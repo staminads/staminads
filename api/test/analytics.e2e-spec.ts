@@ -1,0 +1,452 @@
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { createClient, ClickHouseClient } from '@clickhouse/client';
+import request from 'supertest';
+import { AppModule } from '../src/app.module';
+
+const TEST_DATABASE = 'staminads_test';
+
+function toClickHouseDateTime(date: Date = new Date()): string {
+  return date.toISOString().replace('T', ' ').replace('Z', '');
+}
+
+describe('Analytics E2E', () => {
+  let app: INestApplication;
+  let clickhouse: ClickHouseClient;
+  let authToken: string;
+  let workspaceId: string;
+
+  beforeAll(async () => {
+    process.env.CLICKHOUSE_DATABASE = TEST_DATABASE;
+    process.env.JWT_SECRET = 'test-secret-key';
+    process.env.ADMIN_EMAIL = 'admin@test.com';
+    process.env.ADMIN_PASSWORD = 'testpass';
+
+    const moduleFixture = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        transform: true,
+      }),
+    );
+    await app.init();
+
+    clickhouse = createClient({
+      url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
+      database: TEST_DATABASE,
+    });
+
+    // Get auth token
+    const loginRes = await request(app.getHttpServer())
+      .post('/api/auth.login')
+      .send({
+        email: process.env.ADMIN_EMAIL,
+        password: process.env.ADMIN_PASSWORD,
+      });
+
+    expect(loginRes.status).toBe(201);
+    authToken = loginRes.body.access_token;
+
+    // Create test workspace
+    workspaceId = 'analytics-test-ws';
+    await clickhouse.command({ query: 'TRUNCATE TABLE workspaces' });
+    await clickhouse.command({ query: 'TRUNCATE TABLE sessions' });
+    await clickhouse.insert({
+      table: 'workspaces',
+      values: [
+        {
+          id: workspaceId,
+          name: 'Analytics Test Workspace',
+          website: 'https://test.com',
+          timezone: 'UTC',
+          currency: 'USD',
+          status: 'active',
+          timescore_reference: 60,
+          created_at: toClickHouseDateTime(),
+          updated_at: toClickHouseDateTime(),
+        },
+      ],
+      format: 'JSONEachRow',
+    });
+
+    // Seed test sessions
+    const baseDate = new Date('2025-12-01T12:00:00Z');
+    const sessions = [];
+    for (let i = 0; i < 30; i++) {
+      const date = new Date(baseDate);
+      date.setDate(date.getDate() + Math.floor(i / 3));
+
+      sessions.push({
+        id: `session-${i}`,
+        workspace_id: workspaceId,
+        created_at: toClickHouseDateTime(date),
+        updated_at: toClickHouseDateTime(date),
+        duration: 30 + i * 5,
+        year: date.getFullYear(),
+        month: date.getMonth() + 1,
+        day: date.getDate(),
+        day_of_week: date.getDay() || 7,
+        week_number: 1,
+        hour: date.getHours(),
+        is_weekend: date.getDay() === 0 || date.getDay() === 6,
+        referrer: null,
+        referrer_domain: null,
+        referrer_path: null,
+        is_direct: true,
+        landing_page: 'https://test.com/',
+        landing_domain: 'test.com',
+        landing_path: '/',
+        entry_page: '/',
+        exit_page: '/contact',
+        utm_source: i % 2 === 0 ? 'google' : 'facebook',
+        utm_medium: 'cpc',
+        utm_campaign: i % 3 === 0 ? 'summer' : 'winter',
+        utm_term: null,
+        utm_content: null,
+        utm_id: null,
+        utm_id_from: null,
+        channel: i % 3 === 0 ? 'Paid Search' : i % 3 === 1 ? 'Social' : 'Direct',
+        screen_width: 1920,
+        screen_height: 1080,
+        viewport_width: 1920,
+        viewport_height: 900,
+        user_agent: 'Mozilla/5.0',
+        language: 'en-US',
+        timezone: 'America/New_York',
+        browser: 'Chrome',
+        browser_type: 'browser',
+        os: 'macOS',
+        device: i % 2 === 0 ? 'desktop' : 'mobile',
+        connection_type: 'wifi',
+        max_scroll: 50 + i,
+        sdk_version: '1.0.0',
+      });
+    }
+
+    await clickhouse.insert({
+      table: 'sessions',
+      values: sessions,
+      format: 'JSONEachRow',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  });
+
+  afterAll(async () => {
+    await clickhouse.close();
+    await app.close();
+  });
+
+  describe('POST /api/analytics.query', () => {
+    it('returns sessions count with no dimensions', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions'],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      expect(response.body.data).toHaveLength(1);
+      expect(response.body.data[0].sessions).toBe(30);
+      expect(response.body.meta.metrics).toEqual(['sessions']);
+    });
+
+    it('includes multiple metrics', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions', 'avg_duration'],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      expect(response.body.data[0]).toHaveProperty('sessions');
+      expect(response.body.data[0]).toHaveProperty('avg_duration');
+      expect(response.body.data[0].sessions).toBe(30);
+    });
+
+    it('groups by dimension', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions'],
+          dimensions: ['device'],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      expect(response.body.data.length).toBeGreaterThan(1);
+      expect(response.body.data[0]).toHaveProperty('device');
+
+      // Verify both device types are present
+      const devices = response.body.data.map((d: { device: string }) => d.device);
+      expect(devices).toContain('desktop');
+      expect(devices).toContain('mobile');
+    });
+
+    it('groups by multiple dimensions', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions'],
+          dimensions: ['device', 'channel'],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      expect(response.body.data[0]).toHaveProperty('device');
+      expect(response.body.data[0]).toHaveProperty('channel');
+    });
+
+    it('applies filters correctly', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions'],
+          filters: [
+            { dimension: 'device', operator: 'equals', values: ['mobile'] },
+          ],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      expect(response.body.data[0].sessions).toBe(15); // Half are mobile
+    });
+
+    it('applies in filter correctly', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions'],
+          filters: [
+            { dimension: 'utm_source', operator: 'in', values: ['google'] },
+          ],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      expect(response.body.data[0].sessions).toBe(15); // Half are google
+    });
+
+    it('returns time series with granularity', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions'],
+          dateRange: {
+            start: '2025-12-01',
+            end: '2025-12-10',
+            granularity: 'day',
+          },
+        })
+        .expect(200);
+
+      expect(response.body.data.length).toBe(10); // 10 days with gaps filled
+      expect(response.body.data[0]).toHaveProperty('date_day');
+    });
+
+    it('fills gaps with zeros', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions'],
+          dateRange: {
+            start: '2025-12-01',
+            end: '2025-12-15',
+            granularity: 'day',
+          },
+        })
+        .expect(200);
+
+      // Check that we have 15 days
+      expect(response.body.data.length).toBe(15);
+
+      // Days without data should have 0 sessions
+      const dec14 = response.body.data.find(
+        (d: { date_day: string }) => d.date_day === '2025-12-14',
+      );
+      expect(dec14?.sessions).toBe(0);
+    });
+
+    it('resolves date preset', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions'],
+          dateRange: { preset: 'last_30_days' },
+        })
+        .expect(200);
+
+      expect(response.body.data).toBeDefined();
+    });
+
+    it('respects custom order', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions'],
+          dimensions: ['device'],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          order: { sessions: 'asc' },
+        })
+        .expect(200);
+
+      // First row should have fewer sessions
+      expect(response.body.data[0].sessions).toBeLessThanOrEqual(
+        response.body.data[1].sessions,
+      );
+    });
+
+    it('respects limit', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions'],
+          dimensions: ['channel'],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          limit: 1,
+        })
+        .expect(200);
+
+      expect(response.body.data.length).toBe(1);
+    });
+
+    it('returns comparison data', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions'],
+          dimensions: ['device'],
+          dateRange: { start: '2025-12-01', end: '2025-12-15' },
+          compareDateRange: { start: '2025-11-15', end: '2025-11-30' },
+        })
+        .expect(200);
+
+      expect(response.body.data.current).toBeDefined();
+      expect(response.body.data.previous).toBeDefined();
+      expect(Array.isArray(response.body.data.current)).toBe(true);
+    });
+
+    it('validates unknown metric', async () => {
+      await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['invalid_metric'],
+          dateRange: { start: '2025-12-01', end: '2025-12-28' },
+        })
+        .expect(400);
+    });
+
+    it('validates unknown dimension', async () => {
+      await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions'],
+          dimensions: ['invalid_dimension'],
+          dateRange: { start: '2025-12-01', end: '2025-12-28' },
+        })
+        .expect(400);
+    });
+
+    it('validates unknown workspace', async () => {
+      await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: 'non-existent-workspace',
+          metrics: ['sessions'],
+          dateRange: { start: '2025-12-01', end: '2025-12-28' },
+        })
+        .expect(404);
+    });
+
+    it('requires authentication', async () => {
+      await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions'],
+          dateRange: { start: '2025-12-01', end: '2025-12-28' },
+        })
+        .expect(401);
+    });
+
+    it('returns SQL in response for debugging', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions'],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      expect(response.body.query).toBeDefined();
+      expect(response.body.query.sql).toContain('SELECT');
+      expect(response.body.query.sql).toContain('sessions FINAL');
+      expect(response.body.query.params).toBeDefined();
+    });
+  });
+
+  describe('GET /api/analytics.metrics', () => {
+    it('returns available metrics', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api/analytics.metrics')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(Array.isArray(response.body)).toBe(true);
+      expect(response.body.find((m: { name: string }) => m.name === 'sessions')).toBeDefined();
+      expect(response.body.find((m: { name: string }) => m.name === 'avg_duration')).toBeDefined();
+      expect(response.body.find((m: { name: string }) => m.name === 'bounce_rate')).toBeDefined();
+    });
+  });
+
+  describe('GET /api/analytics.dimensions', () => {
+    it('returns available dimensions', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api/analytics.dimensions')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(Array.isArray(response.body)).toBe(true);
+      expect(response.body.find((d: { name: string }) => d.name === 'channel')).toBeDefined();
+      expect(response.body.find((d: { name: string }) => d.name === 'device')).toBeDefined();
+      expect(response.body.find((d: { name: string }) => d.name === 'utm_source')).toBeDefined();
+    });
+  });
+});

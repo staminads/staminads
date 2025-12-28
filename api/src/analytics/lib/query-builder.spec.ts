@@ -1,0 +1,264 @@
+import { buildAnalyticsQuery } from './query-builder';
+import { AnalyticsQueryDto } from '../dto/analytics-query.dto';
+
+describe('buildAnalyticsQuery', () => {
+  const baseQuery: AnalyticsQueryDto = {
+    workspace_id: 'test-ws',
+    metrics: ['sessions'],
+    dateRange: { start: '2025-12-01', end: '2025-12-28' },
+  };
+
+  it('builds basic query with metrics only', () => {
+    const { sql, params } = buildAnalyticsQuery(baseQuery);
+    expect(sql).toContain('count() as sessions');
+    expect(sql).toContain('FROM sessions FINAL');
+    expect(sql).toContain('workspace_id = {workspace_id:String}');
+    expect(params.workspace_id).toBe('test-ws');
+    expect(params.date_start).toBe('2025-12-01');
+    expect(params.date_end).toBe('2025-12-28');
+  });
+
+  it('includes multiple metrics', () => {
+    const { sql } = buildAnalyticsQuery({
+      ...baseQuery,
+      metrics: ['sessions', 'avg_duration', 'bounce_rate'],
+    });
+    expect(sql).toContain('count() as sessions');
+    expect(sql).toContain('round(avg(duration), 1) as avg_duration');
+    expect(sql).toContain(
+      'round(countIf(duration < 10) * 100.0 / count(), 2) as bounce_rate',
+    );
+  });
+
+  it('adds dimensions to SELECT and GROUP BY', () => {
+    const { sql } = buildAnalyticsQuery({
+      ...baseQuery,
+      dimensions: ['channel', 'device'],
+    });
+    expect(sql).toContain('channel');
+    expect(sql).toContain('device');
+    expect(sql).toMatch(/GROUP BY.*channel.*device/s);
+  });
+
+  it('handles granularity day in SELECT and GROUP BY', () => {
+    const { sql } = buildAnalyticsQuery({
+      ...baseQuery,
+      dateRange: {
+        start: '2025-12-01',
+        end: '2025-12-28',
+        granularity: 'day',
+      },
+    });
+    expect(sql).toContain('toDate(created_at) as date_day');
+    expect(sql).toMatch(/GROUP BY.*date_day/);
+    expect(sql).toMatch(/ORDER BY date_day ASC/);
+  });
+
+  it('handles granularity hour', () => {
+    const { sql } = buildAnalyticsQuery({
+      ...baseQuery,
+      dateRange: {
+        start: '2025-12-01',
+        end: '2025-12-01',
+        granularity: 'hour',
+      },
+    });
+    expect(sql).toContain('toStartOfHour(created_at) as date_hour');
+  });
+
+  it('handles granularity week with Monday start', () => {
+    const { sql } = buildAnalyticsQuery({
+      ...baseQuery,
+      dateRange: {
+        start: '2025-12-01',
+        end: '2025-12-28',
+        granularity: 'week',
+      },
+    });
+    // Mode 1 = Monday as first day of week (ISO week)
+    expect(sql).toContain('toStartOfWeek(created_at, 1) as date_week');
+  });
+
+  it('handles granularity month', () => {
+    const { sql } = buildAnalyticsQuery({
+      ...baseQuery,
+      dateRange: {
+        start: '2025-10-01',
+        end: '2025-12-28',
+        granularity: 'month',
+      },
+    });
+    expect(sql).toContain('toStartOfMonth(created_at) as date_month');
+  });
+
+  it('handles granularity year', () => {
+    const { sql } = buildAnalyticsQuery({
+      ...baseQuery,
+      dateRange: {
+        start: '2024-01-01',
+        end: '2025-12-28',
+        granularity: 'year',
+      },
+    });
+    expect(sql).toContain('toStartOfYear(created_at) as date_year');
+  });
+
+  it('orders by granularity first, then custom order', () => {
+    const { sql } = buildAnalyticsQuery({
+      ...baseQuery,
+      dimensions: ['channel'],
+      dateRange: {
+        start: '2025-12-01',
+        end: '2025-12-28',
+        granularity: 'day',
+      },
+      order: { sessions: 'desc' },
+    });
+    expect(sql).toMatch(/ORDER BY date_day ASC.*sessions DESC/s);
+  });
+
+  it('applies filters to WHERE clause', () => {
+    const { sql, params } = buildAnalyticsQuery({
+      ...baseQuery,
+      filters: [{ dimension: 'device', operator: 'equals', values: ['mobile'] }],
+    });
+    expect(sql).toContain('device = {f0:String}');
+    expect(params.f0).toBe('mobile');
+  });
+
+  it('applies multiple filters', () => {
+    const { sql, params } = buildAnalyticsQuery({
+      ...baseQuery,
+      filters: [
+        { dimension: 'device', operator: 'equals', values: ['mobile'] },
+        { dimension: 'channel', operator: 'in', values: ['google', 'facebook'] },
+      ],
+    });
+    expect(sql).toContain('device = {f0:String}');
+    expect(sql).toContain('channel IN {f1:Array(String)}');
+    expect(params.f0).toBe('mobile');
+    expect(params.f1).toEqual(['google', 'facebook']);
+  });
+
+  it('defaults ORDER BY to first metric DESC when no order specified', () => {
+    const { sql } = buildAnalyticsQuery({
+      ...baseQuery,
+      metrics: ['avg_duration', 'sessions'],
+    });
+    expect(sql).toContain('ORDER BY avg_duration DESC');
+  });
+
+  it('respects custom order', () => {
+    const { sql } = buildAnalyticsQuery({
+      ...baseQuery,
+      order: { sessions: 'asc' },
+    });
+    expect(sql).toContain('ORDER BY sessions ASC');
+  });
+
+  it('respects limit', () => {
+    const { sql } = buildAnalyticsQuery({ ...baseQuery, limit: 50 });
+    expect(sql).toContain('LIMIT 50');
+  });
+
+  it('caps limit at 10000', () => {
+    const { sql } = buildAnalyticsQuery({ ...baseQuery, limit: 50000 });
+    expect(sql).toContain('LIMIT 10000');
+  });
+
+  it('defaults limit to 1000', () => {
+    const { sql } = buildAnalyticsQuery(baseQuery);
+    expect(sql).toContain('LIMIT 1000');
+  });
+
+  it('throws for unknown metric', () => {
+    expect(() =>
+      buildAnalyticsQuery({
+        ...baseQuery,
+        metrics: ['unknown_metric'],
+      }),
+    ).toThrow('Unknown metric: unknown_metric');
+  });
+
+  it('throws for unknown dimension', () => {
+    expect(() =>
+      buildAnalyticsQuery({
+        ...baseQuery,
+        dimensions: ['unknown_dimension'],
+      }),
+    ).toThrow('Unknown dimension: unknown_dimension');
+  });
+
+  it('throws for unknown order field', () => {
+    expect(() =>
+      buildAnalyticsQuery({
+        ...baseQuery,
+        order: { unknown_field: 'asc' },
+      }),
+    ).toThrow('Unknown order field: unknown_field');
+  });
+
+  it('combines granularity with dimensions', () => {
+    const { sql } = buildAnalyticsQuery({
+      ...baseQuery,
+      dimensions: ['channel'],
+      dateRange: {
+        start: '2025-12-01',
+        end: '2025-12-28',
+        granularity: 'day',
+      },
+    });
+    expect(sql).toContain('date_day');
+    expect(sql).toContain('channel');
+    expect(sql).toMatch(/GROUP BY.*date_day.*channel/s);
+  });
+
+  it('applies timezone to granularity grouping', () => {
+    const { sql } = buildAnalyticsQuery(
+      {
+        ...baseQuery,
+        dateRange: {
+          start: '2025-12-01',
+          end: '2025-12-28',
+          granularity: 'day',
+        },
+      },
+      'America/New_York',
+    );
+    expect(sql).toContain("toDate(created_at, 'America/New_York') as date_day");
+  });
+
+  it('applies timezone to week granularity', () => {
+    const { sql } = buildAnalyticsQuery(
+      {
+        ...baseQuery,
+        dateRange: {
+          start: '2025-12-01',
+          end: '2025-12-28',
+          granularity: 'week',
+        },
+      },
+      'Europe/London',
+    );
+    expect(sql).toContain(
+      "toStartOfWeek(created_at, 1, 'Europe/London') as date_week",
+    );
+  });
+
+  it('does not apply timezone when UTC', () => {
+    const { sql } = buildAnalyticsQuery(
+      {
+        ...baseQuery,
+        dateRange: {
+          start: '2025-12-01',
+          end: '2025-12-28',
+          granularity: 'day',
+        },
+      },
+      'UTC',
+    );
+    // No timezone suffix when UTC
+    expect(sql).toContain('toDate(created_at) as date_day');
+    expect(sql).not.toContain("toDate(created_at, 'UTC')");
+  });
+});
