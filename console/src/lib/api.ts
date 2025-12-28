@@ -1,4 +1,5 @@
-import type { Workspace, CreateWorkspaceInput } from '../types/workspace'
+import type { Workspace, CreateWorkspaceInput, UpdateWorkspaceInput } from '../types/workspace'
+import type { AnalyticsQuery, AnalyticsResponse, MetricDefinition, DimensionDefinition } from '../types/analytics'
 
 export interface WebsiteMetaResponse {
   title?: string
@@ -28,6 +29,25 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    update: (data: UpdateWorkspaceInput) =>
+      request<Workspace>('workspaces.update', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      request<{ success: boolean }>('workspaces.delete', {
+        method: 'POST',
+        body: JSON.stringify({ id }),
+      }),
+  },
+  analytics: {
+    query: (data: AnalyticsQuery) =>
+      request<AnalyticsResponse>('analytics.query', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    metrics: () => request<Record<string, MetricDefinition>>('analytics.metrics'),
+    dimensions: () => request<Record<string, DimensionDefinition>>('analytics.dimensions'),
   },
   tools: {
     websiteMeta: (url: string) =>

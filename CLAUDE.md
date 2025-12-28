@@ -50,6 +50,41 @@ CLICKHOUSE_PASSWORD=
 
 ClickHouse is used for storing workspaces and web sessions. Schemas in `api/src/database/schemas/`.
 
+### OpenAPI Spec
+
+The API uses `@nestjs/swagger` with CLI plugin for automatic OpenAPI generation. Run `npm run openapi:generate` to generate `openapi.json` and `openapi.yaml`.
+
+**Controller requirements:**
+- Add `@ApiTags('tag-name')` at controller level for grouping
+- Add `@ApiOperation({ summary: '...' })` on each endpoint
+- For authenticated routes: add `@ApiSecurity('jwt-auth')` at controller level
+- Use `@Public()` decorator for public endpoints (auto-documents as no auth required)
+- Use `@DemoProtected()` for demo endpoints (auto-documents secret query param)
+
+**What's auto-documented (via CLI plugin):**
+- `@Body() dto: SomeClass` - Full request schema from DTO class
+- Field constraints from class-validator decorators (`@IsString()`, `@IsUrl()`, `@IsOptional()`, etc.)
+
+**Manual annotations needed:**
+- `@Query('name')` params: add `@ApiQuery({ name: 'name', type: String, required: true })`
+- `@Body('field')` partial extraction: add `@ApiBody({ schema: { ... } })`
+- Response types: add `@ApiResponse({ status: 200, type: SomeClass })` or use schema
+
+**Example controller:**
+```typescript
+@ApiTags('workspaces')
+@ApiSecurity('jwt-auth')
+@Controller('api')
+export class WorkspacesController {
+  @Get('workspaces.get')
+  @ApiOperation({ summary: 'Get workspace by ID' })
+  @ApiQuery({ name: 'id', type: String, required: true })
+  get(@Query('id') id: string) {
+    return this.service.get(id);
+  }
+}
+```
+
 ### Running
 
 ```bash

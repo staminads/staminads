@@ -21,3 +21,12 @@ export interface CreateWorkspaceInput {
   currency: string
   logo_url?: string
 }
+
+export interface UpdateWorkspaceInput {
+  id: string
+  name?: string
+  website?: string
+  timezone?: string
+  currency?: string
+  logo_url?: string
+}

@@ -1,0 +1,554 @@
+openapi: 3.0.0
+paths:
+  /api/auth.login:
+    post:
+      operationId: AuthController_login
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginDto"
+      responses:
+        "200":
+          description: Returns JWT access token
+          content:
+            application/json:
+              schema:
+                properties:
+                  access_token:
+                    type: string
+        "201":
+          description: ""
+        "401":
+          description: Invalid credentials
+      security:
+        - {}
+      summary: Login with admin credentials
+      tags:
+        - auth
+  /api/workspaces.list:
+    get:
+      operationId: WorkspacesController_list
+      parameters: []
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+      security: &a1
+        - jwt-auth: []
+      summary: List all workspaces
+      tags: &a2
+        - workspaces
+  /api/workspaces.get:
+    get:
+      operationId: WorkspacesController_get
+      parameters:
+        - name: id
+          required: true
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+      security: *a1
+      summary: Get workspace by ID
+      tags: *a2
+  /api/workspaces.create:
+    post:
+      operationId: WorkspacesController_create
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkspaceDto"
+      responses:
+        "201":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+      security: *a1
+      summary: Create a new workspace
+      tags: *a2
+  /api/workspaces.update:
+    post:
+      operationId: WorkspacesController_update
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWorkspaceDto"
+      responses:
+        "201":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+      security: *a1
+      summary: Update an existing workspace
+      tags: *a2
+  /api/workspaces.delete:
+    post:
+      operationId: WorkspacesController_delete
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+              required:
+                - id
+      responses:
+        "200":
+          description: ""
+      security: *a1
+      summary: Delete a workspace
+      tags: *a2
+  /api/tools.websiteMeta:
+    post:
+      operationId: ToolsController_websiteMeta
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebsiteMetaDto"
+      responses:
+        "200":
+          description: Website metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebsiteMetaResponse"
+        "400":
+          description: Failed to fetch metadata
+      security:
+        - {}
+      summary: Fetch website title and logo
+      tags:
+        - tools
+  /api/demo.generate:
+    post:
+      operationId: DemoController_generate
+      parameters:
+        - name: secret
+          required: true
+          in: query
+          description: Demo secret from DEMO_SECRET environment variable
+          schema: {}
+      responses:
+        "201":
+          description: ""
+      security:
+        - demo-secret: []
+        - {}
+      summary: Generate demo fixtures (10k sessions)
+      tags: &a3
+        - demo
+  /api/demo.delete:
+    post:
+      operationId: DemoController_delete
+      parameters:
+        - name: secret
+          required: true
+          in: query
+          description: Demo secret from DEMO_SECRET environment variable
+          schema: {}
+      responses:
+        "200":
+          description: ""
+      security:
+        - demo-secret: []
+        - {}
+      summary: Delete demo workspace and sessions
+      tags: *a3
+  /api/track:
+    post:
+      operationId: EventsController_track
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrackEventDto"
+      responses:
+        "200":
+          description: ""
+      security:
+        - {}
+      summary: Track a single event
+      tags: &a4
+        - events
+  /api/track.batch:
+    post:
+      operationId: EventsController_trackBatch
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrackBatchDto"
+      responses:
+        "200":
+          description: ""
+      security:
+        - {}
+      summary: Track multiple events in a batch
+      tags: *a4
+  /api/analytics.query:
+    post:
+      operationId: AnalyticsController_query
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyticsQueryDto"
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+      security: &a5
+        - jwt-auth: []
+      summary: Execute an analytics query
+      tags: &a6
+        - analytics
+  /api/analytics.metrics:
+    get:
+      operationId: AnalyticsController_getMetrics
+      parameters: []
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+      security: *a5
+      summary: Get available metrics
+      tags: *a6
+  /api/analytics.dimensions:
+    get:
+      operationId: AnalyticsController_getDimensions
+      parameters: []
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+      security: *a5
+      summary: Get available dimensions
+      tags: *a6
+info:
+  title: Staminads API
+  description: Web analytics platform for tracking TimeScore metrics
+  version: "1.0"
+  contact: {}
+tags: []
+servers: []
+components:
+  securitySchemes:
+    jwt-auth:
+      scheme: bearer
+      bearerFormat: JWT
+      type: http
+      name: JWT
+      description: Enter JWT token
+      in: header
+    demo-secret:
+      type: apiKey
+      in: query
+      name: secret
+      description: Demo secret for demo endpoints
+  schemas:
+    LoginDto:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+      required:
+        - email
+        - password
+    CreateWorkspaceDto:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        website:
+          type: string
+          format: uri
+        timezone:
+          type: string
+        currency:
+          type: string
+        logo_url:
+          type: string
+          format: uri
+      required:
+        - id
+        - name
+        - website
+        - timezone
+        - currency
+    UpdateWorkspaceDto:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        website:
+          type: string
+          format: uri
+        timezone:
+          type: string
+        currency:
+          type: string
+        logo_url:
+          type: string
+          format: uri
+      required:
+        - id
+    WebsiteMetaDto:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+      required:
+        - url
+    WebsiteMetaResponse:
+      type: object
+      properties:
+        title:
+          type: string
+          description: Website title
+        logo_url:
+          type: string
+          description: Website logo URL
+    TrackEventDto:
+      type: object
+      properties:
+        workspace_id:
+          type: string
+        session_id:
+          type: string
+        name:
+          type: string
+        path:
+          type: string
+        duration:
+          type: number
+          minimum: 0
+        referrer:
+          type: string
+        referrer_domain:
+          type: string
+        referrer_path:
+          type: string
+        is_direct:
+          type: boolean
+        landing_page:
+          type: string
+        landing_domain:
+          type: string
+        landing_path:
+          type: string
+        utm_source:
+          type: string
+        utm_medium:
+          type: string
+        utm_campaign:
+          type: string
+        utm_term:
+          type: string
+        utm_content:
+          type: string
+        utm_id:
+          type: string
+        utm_id_from:
+          type: string
+        channel:
+          type: string
+        screen_width:
+          type: number
+        screen_height:
+          type: number
+        viewport_width:
+          type: number
+        viewport_height:
+          type: number
+        device:
+          type: string
+        browser:
+          type: string
+        browser_type:
+          type: string
+        os:
+          type: string
+        user_agent:
+          type: string
+        connection_type:
+          type: string
+        language:
+          type: string
+        timezone:
+          type: string
+        max_scroll:
+          type: number
+          minimum: 0
+          maximum: 100
+        sdk_version:
+          type: string
+        properties:
+          type: object
+      required:
+        - workspace_id
+        - session_id
+        - name
+        - path
+        - landing_page
+    TrackBatchDto:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrackEventDto"
+      required:
+        - events
+    FilterDto:
+      type: object
+      properties:
+        dimension:
+          type: string
+        operator:
+          type: string
+          enum:
+            - equals
+            - notEquals
+            - in
+            - notIn
+            - contains
+            - notContains
+            - gt
+            - gte
+            - lt
+            - lte
+            - isNull
+            - isNotNull
+            - between
+        values:
+          type: array
+          items:
+            type: object
+      required:
+        - dimension
+        - operator
+    DateRangeDto:
+      type: object
+      properties:
+        start:
+          type: string
+        end:
+          type: string
+        preset:
+          type: string
+          enum:
+            - today
+            - yesterday
+            - last_7_days
+            - last_14_days
+            - last_30_days
+            - last_90_days
+            - this_week
+            - last_week
+            - this_month
+            - last_month
+            - this_quarter
+            - last_quarter
+            - this_year
+            - last_year
+        granularity:
+          type: string
+          enum:
+            - hour
+            - day
+            - week
+            - month
+            - year
+    AnalyticsQueryDto:
+      type: object
+      properties:
+        workspace_id:
+          type: string
+        metrics:
+          minItems: 1
+          type: array
+          items:
+            type: string
+        dimensions:
+          type: array
+          items:
+            type: string
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/FilterDto"
+        dateRange:
+          $ref: "#/components/schemas/DateRangeDto"
+        compareDateRange:
+          $ref: "#/components/schemas/DateRangeDto"
+        timezone:
+          type: string
+        order:
+          type: object
+        limit:
+          type: number
+          minimum: 1
+          maximum: 10000
+      required:
+        - workspace_id
+        - metrics
+        - dateRange

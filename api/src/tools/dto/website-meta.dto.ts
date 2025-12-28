@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { IsUrl } from 'class-validator';
 
 export class WebsiteMetaDto {
@@ -5,7 +6,10 @@ export class WebsiteMetaDto {
   url: string;
 }
 
-export interface WebsiteMetaResponse {
+export class WebsiteMetaResponse {
+  @ApiProperty({ description: 'Website title', required: false })
   title?: string;
+
+  @ApiProperty({ description: 'Website logo URL', required: false })
   logo_url?: string;
 }
