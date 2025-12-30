@@ -5,7 +5,8 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { EventBufferService } from '../src/events/event-buffer.service';
 
-const TEST_DATABASE = 'staminads_test';
+const TEST_SYSTEM_DATABASE = 'staminads_test_system';
+const TEST_WORKSPACE_DATABASE = 'staminads_test_ws';
 
 function toClickHouseDateTime(date: Date = new Date()): string {
   return date.toISOString().replace('T', ' ').replace('Z', '');
@@ -13,12 +14,13 @@ function toClickHouseDateTime(date: Date = new Date()): string {
 
 describe('Events Integration', () => {
   let app: INestApplication;
-  let clickhouse: ClickHouseClient;
+  let systemClient: ClickHouseClient;
+  let workspaceClient: ClickHouseClient;
   let authToken: string;
   let eventBuffer: EventBufferService;
 
   beforeAll(async () => {
-    process.env.CLICKHOUSE_DATABASE = TEST_DATABASE;
+    process.env.CLICKHOUSE_SYSTEM_DATABASE = TEST_SYSTEM_DATABASE;
     process.env.JWT_SECRET = 'test-secret-key';
     process.env.ADMIN_EMAIL = 'admin@test.com';
     process.env.ADMIN_PASSWORD = 'testpass';
@@ -38,9 +40,14 @@ describe('Events Integration', () => {
 
     eventBuffer = moduleFixture.get<EventBufferService>(EventBufferService);
 
-    clickhouse = createClient({
+    systemClient = createClient({
       url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
-      database: TEST_DATABASE,
+      database: TEST_SYSTEM_DATABASE,
+    });
+
+    workspaceClient = createClient({
+      url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
+      database: TEST_WORKSPACE_DATABASE,
     });
 
     // Get auth token
@@ -56,15 +63,16 @@ describe('Events Integration', () => {
   });
 
   afterAll(async () => {
-    await clickhouse.close();
+    await systemClient.close();
+    await workspaceClient.close();
     await app.close();
   });
 
   beforeEach(async () => {
     // Clean tables before each test
-    await clickhouse.command({ query: 'TRUNCATE TABLE workspaces' });
-    await clickhouse.command({ query: 'TRUNCATE TABLE events' });
-    await clickhouse.command({ query: 'TRUNCATE TABLE sessions' });
+    await systemClient.command({ query: 'TRUNCATE TABLE workspaces' });
+    await workspaceClient.command({ query: 'TRUNCATE TABLE events' });
+    await workspaceClient.command({ query: 'TRUNCATE TABLE sessions' });
     await new Promise((resolve) => setTimeout(resolve, 100));
   });
 
@@ -80,7 +88,7 @@ describe('Events Integration', () => {
       created_at: toClickHouseDateTime(),
       updated_at: toClickHouseDateTime(),
     };
-    await clickhouse.insert({
+    await systemClient.insert({
       table: 'workspaces',
       values: [workspace],
       format: 'JSONEachRow',
@@ -107,11 +115,11 @@ describe('Events Integration', () => {
       expect(response.body.success).toBe(true);
 
       // Flush buffer to ensure event is written
-      await eventBuffer.flush();
+      await eventBuffer.flushAll();
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Verify event in ClickHouse
-      const result = await clickhouse.query({
+      // Verify event in ClickHouse workspace database
+      const result = await workspaceClient.query({
         query:
           'SELECT * FROM events WHERE session_id = {session_id:String} LIMIT 1',
         query_params: { session_id: 'session-1' },
@@ -200,11 +208,11 @@ describe('Events Integration', () => {
       expect(response.body.count).toBe(2);
 
       // Flush buffer
-      await eventBuffer.flush();
+      await eventBuffer.flushAll();
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Verify events in ClickHouse
-      const result = await clickhouse.query({
+      // Verify events in ClickHouse workspace database
+      const result = await workspaceClient.query({
         query:
           'SELECT * FROM events WHERE session_id = {session_id:String} ORDER BY created_at',
         query_params: { session_id: 'batch-session-1' },
@@ -294,12 +302,12 @@ describe('Events Integration', () => {
       }
 
       // Flush buffer
-      await eventBuffer.flush();
+      await eventBuffer.flushAll();
       // Wait for MV to populate sessions
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      // Query sessions table (with FINAL to deduplicate)
-      const result = await clickhouse.query({
+      // Query sessions table in workspace database (with FINAL to deduplicate)
+      const result = await workspaceClient.query({
         query:
           'SELECT * FROM sessions FINAL WHERE id = {id:String} LIMIT 1',
         query_params: { id: sessionId },

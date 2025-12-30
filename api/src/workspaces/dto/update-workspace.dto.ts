@@ -1,4 +1,7 @@
-import { IsOptional, IsString, IsUrl } from 'class-validator';
+import { IsOptional, IsString, IsUrl, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { CustomDimensionDefinition } from '../../custom-dimensions/entities/custom-dimension.entity';
+import { FilterDefinition } from '../../filters/entities/filter.entity';
 
 export class UpdateWorkspaceDto {
   @IsString()
@@ -23,4 +26,12 @@ export class UpdateWorkspaceDto {
   @IsOptional()
   @IsUrl()
   logo_url?: string;
+
+  @IsOptional()
+  @IsArray()
+  custom_dimensions?: CustomDimensionDefinition[];
+
+  @IsOptional()
+  @IsArray()
+  filters?: FilterDefinition[];
 }

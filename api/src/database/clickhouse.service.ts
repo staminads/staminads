@@ -1,18 +1,19 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, ClickHouseClient } from '@clickhouse/client';
-import { SCHEMAS } from './schemas';
+import { SYSTEM_SCHEMAS, WORKSPACE_SCHEMAS } from './schemas';
 
 @Injectable()
 export class ClickHouseService implements OnModuleInit, OnModuleDestroy {
   private client: ClickHouseClient;
-  private database: string;
+  private systemDatabase: string;
 
   constructor(private configService: ConfigService) {
-    this.database = this.configService.get<string>(
-      'CLICKHOUSE_DATABASE',
-      'staminads',
+    this.systemDatabase = this.configService.get<string>(
+      'CLICKHOUSE_SYSTEM_DATABASE',
+      'staminads_system',
     );
+    // Create client without default database - we'll use fully qualified names
     this.client = createClient({
       url: this.configService.get<string>(
         'CLICKHOUSE_HOST',
@@ -20,52 +21,199 @@ export class ClickHouseService implements OnModuleInit, OnModuleDestroy {
       ),
       username: this.configService.get<string>('CLICKHOUSE_USER', 'default'),
       password: this.configService.get<string>('CLICKHOUSE_PASSWORD', ''),
-      database: this.database,
     });
   }
 
   async onModuleInit() {
-    await this.initDatabase();
+    await this.initSystemDatabase();
   }
 
   async onModuleDestroy() {
     await this.client.close();
   }
 
-  private async initDatabase() {
-    // Create database if not exists
+  /**
+   * Initialize the system database and its tables.
+   */
+  private async initSystemDatabase() {
+    // Create system database if not exists
     await this.client.command({
-      query: `CREATE DATABASE IF NOT EXISTS ${this.database}`,
+      query: `CREATE DATABASE IF NOT EXISTS ${this.systemDatabase}`,
     });
 
-    // Create all tables from schemas
-    for (const schema of Object.values(SCHEMAS)) {
-      const query = schema.replace(/{database}/g, this.database);
+    // Create all system tables
+    for (const schema of Object.values(SYSTEM_SCHEMAS)) {
+      const query = schema.replace(/{database}/g, this.systemDatabase);
       await this.client.command({ query });
     }
   }
 
-  async query<T>(
+  /**
+   * Get the database name for a workspace.
+   * Sanitizes the workspace ID for safe use as a database name.
+   */
+  getWorkspaceDatabaseName(workspaceId: string): string {
+    // Replace any characters that aren't alphanumeric or underscore with underscore
+    // ClickHouse doesn't allow hyphens in database names
+    const sanitized = workspaceId.replace(/[^a-zA-Z0-9_]/g, '_');
+    return `staminads_ws_${sanitized}`;
+  }
+
+  /**
+   * Create a workspace database and its tables.
+   */
+  async createWorkspaceDatabase(workspaceId: string): Promise<void> {
+    const dbName = this.getWorkspaceDatabaseName(workspaceId);
+
+    // Create workspace database
+    await this.client.command({
+      query: `CREATE DATABASE IF NOT EXISTS ${dbName}`,
+    });
+
+    // Create all workspace tables
+    for (const schema of Object.values(WORKSPACE_SCHEMAS)) {
+      const query = schema.replace(/{database}/g, dbName);
+      await this.client.command({ query });
+    }
+  }
+
+  /**
+   * Drop a workspace database (cascade deletes all tables).
+   */
+  async dropWorkspaceDatabase(workspaceId: string): Promise<void> {
+    const dbName = this.getWorkspaceDatabaseName(workspaceId);
+    await this.client.command({
+      query: `DROP DATABASE IF EXISTS ${dbName}`,
+    });
+  }
+
+  /**
+   * Query the system database.
+   * Note: SQL should use unqualified table names (e.g., 'workspaces' not 'database.workspaces').
+   * Tables are automatically qualified with the system database name.
+   */
+  async querySystem<T>(
     sql: string,
     params?: Record<string, unknown>,
   ): Promise<T[]> {
+    // Replace unqualified table names with fully qualified names
+    const qualifiedSql = this.qualifyTableNames(sql, this.systemDatabase);
     const result = await this.client.query({
-      query: sql,
+      query: qualifiedSql,
       query_params: params,
       format: 'JSONEachRow',
     });
     return result.json() as Promise<T[]>;
   }
 
-  async insert<T>(table: string, values: T[]): Promise<void> {
+  /**
+   * Query a workspace database.
+   * Note: SQL should use unqualified table names (e.g., 'sessions' not 'database.sessions').
+   * Tables are automatically qualified with the workspace database name.
+   */
+  async queryWorkspace<T>(
+    workspaceId: string,
+    sql: string,
+    params?: Record<string, unknown>,
+  ): Promise<T[]> {
+    const dbName = this.getWorkspaceDatabaseName(workspaceId);
+    // Replace unqualified table names with fully qualified names
+    const qualifiedSql = this.qualifyTableNames(sql, dbName);
+    const result = await this.client.query({
+      query: qualifiedSql,
+      query_params: params,
+      format: 'JSONEachRow',
+    });
+    return result.json() as Promise<T[]>;
+  }
+
+  /**
+   * Qualify table names in SQL with the given database name.
+   * This is a simple replacement for common table patterns.
+   */
+  private qualifyTableNames(sql: string, database: string): string {
+    // Replace FROM table with FROM database.table
+    // Replace INTO table with INTO database.table
+    // Handle common patterns: FROM, INTO, UPDATE, ALTER TABLE
+    return sql
+      .replace(/\bFROM\s+(\w+)\b/gi, `FROM ${database}.$1`)
+      .replace(/\bINTO\s+(\w+)\b/gi, `INTO ${database}.$1`)
+      .replace(/\bUPDATE\s+(\w+)\b/gi, `UPDATE ${database}.$1`)
+      .replace(/\bALTER\s+TABLE\s+(\w+)\b/gi, `ALTER TABLE ${database}.$1`);
+  }
+
+  /**
+   * Insert into a system database table.
+   */
+  async insertSystem<T>(table: string, values: T[]): Promise<void> {
     await this.client.insert({
-      table,
+      table: `${this.systemDatabase}.${table}`,
       values: values as Record<string, unknown>[],
       format: 'JSONEachRow',
     });
   }
 
+  /**
+   * Insert into a workspace database table.
+   */
+  async insertWorkspace<T>(
+    workspaceId: string,
+    table: string,
+    values: T[],
+  ): Promise<void> {
+    const dbName = this.getWorkspaceDatabaseName(workspaceId);
+    await this.client.insert({
+      table: `${dbName}.${table}`,
+      values: values as Record<string, unknown>[],
+      format: 'JSONEachRow',
+    });
+  }
+
+  /**
+   * Execute a command on the system database.
+   */
+  async commandSystem(sql: string): Promise<void> {
+    // Replace {database} placeholder if present
+    const finalSql = sql.replace(/{database}/g, this.systemDatabase);
+    await this.client.command({ query: finalSql });
+  }
+
+  /**
+   * Execute a command on a workspace database.
+   */
+  async commandWorkspace(workspaceId: string, sql: string): Promise<void> {
+    const dbName = this.getWorkspaceDatabaseName(workspaceId);
+    // Replace {database} placeholder if present
+    const finalSql = sql.replace(/{database}/g, dbName);
+    await this.client.command({ query: finalSql });
+  }
+
+  // ============================================
+  // Legacy methods for backward compatibility
+  // These will be removed after migration
+  // ============================================
+
+  /**
+   * @deprecated Use querySystem or queryWorkspace instead
+   */
+  async query<T>(
+    sql: string,
+    params?: Record<string, unknown>,
+  ): Promise<T[]> {
+    return this.querySystem<T>(sql, params);
+  }
+
+  /**
+   * @deprecated Use insertSystem or insertWorkspace instead
+   */
+  async insert<T>(table: string, values: T[]): Promise<void> {
+    return this.insertSystem<T>(table, values);
+  }
+
+  /**
+   * @deprecated Use commandSystem or commandWorkspace instead
+   */
   async command(sql: string): Promise<void> {
-    await this.client.command({ query: sql });
+    return this.commandSystem(sql);
   }
 }

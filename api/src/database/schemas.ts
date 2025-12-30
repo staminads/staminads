@@ -1,4 +1,5 @@
-export const SCHEMAS: Record<string, string> = {
+// System schemas - stored in staminads_system database
+export const SYSTEM_SCHEMAS: Record<string, string> = {
   workspaces: `
     CREATE TABLE IF NOT EXISTS {database}.workspaces (
       id String,
@@ -9,12 +10,42 @@ export const SCHEMAS: Record<string, string> = {
       logo_url Nullable(String),
       timescore_reference UInt32 DEFAULT 60,
       status Enum8('initializing' = 1, 'active' = 2, 'inactive' = 3, 'error' = 4),
+      custom_dimensions String DEFAULT '[]',
+      filters String DEFAULT '[]',
       created_at DateTime64(3) DEFAULT now64(3),
       updated_at DateTime64(3) DEFAULT now64(3)
     ) ENGINE = MergeTree()
     ORDER BY id
   `,
 
+  backfill_tasks: `
+    CREATE TABLE IF NOT EXISTS {database}.backfill_tasks (
+      id String,
+      workspace_id String,
+      status Enum8('pending' = 1, 'running' = 2, 'completed' = 3, 'failed' = 4, 'cancelled' = 5),
+      lookback_days UInt16,
+      chunk_size_days UInt8 DEFAULT 1,
+      batch_size UInt32 DEFAULT 5000,
+      total_sessions UInt64 DEFAULT 0,
+      processed_sessions UInt64 DEFAULT 0,
+      total_events UInt64 DEFAULT 0,
+      processed_events UInt64 DEFAULT 0,
+      current_date_chunk Nullable(Date),
+      created_at DateTime64(3) DEFAULT now64(3),
+      started_at Nullable(DateTime64(3)),
+      completed_at Nullable(DateTime64(3)),
+      error_message Nullable(String),
+      retry_count UInt8 DEFAULT 0,
+      dimensions_snapshot String DEFAULT '[]',
+      filters_snapshot String DEFAULT '[]'
+    ) ENGINE = MergeTree()
+    ORDER BY (workspace_id, created_at)
+  `,
+};
+
+// Workspace schemas - stored in staminads_ws_{workspace_id} databases
+// Note: workspace_id removed from ORDER BY and indexes since each database is per-workspace
+export const WORKSPACE_SCHEMAS: Record<string, string> = {
   events: `
     CREATE TABLE IF NOT EXISTS {database}.events (
       id UUID DEFAULT generateUUIDv4(),
@@ -38,7 +69,17 @@ export const SCHEMAS: Record<string, string> = {
       utm_content Nullable(String),
       utm_id Nullable(String),
       utm_id_from Nullable(String),
-      channel Nullable(String),
+      cd_1 Nullable(String),
+      cd_2 Nullable(String),
+      cd_3 Nullable(String),
+      cd_4 Nullable(String),
+      cd_5 Nullable(String),
+      cd_6 Nullable(String),
+      cd_7 Nullable(String),
+      cd_8 Nullable(String),
+      cd_9 Nullable(String),
+      cd_10 Nullable(String),
+      filter_version Nullable(String),
       screen_width Nullable(UInt16),
       screen_height Nullable(UInt16),
       viewport_width Nullable(UInt16),
@@ -54,12 +95,11 @@ export const SCHEMAS: Record<string, string> = {
       max_scroll Nullable(UInt8),
       sdk_version Nullable(String),
       properties Map(String, String) DEFAULT map(),
-      INDEX idx_workspace_id workspace_id TYPE bloom_filter GRANULARITY 1,
       INDEX idx_name name TYPE bloom_filter(0.01) GRANULARITY 1,
       INDEX idx_browser_type browser_type TYPE set(10) GRANULARITY 1
     ) ENGINE = MergeTree()
     PARTITION BY toYYYYMMDD(created_at)
-    ORDER BY (workspace_id, session_id, created_at)
+    ORDER BY (session_id, created_at)
     TTL created_at + INTERVAL 7 DAY
   `,
 
@@ -93,7 +133,17 @@ export const SCHEMAS: Record<string, string> = {
       utm_content Nullable(String),
       utm_id Nullable(String),
       utm_id_from Nullable(String),
-      channel Nullable(String),
+      cd_1 Nullable(String),
+      cd_2 Nullable(String),
+      cd_3 Nullable(String),
+      cd_4 Nullable(String),
+      cd_5 Nullable(String),
+      cd_6 Nullable(String),
+      cd_7 Nullable(String),
+      cd_8 Nullable(String),
+      cd_9 Nullable(String),
+      cd_10 Nullable(String),
+      filter_version Nullable(String),
       screen_width Nullable(UInt16),
       screen_height Nullable(UInt16),
       viewport_width Nullable(UInt16),
@@ -108,11 +158,10 @@ export const SCHEMAS: Record<string, string> = {
       connection_type Nullable(String),
       max_scroll Nullable(UInt8),
       sdk_version Nullable(String),
-      INDEX idx_workspace_id workspace_id TYPE bloom_filter GRANULARITY 1,
       INDEX idx_created_at created_at TYPE minmax GRANULARITY 1
     ) ENGINE = ReplacingMergeTree(updated_at)
     PARTITION BY toYYYYMM(created_at)
-    ORDER BY (workspace_id, created_at, id)
+    ORDER BY (created_at, id)
   `,
 
   sessions_mv: `
@@ -147,7 +196,17 @@ export const SCHEMAS: Record<string, string> = {
       argMin(utm_content, events.created_at) as utm_content,
       argMin(utm_id, events.created_at) as utm_id,
       argMin(utm_id_from, events.created_at) as utm_id_from,
-      argMin(channel, events.created_at) as channel,
+      argMin(cd_1, events.created_at) as cd_1,
+      argMin(cd_2, events.created_at) as cd_2,
+      argMin(cd_3, events.created_at) as cd_3,
+      argMin(cd_4, events.created_at) as cd_4,
+      argMin(cd_5, events.created_at) as cd_5,
+      argMin(cd_6, events.created_at) as cd_6,
+      argMin(cd_7, events.created_at) as cd_7,
+      argMin(cd_8, events.created_at) as cd_8,
+      argMin(cd_9, events.created_at) as cd_9,
+      argMin(cd_10, events.created_at) as cd_10,
+      argMin(filter_version, events.created_at) as filter_version,
       any(screen_width) as screen_width,
       any(screen_height) as screen_height,
       any(viewport_width) as viewport_width,

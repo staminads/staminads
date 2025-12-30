@@ -4,7 +4,8 @@ import { createClient, ClickHouseClient } from '@clickhouse/client';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 
-const TEST_DATABASE = 'staminads_test';
+const TEST_SYSTEM_DATABASE = 'staminads_test_system';
+const TEST_WORKSPACE_DATABASE = 'staminads_test_ws';
 
 function toClickHouseDateTime(date: Date = new Date()): string {
   return date.toISOString().replace('T', ' ').replace('Z', '');
@@ -12,12 +13,13 @@ function toClickHouseDateTime(date: Date = new Date()): string {
 
 describe('Analytics E2E', () => {
   let app: INestApplication;
-  let clickhouse: ClickHouseClient;
+  let systemClient: ClickHouseClient;
+  let workspaceClient: ClickHouseClient;
   let authToken: string;
   let workspaceId: string;
 
   beforeAll(async () => {
-    process.env.CLICKHOUSE_DATABASE = TEST_DATABASE;
+    process.env.CLICKHOUSE_SYSTEM_DATABASE = TEST_SYSTEM_DATABASE;
     process.env.JWT_SECRET = 'test-secret-key';
     process.env.ADMIN_EMAIL = 'admin@test.com';
     process.env.ADMIN_PASSWORD = 'testpass';
@@ -35,9 +37,14 @@ describe('Analytics E2E', () => {
     );
     await app.init();
 
-    clickhouse = createClient({
+    systemClient = createClient({
       url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
-      database: TEST_DATABASE,
+      database: TEST_SYSTEM_DATABASE,
+    });
+
+    workspaceClient = createClient({
+      url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
+      database: TEST_WORKSPACE_DATABASE,
     });
 
     // Get auth token
@@ -51,11 +58,11 @@ describe('Analytics E2E', () => {
     expect(loginRes.status).toBe(201);
     authToken = loginRes.body.access_token;
 
-    // Create test workspace
+    // Create test workspace in system database
     workspaceId = 'analytics-test-ws';
-    await clickhouse.command({ query: 'TRUNCATE TABLE workspaces' });
-    await clickhouse.command({ query: 'TRUNCATE TABLE sessions' });
-    await clickhouse.insert({
+    await systemClient.command({ query: 'TRUNCATE TABLE workspaces' });
+    await workspaceClient.command({ query: 'TRUNCATE TABLE sessions' });
+    await systemClient.insert({
       table: 'workspaces',
       values: [
         {
@@ -73,7 +80,7 @@ describe('Analytics E2E', () => {
       format: 'JSONEachRow',
     });
 
-    // Seed test sessions
+    // Seed test sessions in workspace database
     const baseDate = new Date('2025-12-01T12:00:00Z');
     const sessions = [];
     for (let i = 0; i < 30; i++) {
@@ -127,7 +134,7 @@ describe('Analytics E2E', () => {
       });
     }
 
-    await clickhouse.insert({
+    await workspaceClient.insert({
       table: 'sessions',
       values: sessions,
       format: 'JSONEachRow',
@@ -137,7 +144,8 @@ describe('Analytics E2E', () => {
   });
 
   afterAll(async () => {
-    await clickhouse.close();
+    await systemClient.close();
+    await workspaceClient.close();
     await app.close();
   });
 

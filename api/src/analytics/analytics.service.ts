@@ -97,7 +97,12 @@ export class AnalyticsService {
 
     // Build and execute query (pass timezone for granularity grouping)
     const { sql, params } = buildAnalyticsQuery(queryDto, tz);
-    let data = await this.clickhouse.query<Record<string, unknown>>(sql, params);
+    // Query the workspace-specific database
+    let data = await this.clickhouse.queryWorkspace<Record<string, unknown>>(
+      dto.workspace_id,
+      sql,
+      params,
+    );
 
     // Fill gaps if granularity is set (pass dimensions for per-dimension gap filling)
     const granularity = dto.dateRange.granularity;
@@ -182,10 +187,18 @@ export class AnalyticsService {
       tz,
     );
 
-    // Execute both queries
+    // Execute both queries against workspace database
     const [currentData, previousData] = await Promise.all([
-      this.clickhouse.query<Record<string, unknown>>(currentSql, currentParams),
-      this.clickhouse.query<Record<string, unknown>>(previousSql, previousParams),
+      this.clickhouse.queryWorkspace<Record<string, unknown>>(
+        dto.workspace_id,
+        currentSql,
+        currentParams,
+      ),
+      this.clickhouse.queryWorkspace<Record<string, unknown>>(
+        dto.workspace_id,
+        previousSql,
+        previousParams,
+      ),
     ]);
 
     // Fill gaps for both if granularity is set (pass dimensions for per-dimension gap filling)

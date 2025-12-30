@@ -86,6 +86,12 @@ export function buildAnalyticsQuery(
   const groupByClause =
     groupByCols.length > 0 ? `GROUP BY ${groupByCols.join(', ')}` : '';
 
+  // Build HAVING clause (only if GROUP BY exists)
+  const havingClause =
+    query.havingMinSessions && groupByCols.length > 0
+      ? `HAVING count() >= ${query.havingMinSessions}`
+      : '';
+
   // Build ORDER BY
   let orderBy = '';
   if (granularityColumn) {
@@ -122,8 +128,8 @@ export function buildAnalyticsQuery(
   const selectClause = selectParts.join(',\n  ');
   const limitClause = `LIMIT ${Math.min(query.limit || 1000, 10000)}`;
 
+  // Note: workspace_id filter removed since each workspace has its own database
   const whereConditions = [
-    'workspace_id = {workspace_id:String}',
     'created_at >= {date_start:DateTime64(3)}',
     'created_at <= {date_end:DateTime64(3)}',
   ];
@@ -137,12 +143,12 @@ SELECT
 FROM sessions FINAL
 WHERE ${whereConditions.join('\n  AND ')}
 ${groupByClause}
+${havingClause}
 ${orderBy}
 ${limitClause}
   `.trim();
 
   const params: Record<string, unknown> = {
-    workspace_id: query.workspace_id,
     date_start: query.dateRange.start,
     date_end: query.dateRange.end,
     ...filterParams,

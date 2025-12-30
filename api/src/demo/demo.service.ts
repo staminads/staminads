@@ -2,8 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ClickHouseService } from '../database/clickhouse.service';
 import { generateEvents } from './fixtures/generators';
 import { TrackingEvent } from '../events/entities/event.entity';
-import { randomUUID } from 'crypto';
 
+const DEMO_WORKSPACE_ID = 'demo-apple';
 const DEMO_WORKSPACE_NAME = 'Apple Demo';
 const DEMO_WEBSITE = 'https://www.apple.com';
 const SESSION_COUNT = 10000;
@@ -19,6 +19,8 @@ interface Workspace {
   logo_url: string | null;
   timescore_reference: number;
   status: string;
+  custom_dimensions: string;
+  filters: string;
   created_at: string;
   updated_at: string;
 }
@@ -39,16 +41,15 @@ export class DemoService {
     // Delete existing demo workspace if it exists
     await this.deleteExistingDemo();
 
-    // Create new workspace
-    const workspaceId = `demo-apple-${randomUUID().slice(0, 8)}`;
-    const workspace = await this.createWorkspace(workspaceId);
+    // Create new workspace with fixed ID
+    const workspace = await this.createWorkspace(DEMO_WORKSPACE_ID);
 
-    this.logger.log(`Created workspace: ${workspaceId}`);
+    this.logger.log(`Created workspace: ${DEMO_WORKSPACE_ID}`);
 
     // Generate events (not sessions - MV will create sessions)
     const endDate = new Date();
     const events = generateEvents({
-      workspaceId,
+      workspaceId: DEMO_WORKSPACE_ID,
       sessionCount: SESSION_COUNT,
       endDate,
       daysRange: DAYS_RANGE,
@@ -57,7 +58,7 @@ export class DemoService {
     this.logger.log(`Generated ${events.length} events for ${SESSION_COUNT} sessions`);
 
     // Insert events in batches
-    await this.insertEventsBatched(events);
+    await this.insertEventsBatched(DEMO_WORKSPACE_ID, events);
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
     this.logger.log(`Demo generation completed in ${duration}s`);
@@ -67,7 +68,7 @@ export class DemoService {
     startDate.setDate(startDate.getDate() - DAYS_RANGE);
 
     return {
-      workspace_id: workspaceId,
+      workspace_id: DEMO_WORKSPACE_ID,
       workspace_name: DEMO_WORKSPACE_NAME,
       events_count: events.length,
       sessions_count: SESSION_COUNT,
@@ -85,7 +86,7 @@ export class DemoService {
     if (deleted) {
       return {
         success: true,
-        message: 'Demo workspace, events, and sessions deleted',
+        message: 'Demo workspace and database deleted',
       };
     }
 
@@ -96,34 +97,25 @@ export class DemoService {
   }
 
   private async deleteExistingDemo(): Promise<boolean> {
-    // Find existing demo workspace
-    const workspaces = await this.clickhouse.query<{ id: string }>(
-      `SELECT id FROM workspaces WHERE name = {name:String} LIMIT 1`,
-      { name: DEMO_WORKSPACE_NAME },
+    // Check if demo workspace exists in system database
+    const workspaces = await this.clickhouse.querySystem<{ id: string }>(
+      `SELECT id FROM workspaces WHERE id = {id:String} LIMIT 1`,
+      { id: DEMO_WORKSPACE_ID },
     );
 
     if (workspaces.length === 0) {
       return false;
     }
 
-    const workspaceId = workspaces[0].id;
+    // Drop workspace database (cascades to all tables - events, sessions, etc.)
+    await this.clickhouse.dropWorkspaceDatabase(DEMO_WORKSPACE_ID);
 
-    // Delete events for this workspace
-    await this.clickhouse.command(
-      `ALTER TABLE events DELETE WHERE workspace_id = '${workspaceId}'`,
+    // Delete workspace row from system database
+    await this.clickhouse.commandSystem(
+      `ALTER TABLE workspaces DELETE WHERE id = '${DEMO_WORKSPACE_ID}'`,
     );
 
-    // Delete sessions for this workspace (populated by MV)
-    await this.clickhouse.command(
-      `ALTER TABLE sessions DELETE WHERE workspace_id = '${workspaceId}'`,
-    );
-
-    // Delete workspace
-    await this.clickhouse.command(
-      `ALTER TABLE workspaces DELETE WHERE id = '${workspaceId}'`,
-    );
-
-    this.logger.log(`Deleted existing demo workspace: ${workspaceId}`);
+    this.logger.log(`Deleted existing demo workspace: ${DEMO_WORKSPACE_ID}`);
 
     return true;
   }
@@ -140,23 +132,33 @@ export class DemoService {
       logo_url: 'https://www.apple.com/ac/structured-data/images/knowledge_graph_logo.png',
       timescore_reference: 60,
       status: 'active',
+      custom_dimensions: '[]',
+      filters: '[]',
       created_at: now,
       updated_at: now,
     };
 
-    await this.clickhouse.insert('workspaces', [workspace]);
+    // Create workspace database first
+    await this.clickhouse.createWorkspaceDatabase(workspaceId);
+
+    // Insert workspace row into system database
+    await this.clickhouse.insertSystem('workspaces', [workspace]);
 
     return workspace;
   }
 
-  private async insertEventsBatched(events: TrackingEvent[]): Promise<void> {
+  private async insertEventsBatched(
+    workspaceId: string,
+    events: TrackingEvent[],
+  ): Promise<void> {
     const totalBatches = Math.ceil(events.length / BATCH_SIZE);
 
     for (let i = 0; i < events.length; i += BATCH_SIZE) {
       const batch = events.slice(i, i + BATCH_SIZE);
       const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
 
-      await this.clickhouse.insert('events', batch);
+      // Insert to workspace database
+      await this.clickhouse.insertWorkspace(workspaceId, 'events', batch);
 
       this.logger.log(`Inserted batch ${batchNumber}/${totalBatches} (${batch.length} events)`);
     }

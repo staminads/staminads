@@ -28,8 +28,20 @@ export interface TrackingEvent {
   utm_id: string | null;
   utm_id_from: string | null;
 
-  // Channel
-  channel: string | null;
+  // Custom dimensions (cd_1 through cd_10)
+  cd_1: string | null;
+  cd_2: string | null;
+  cd_3: string | null;
+  cd_4: string | null;
+  cd_5: string | null;
+  cd_6: string | null;
+  cd_7: string | null;
+  cd_8: string | null;
+  cd_9: string | null;
+  cd_10: string | null;
+
+  // Filter version for staleness tracking
+  filter_version: string | null;
 
   // Screen/Viewport
   screen_width: number | null;

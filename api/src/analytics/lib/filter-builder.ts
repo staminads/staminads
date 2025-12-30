@@ -74,6 +74,12 @@ export function buildFilters(
       case 'isNotNull':
         conditions.push(`${col} IS NOT NULL`);
         break;
+      case 'isEmpty':
+        conditions.push(`(${col} = '' OR ${col} IS NULL)`);
+        break;
+      case 'isNotEmpty':
+        conditions.push(`(${col} != '' AND ${col} IS NOT NULL)`);
+        break;
       case 'between': {
         const p1 = `${paramName}a`;
         const p2 = `${paramName}b`;

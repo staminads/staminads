@@ -32,17 +32,17 @@ describe('buildFilters', () => {
 
   it('handles in operator with array', () => {
     const result = buildFilters([
-      { dimension: 'channel', operator: 'in', values: ['google', 'facebook'] },
+      { dimension: 'utm_source', operator: 'in', values: ['google', 'facebook'] },
     ]);
-    expect(result.sql).toBe('channel IN {f0:Array(String)}');
+    expect(result.sql).toBe('utm_source IN {f0:Array(String)}');
     expect(result.params.f0).toEqual(['google', 'facebook']);
   });
 
   it('handles notIn operator', () => {
     const result = buildFilters([
-      { dimension: 'channel', operator: 'notIn', values: ['google'] },
+      { dimension: 'utm_source', operator: 'notIn', values: ['google'] },
     ]);
-    expect(result.sql).toBe('channel NOT IN {f0:Array(String)}');
+    expect(result.sql).toBe('utm_source NOT IN {f0:Array(String)}');
     expect(result.params.f0).toEqual(['google']);
   });
 
@@ -110,6 +110,22 @@ describe('buildFilters', () => {
     expect(Object.keys(result.params)).toHaveLength(0);
   });
 
+  it('handles isEmpty operator', () => {
+    const result = buildFilters([
+      { dimension: 'utm_source', operator: 'isEmpty' },
+    ]);
+    expect(result.sql).toBe("(utm_source = '' OR utm_source IS NULL)");
+    expect(Object.keys(result.params)).toHaveLength(0);
+  });
+
+  it('handles isNotEmpty operator', () => {
+    const result = buildFilters([
+      { dimension: 'utm_source', operator: 'isNotEmpty' },
+    ]);
+    expect(result.sql).toBe("(utm_source != '' AND utm_source IS NOT NULL)");
+    expect(Object.keys(result.params)).toHaveLength(0);
+  });
+
   it('handles between with two values', () => {
     const result = buildFilters([
       { dimension: 'hour', operator: 'between', values: [9, 17] },
@@ -122,9 +138,9 @@ describe('buildFilters', () => {
   it('combines multiple filters with AND', () => {
     const result = buildFilters([
       { dimension: 'device', operator: 'equals', values: ['mobile'] },
-      { dimension: 'channel', operator: 'equals', values: ['google'] },
+      { dimension: 'utm_source', operator: 'equals', values: ['google'] },
     ]);
-    expect(result.sql).toBe('device = {f0:String} AND channel = {f1:String}');
+    expect(result.sql).toBe('device = {f0:String} AND utm_source = {f1:String}');
     expect(result.params.f0).toBe('mobile');
     expect(result.params.f1).toBe('google');
   });

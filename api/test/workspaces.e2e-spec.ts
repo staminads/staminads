@@ -4,7 +4,8 @@ import { createClient, ClickHouseClient } from '@clickhouse/client';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 
-const TEST_DATABASE = 'staminads_test';
+const TEST_SYSTEM_DATABASE = 'staminads_test_system';
+const TEST_WORKSPACE_DATABASE = 'staminads_test_ws';
 
 function toClickHouseDateTime(date: Date = new Date()): string {
   return date.toISOString().replace('T', ' ').replace('Z', '');
@@ -12,12 +13,13 @@ function toClickHouseDateTime(date: Date = new Date()): string {
 
 describe('Workspaces Integration', () => {
   let app: INestApplication;
-  let clickhouse: ClickHouseClient;
+  let systemClient: ClickHouseClient;
+  let workspaceClient: ClickHouseClient;
   let authToken: string;
 
   beforeAll(async () => {
-    // Override env vars for test database
-    process.env.CLICKHOUSE_DATABASE = TEST_DATABASE;
+    // Override env vars for test databases
+    process.env.CLICKHOUSE_SYSTEM_DATABASE = TEST_SYSTEM_DATABASE;
     process.env.JWT_SECRET = 'test-secret-key';
     process.env.ADMIN_EMAIL = 'admin@test.com';
     process.env.ADMIN_PASSWORD = 'testpass';
@@ -35,10 +37,15 @@ describe('Workspaces Integration', () => {
     );
     await app.init();
 
-    // Direct ClickHouse client for verification
-    clickhouse = createClient({
+    // Direct ClickHouse clients for verification
+    systemClient = createClient({
       url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
-      database: TEST_DATABASE,
+      database: TEST_SYSTEM_DATABASE,
+    });
+
+    workspaceClient = createClient({
+      url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
+      database: TEST_WORKSPACE_DATABASE,
     });
 
     // Get auth token
@@ -55,13 +62,14 @@ describe('Workspaces Integration', () => {
   });
 
   afterAll(async () => {
-    await clickhouse.close();
+    await systemClient.close();
+    await workspaceClient.close();
     await app.close();
   });
 
   beforeEach(async () => {
-    // Clean tables before each test
-    await clickhouse.command({ query: 'TRUNCATE TABLE workspaces' });
+    // Clean system tables before each test
+    await systemClient.command({ query: 'TRUNCATE TABLE workspaces' });
     // Wait for mutations to complete
     await new Promise((resolve) => setTimeout(resolve, 100));
   });
@@ -100,8 +108,8 @@ describe('Workspaces Integration', () => {
       // Wait for insert to be visible
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Verify persisted in ClickHouse
-      const result = await clickhouse.query({
+      // Verify persisted in ClickHouse system database
+      const result = await systemClient.query({
         query: 'SELECT * FROM workspaces WHERE id = {id:String}',
         query_params: { id: dto.id },
         format: 'JSONEachRow',
@@ -191,7 +199,7 @@ describe('Workspaces Integration', () => {
 
   describe('GET /api/workspaces.get', () => {
     it('returns workspace by id', async () => {
-      // Insert directly to ClickHouse
+      // Insert directly to ClickHouse system database
       const workspace = {
         id: 'get-test-ws',
         name: 'Get Test',
@@ -203,7 +211,7 @@ describe('Workspaces Integration', () => {
         created_at: toClickHouseDateTime(),
         updated_at: toClickHouseDateTime(),
       };
-      await clickhouse.insert({
+      await systemClient.insert({
         table: 'workspaces',
         values: [workspace],
         format: 'JSONEachRow',
@@ -275,7 +283,7 @@ describe('Workspaces Integration', () => {
           updated_at: toClickHouseDateTime(),
         },
       ];
-      await clickhouse.insert({
+      await systemClient.insert({
         table: 'workspaces',
         values: workspaces,
         format: 'JSONEachRow',
@@ -321,7 +329,7 @@ describe('Workspaces Integration', () => {
         created_at: toClickHouseDateTime(),
         updated_at: toClickHouseDateTime(),
       };
-      await clickhouse.insert({
+      await systemClient.insert({
         table: 'workspaces',
         values: [workspace],
         format: 'JSONEachRow',
@@ -337,8 +345,8 @@ describe('Workspaces Integration', () => {
       // Wait for delete mutation to complete
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      // Verify deleted from ClickHouse
-      const result = await clickhouse.query({
+      // Verify deleted from ClickHouse system database
+      const result = await systemClient.query({
         query: 'SELECT * FROM workspaces WHERE id = {id:String}',
         query_params: { id: workspace.id },
         format: 'JSONEachRow',
@@ -365,7 +373,7 @@ describe('Workspaces Integration', () => {
 
   describe('Table Schema Verification', () => {
     it('workspaces table has all required columns with correct types', async () => {
-      const result = await clickhouse.query({
+      const result = await systemClient.query({
         query: 'DESCRIBE TABLE workspaces',
         format: 'JSONEachRow',
       });
@@ -387,8 +395,8 @@ describe('Workspaces Integration', () => {
       expect(columnMap['updated_at']).toMatch(/DateTime64/);
     });
 
-    it('sessions table has all required columns', async () => {
-      const result = await clickhouse.query({
+    it('sessions table has all required columns (in workspace database)', async () => {
+      const result = await workspaceClient.query({
         query: 'DESCRIBE TABLE sessions',
         format: 'JSONEachRow',
       });
@@ -427,8 +435,8 @@ describe('Workspaces Integration', () => {
       expect(columnNames).toContain('exit_page');
     });
 
-    it('events table has all required columns', async () => {
-      const result = await clickhouse.query({
+    it('events table has all required columns (in workspace database)', async () => {
+      const result = await workspaceClient.query({
         query: 'DESCRIBE TABLE events',
         format: 'JSONEachRow',
       });

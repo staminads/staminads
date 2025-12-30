@@ -1,3 +1,6 @@
+import { CustomDimensionDefinition } from '../../custom-dimensions/entities/custom-dimension.entity';
+import { FilterDefinition } from '../../filters/entities/filter.entity';
+
 export type WorkspaceStatus = 'initializing' | 'active' | 'inactive' | 'error';
 
 export interface Workspace {
@@ -11,4 +14,6 @@ export interface Workspace {
   updated_at: string;
   timescore_reference: number;
   status: WorkspaceStatus;
+  custom_dimensions?: CustomDimensionDefinition[];
+  filters?: FilterDefinition[];
 }

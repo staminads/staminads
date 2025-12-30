@@ -8,87 +8,137 @@ const FLUSH_INTERVAL_MS = 2000;
 @Injectable()
 export class EventBufferService implements OnModuleDestroy {
   private readonly logger = new Logger(EventBufferService.name);
-  private buffer: TrackingEvent[] = [];
-  private flushTimer: NodeJS.Timeout | null = null;
-  private isFlushing = false;
+  // Per-workspace buffers
+  private buffers = new Map<string, TrackingEvent[]>();
+  private flushTimers = new Map<string, NodeJS.Timeout>();
+  private flushingWorkspaces = new Set<string>();
 
   constructor(private readonly clickhouse: ClickHouseService) {}
 
   async onModuleDestroy() {
-    this.stopFlushTimer();
-    await this.flush();
+    // Stop all timers
+    for (const [workspaceId] of this.flushTimers) {
+      this.stopFlushTimer(workspaceId);
+    }
+
+    // Flush all workspace buffers
+    const flushPromises: Promise<void>[] = [];
+    for (const workspaceId of this.buffers.keys()) {
+      flushPromises.push(this.flush(workspaceId));
+    }
+    await Promise.all(flushPromises);
+
     this.logger.log('Event buffer destroyed, final flush complete');
   }
 
   async add(event: TrackingEvent): Promise<void> {
-    this.buffer.push(event);
+    const workspaceId = event.workspace_id;
 
-    // Start timer on first event
-    if (this.buffer.length === 1) {
-      this.startFlushTimer();
+    if (!this.buffers.has(workspaceId)) {
+      this.buffers.set(workspaceId, []);
     }
 
-    if (this.buffer.length >= MAX_BUFFER_SIZE) {
-      await this.flush();
+    const buffer = this.buffers.get(workspaceId)!;
+    buffer.push(event);
+
+    // Start timer on first event for this workspace
+    if (buffer.length === 1) {
+      this.startFlushTimer(workspaceId);
+    }
+
+    if (buffer.length >= MAX_BUFFER_SIZE) {
+      await this.flush(workspaceId);
     }
   }
 
   async addBatch(events: TrackingEvent[]): Promise<void> {
-    const wasEmpty = this.buffer.length === 0;
-    this.buffer.push(...events);
-
-    // Start timer if buffer was empty
-    if (wasEmpty && this.buffer.length > 0) {
-      this.startFlushTimer();
+    // Group events by workspace
+    const byWorkspace = new Map<string, TrackingEvent[]>();
+    for (const event of events) {
+      const workspaceId = event.workspace_id;
+      if (!byWorkspace.has(workspaceId)) {
+        byWorkspace.set(workspaceId, []);
+      }
+      byWorkspace.get(workspaceId)!.push(event);
     }
 
-    if (this.buffer.length >= MAX_BUFFER_SIZE) {
-      await this.flush();
+    // Add each group to its workspace buffer
+    for (const [workspaceId, workspaceEvents] of byWorkspace) {
+      for (const event of workspaceEvents) {
+        await this.add(event);
+      }
     }
   }
 
-  getBufferSize(): number {
-    return this.buffer.length;
+  getBufferSize(workspaceId?: string): number {
+    if (workspaceId) {
+      return this.buffers.get(workspaceId)?.length ?? 0;
+    }
+    // Return total size across all workspaces
+    let total = 0;
+    for (const buffer of this.buffers.values()) {
+      total += buffer.length;
+    }
+    return total;
   }
 
-  private startFlushTimer(): void {
-    if (this.flushTimer) return; // Already running
+  private startFlushTimer(workspaceId: string): void {
+    if (this.flushTimers.has(workspaceId)) return; // Already running
 
-    this.flushTimer = setTimeout(() => {
-      this.flush().catch((err) => {
-        this.logger.error('Flush timer error:', err);
+    const timer = setTimeout(() => {
+      this.flush(workspaceId).catch((err) => {
+        this.logger.error(`Flush timer error for workspace ${workspaceId}:`, err);
       });
     }, FLUSH_INTERVAL_MS);
+
+    this.flushTimers.set(workspaceId, timer);
   }
 
-  private stopFlushTimer(): void {
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
-      this.flushTimer = null;
+  private stopFlushTimer(workspaceId: string): void {
+    const timer = this.flushTimers.get(workspaceId);
+    if (timer) {
+      clearTimeout(timer);
+      this.flushTimers.delete(workspaceId);
     }
   }
 
-  async flush(): Promise<void> {
-    this.stopFlushTimer(); // Clear timer on flush
+  async flush(workspaceId: string): Promise<void> {
+    this.stopFlushTimer(workspaceId); // Clear timer on flush
 
-    if (this.buffer.length === 0 || this.isFlushing) {
+    const buffer = this.buffers.get(workspaceId);
+    if (!buffer || buffer.length === 0 || this.flushingWorkspaces.has(workspaceId)) {
       return;
     }
 
-    this.isFlushing = true;
-    const eventsToFlush = [...this.buffer];
-    this.buffer = [];
+    this.flushingWorkspaces.add(workspaceId);
+    const eventsToFlush = [...buffer];
+    this.buffers.set(workspaceId, []);
 
     try {
-      await this.clickhouse.insert('events', eventsToFlush);
-      this.logger.debug(`Flushed ${eventsToFlush.length} events to ClickHouse`);
+      // Insert to workspace-specific database
+      await this.clickhouse.insertWorkspace(workspaceId, 'events', eventsToFlush);
+      this.logger.debug(
+        `Flushed ${eventsToFlush.length} events to workspace ${workspaceId}`,
+      );
     } catch (error) {
       // Re-add failed events to buffer (at front for retry)
-      this.buffer = [...eventsToFlush, ...this.buffer];
-      this.logger.error('Failed to flush events:', error);
+      const currentBuffer = this.buffers.get(workspaceId) || [];
+      this.buffers.set(workspaceId, [...eventsToFlush, ...currentBuffer]);
+      this.logger.error(`Failed to flush events for workspace ${workspaceId}:`, error);
       throw error;
     } finally {
-      this.isFlushing = false;
+      this.flushingWorkspaces.delete(workspaceId);
+    }
+  }
+
+  /**
+   * Flush all workspace buffers.
+   * Used primarily for testing and graceful shutdown.
+   */
+  async flushAll(): Promise<void> {
+    const workspaceIds = [...this.buffers.keys()];
+    for (const workspaceId of workspaceIds) {
+      await this.flush(workspaceId);
     }
   }
 }

@@ -12,8 +12,8 @@ describe('buildAnalyticsQuery', () => {
     const { sql, params } = buildAnalyticsQuery(baseQuery);
     expect(sql).toContain('count() as sessions');
     expect(sql).toContain('FROM sessions FINAL');
-    expect(sql).toContain('workspace_id = {workspace_id:String}');
-    expect(params.workspace_id).toBe('test-ws');
+    // workspace_id filter is no longer in query - queries run against workspace-specific database
+    expect(sql).not.toContain('workspace_id');
     expect(params.date_start).toBe('2025-12-01');
     expect(params.date_end).toBe('2025-12-28');
   });
@@ -33,11 +33,11 @@ describe('buildAnalyticsQuery', () => {
   it('adds dimensions to SELECT and GROUP BY', () => {
     const { sql } = buildAnalyticsQuery({
       ...baseQuery,
-      dimensions: ['channel', 'device'],
+      dimensions: ['utm_source', 'device'],
     });
-    expect(sql).toContain('channel');
+    expect(sql).toContain('utm_source');
     expect(sql).toContain('device');
-    expect(sql).toMatch(/GROUP BY.*channel.*device/s);
+    expect(sql).toMatch(/GROUP BY.*utm_source.*device/s);
   });
 
   it('handles granularity day in SELECT and GROUP BY', () => {
@@ -106,7 +106,7 @@ describe('buildAnalyticsQuery', () => {
   it('orders by granularity first, then custom order', () => {
     const { sql } = buildAnalyticsQuery({
       ...baseQuery,
-      dimensions: ['channel'],
+      dimensions: ['utm_source'],
       dateRange: {
         start: '2025-12-01',
         end: '2025-12-28',
@@ -131,11 +131,11 @@ describe('buildAnalyticsQuery', () => {
       ...baseQuery,
       filters: [
         { dimension: 'device', operator: 'equals', values: ['mobile'] },
-        { dimension: 'channel', operator: 'in', values: ['google', 'facebook'] },
+        { dimension: 'utm_source', operator: 'in', values: ['google', 'facebook'] },
       ],
     });
     expect(sql).toContain('device = {f0:String}');
-    expect(sql).toContain('channel IN {f1:Array(String)}');
+    expect(sql).toContain('utm_source IN {f1:Array(String)}');
     expect(params.f0).toBe('mobile');
     expect(params.f1).toEqual(['google', 'facebook']);
   });
@@ -201,7 +201,7 @@ describe('buildAnalyticsQuery', () => {
   it('combines granularity with dimensions', () => {
     const { sql } = buildAnalyticsQuery({
       ...baseQuery,
-      dimensions: ['channel'],
+      dimensions: ['utm_source'],
       dateRange: {
         start: '2025-12-01',
         end: '2025-12-28',
@@ -209,8 +209,8 @@ describe('buildAnalyticsQuery', () => {
       },
     });
     expect(sql).toContain('date_day');
-    expect(sql).toContain('channel');
-    expect(sql).toMatch(/GROUP BY.*date_day.*channel/s);
+    expect(sql).toContain('utm_source');
+    expect(sql).toMatch(/GROUP BY.*date_day.*utm_source/s);
   });
 
   it('applies timezone to granularity grouping', () => {
@@ -260,5 +260,31 @@ describe('buildAnalyticsQuery', () => {
     // No timezone suffix when UTC
     expect(sql).toContain('toDate(created_at) as date_day');
     expect(sql).not.toContain("toDate(created_at, 'UTC')");
+  });
+
+  it('adds HAVING clause when havingMinSessions specified', () => {
+    const { sql } = buildAnalyticsQuery({
+      ...baseQuery,
+      dimensions: ['utm_source'],
+      havingMinSessions: 10,
+    });
+    expect(sql).toContain('HAVING count() >= 10');
+  });
+
+  it('omits HAVING clause when havingMinSessions not specified', () => {
+    const { sql } = buildAnalyticsQuery({
+      ...baseQuery,
+      dimensions: ['utm_source'],
+    });
+    expect(sql).not.toContain('HAVING');
+  });
+
+  it('ignores havingMinSessions when no GROUP BY', () => {
+    const { sql } = buildAnalyticsQuery({
+      ...baseQuery,
+      havingMinSessions: 10,
+      // No dimensions, no granularity = no GROUP BY
+    });
+    expect(sql).not.toContain('HAVING');
   });
 });

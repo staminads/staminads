@@ -29,6 +29,8 @@ export const FILTER_OPERATORS = [
   'isNull',
   'isNotNull',
   'between',
+  'isEmpty',
+  'isNotEmpty',
 ] as const;
 
 export type FilterOperator = (typeof FILTER_OPERATORS)[number];
@@ -157,4 +159,9 @@ export class AnalyticsQueryDto {
   @Min(1)
   @Max(10000)
   limit?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  havingMinSessions?: number;
 }

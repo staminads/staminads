@@ -1,8 +1,16 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { ClickHouseService } from '../database/clickhouse.service';
 import { EventBufferService } from './event-buffer.service';
 import { TrackEventDto } from './dto/track-event.dto';
 import { TrackingEvent } from './entities/event.entity';
+import { WorkspacesService } from '../workspaces/workspaces.service';
+import { Workspace } from '../workspaces/entities/workspace.entity';
+import {
+  extractFieldValues,
+  applyFilterResults,
+} from '../filters/lib/filter-evaluator';
+import { computeCustomDimensions } from '../custom-dimensions/lib/rule-evaluator';
 
 function toClickHouseDateTime(date: Date = new Date()): string {
   return date.toISOString().replace('T', ' ').replace('Z', '');
@@ -24,17 +32,28 @@ function parseUrl(urlString: string | undefined): {
   }
 }
 
+// Simple in-memory cache for workspace configs
+interface CachedWorkspace {
+  workspace: Workspace;
+  expiresAt: number;
+}
+
+const CACHE_TTL_MS = 60 * 1000; // 1 minute cache
+
 @Injectable()
 export class EventsService {
+  private readonly logger = new Logger(EventsService.name);
+  private workspaceCache = new Map<string, CachedWorkspace>();
+
   constructor(
     private readonly clickhouse: ClickHouseService,
     private readonly buffer: EventBufferService,
+    private readonly workspacesService: WorkspacesService,
   ) {}
 
   async track(dto: TrackEventDto): Promise<{ success: boolean }> {
-    await this.validateWorkspace(dto.workspace_id);
-
-    const event = this.dtoToEvent(dto);
+    const workspace = await this.getWorkspaceConfig(dto.workspace_id);
+    const event = this.buildEvent(dto, workspace);
     await this.buffer.add(event);
 
     return { success: true };
@@ -55,31 +74,61 @@ export class EventsService {
       );
     }
 
-    await this.validateWorkspace(workspaceId);
-
-    const events = dtos.map((dto) => this.dtoToEvent(dto));
+    const workspace = await this.getWorkspaceConfig(workspaceId);
+    const events = dtos.map((dto) => this.buildEvent(dto, workspace));
     await this.buffer.addBatch(events);
 
     return { success: true, count: events.length };
   }
 
-  private async validateWorkspace(workspaceId: string): Promise<void> {
-    const rows = await this.clickhouse.query<{ id: string }>(
-      'SELECT id FROM workspaces WHERE id = {id:String} LIMIT 1',
-      { id: workspaceId },
-    );
+  /**
+   * Get workspace configuration with caching.
+   */
+  private async getWorkspaceConfig(workspaceId: string): Promise<Workspace> {
+    const now = Date.now();
+    const cached = this.workspaceCache.get(workspaceId);
 
-    if (rows.length === 0) {
+    if (cached && cached.expiresAt > now) {
+      return cached.workspace;
+    }
+
+    try {
+      const workspace = await this.workspacesService.get(workspaceId);
+      this.workspaceCache.set(workspaceId, {
+        workspace,
+        expiresAt: now + CACHE_TTL_MS,
+      });
+      return workspace;
+    } catch (error) {
       throw new BadRequestException(`Invalid workspace_id: ${workspaceId}`);
     }
   }
 
-  private dtoToEvent(dto: TrackEventDto): TrackingEvent {
+  /**
+   * Invalidate workspace cache (called when filters change).
+   */
+  invalidateCache(workspaceId: string): void {
+    this.workspaceCache.delete(workspaceId);
+  }
+
+  /**
+   * Handle filters.changed event to invalidate cache.
+   */
+  @OnEvent('filters.changed')
+  handleFiltersChanged(payload: { workspaceId: string }): void {
+    this.invalidateCache(payload.workspaceId);
+  }
+
+  /**
+   * Build a tracking event from a DTO, applying filters and custom dimensions.
+   */
+  private buildEvent(dto: TrackEventDto, workspace: Workspace): TrackingEvent {
     const referrerParsed = parseUrl(dto.referrer);
     const landingParsed = parseUrl(dto.landing_page);
     const now = toClickHouseDateTime();
 
-    return {
+    // Build base event with raw values
+    const baseEvent: TrackingEvent = {
       session_id: dto.session_id,
       workspace_id: dto.workspace_id,
       created_at: now,
@@ -107,9 +156,6 @@ export class EventsService {
       utm_id: dto.utm_id ?? null,
       utm_id_from: dto.utm_id_from ?? null,
 
-      // Channel (derive from UTM or referrer if not provided)
-      channel: dto.channel ?? this.deriveChannel(dto),
-
       // Device
       screen_width: dto.screen_width ?? null,
       screen_height: dto.screen_height ?? null,
@@ -134,12 +180,52 @@ export class EventsService {
 
       // Properties
       properties: dto.properties ?? {},
-    };
-  }
 
-  private deriveChannel(dto: TrackEventDto): string | null {
-    if (dto.utm_source) return dto.utm_source;
-    if (dto.referrer) return 'referral';
-    return 'direct';
+      // Custom dimensions (will be set below)
+      cd_1: null,
+      cd_2: null,
+      cd_3: null,
+      cd_4: null,
+      cd_5: null,
+      cd_6: null,
+      cd_7: null,
+      cd_8: null,
+      cd_9: null,
+      cd_10: null,
+      filter_version: null,
+    };
+
+    // Apply filters if workspace has them configured
+    const filters = workspace.filters ?? [];
+    const customDimensions = workspace.custom_dimensions ?? [];
+
+    if (filters.length > 0) {
+      // Use new filters system (priority-based)
+      const fieldValues = extractFieldValues(baseEvent as unknown as Record<string, unknown>);
+      const { customDimensions: cdValues, modifiedFields } = applyFilterResults(
+        filters,
+        fieldValues,
+        baseEvent as unknown as Record<string, unknown>,
+      );
+
+      // Apply custom dimension values
+      Object.assign(baseEvent, cdValues);
+
+      // Apply modified standard fields (utm_*, referrer_domain, is_direct)
+      for (const [field, value] of Object.entries(modifiedFields)) {
+        if (field === 'is_direct') {
+          (baseEvent as any)[field] = value === 'true';
+        } else {
+          (baseEvent as any)[field] = value;
+        }
+      }
+    } else if (customDimensions.length > 0) {
+      // Fall back to legacy custom dimensions system
+      const fieldValues = extractFieldValues(baseEvent as unknown as Record<string, unknown>);
+      const cdValues = computeCustomDimensions(customDimensions, fieldValues);
+      Object.assign(baseEvent, cdValues);
+    }
+
+    return baseEvent;
   }
 }

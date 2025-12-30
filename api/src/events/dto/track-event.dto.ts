@@ -87,11 +87,6 @@ export class TrackEventDto {
   @IsString()
   utm_id_from?: string;
 
-  // Channel
-  @IsOptional()
-  @IsString()
-  channel?: string;
-
   // Device info
   @IsOptional()
   @IsNumber()

@@ -217,7 +217,7 @@ describe('fillGaps', () => {
 
   it('preserves dimension values', () => {
     const data = [
-      { date_day: '2025-12-01', channel: 'google', sessions: 100 },
+      { date_day: '2025-12-01', utm_source: 'google', sessions: 100 },
     ];
     const result = fillGaps(
       data,
@@ -227,7 +227,7 @@ describe('fillGaps', () => {
       '2025-12-01',
       ['sessions'],
     );
-    expect(result[0].channel).toBe('google');
+    expect(result[0].utm_source).toBe('google');
   });
 
   it('fills gaps for each dimension combination', () => {
@@ -264,8 +264,8 @@ describe('fillGaps', () => {
 
   it('fills gaps for multiple dimensions', () => {
     const data = [
-      { date_day: '2025-12-01', device: 'mobile', channel: 'google', sessions: 25 },
-      { date_day: '2025-12-01', device: 'desktop', channel: 'facebook', sessions: 30 },
+      { date_day: '2025-12-01', device: 'mobile', utm_source: 'google', sessions: 25 },
+      { date_day: '2025-12-01', device: 'desktop', utm_source: 'facebook', sessions: 30 },
     ];
     const result = fillGaps(
       data,
@@ -274,7 +274,7 @@ describe('fillGaps', () => {
       '2025-12-01',
       '2025-12-02',
       ['sessions'],
-      ['device', 'channel'],
+      ['device', 'utm_source'],
     );
 
     // 2 days × 2 dimension combos = 4 rows
@@ -283,7 +283,7 @@ describe('fillGaps', () => {
       (r) =>
         r.date_day === '2025-12-02' &&
         r.device === 'mobile' &&
-        r.channel === 'google',
+        r.utm_source === 'google',
     );
     expect(dec2MobileGoogle?.sessions).toBe(0);
   });

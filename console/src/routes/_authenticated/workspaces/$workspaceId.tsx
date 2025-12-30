@@ -1,11 +1,20 @@
-import { createFileRoute, Outlet, Link, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, Outlet, Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { Select, Button, Avatar, Spin, Space } from 'antd'
 import { LogoutOutlined, PlusOutlined } from '@ant-design/icons'
 import { workspacesQueryOptions, workspaceQueryOptions } from '../../../lib/queries'
 import { useAuth } from '../../../lib/auth'
+import type { DatePreset } from '../../../types/analytics'
+import type { WorkspaceSearch, ComparisonMode } from '../../../types/dashboard'
 
 export const Route = createFileRoute('/_authenticated/workspaces/$workspaceId')({
+  validateSearch: (search: Record<string, unknown>): WorkspaceSearch => ({
+    period: (search.period as DatePreset) || undefined,
+    timezone: (search.timezone as string) || undefined,
+    comparison: (search.comparison as ComparisonMode) || undefined,
+    customStart: (search.customStart as string) || undefined,
+    customEnd: (search.customEnd as string) || undefined,
+  }),
   loader: async ({ context, params }) => {
     await Promise.all([
       context.queryClient.ensureQueryData(workspacesQueryOptions),
@@ -26,6 +35,8 @@ function WorkspaceLayout() {
   const { data: workspace } = useSuspenseQuery(workspaceQueryOptions(workspaceId))
   const { logout } = useAuth()
   const navigate = useNavigate()
+  const routerState = useRouterState()
+  const currentPath = routerState.location.pathname
 
   const handleLogout = () => {
     logout()
@@ -85,32 +96,35 @@ function WorkspaceLayout() {
               ]}
             />
             <nav className="flex gap-1">
-              <Link
-                to="/workspaces/$workspaceId"
-                params={{ workspaceId }}
-                activeOptions={{ exact: true }}
-                className="px-4 py-2 rounded !text-gray-500 hover:!text-[#7763f1] transition-colors [&.active]:!text-[#7763f1] [&.active]:bg-white"
-              >
-                Dashboard
-              </Link>
-              <Link
-                to="/workspaces/$workspaceId/explore"
-                params={{ workspaceId }}
-                className="px-4 py-2 rounded !text-gray-500 hover:!text-[#7763f1] transition-colors [&.active]:!text-[#7763f1] [&.active]:bg-white"
-              >
-                Explore
-              </Link>
-              <Link
-                to="/workspaces/$workspaceId/settings"
-                params={{ workspaceId }}
-                className="px-4 py-2 rounded !text-gray-500 hover:!text-[#7763f1] transition-colors [&.active]:!text-[#7763f1] [&.active]:bg-white"
-              >
-                Settings
-              </Link>
+              {[
+                { to: '/workspaces/$workspaceId', label: 'Dashboard', exact: true },
+                { to: '/workspaces/$workspaceId/explore', label: 'Explore' },
+                { to: '/workspaces/$workspaceId/filters', label: 'Filters' },
+                { to: '/workspaces/$workspaceId/settings', label: 'Settings' },
+              ].map(({ to, label, exact }) => {
+                const resolvedPath = to.replace('$workspaceId', workspaceId)
+                const isActive = exact
+                  ? currentPath === resolvedPath
+                  : currentPath.startsWith(resolvedPath)
+                return (
+                  <Link
+                    key={to}
+                    to={to}
+                    params={{ workspaceId }}
+                    className={`px-4 py-2 rounded transition-colors ${
+                      isActive
+                        ? '!text-[var(--primary)] bg-white'
+                        : '!text-gray-500 hover:!text-[var(--primary)]'
+                    }`}
+                  >
+                    {label}
+                  </Link>
+                )
+              })}
             </nav>
           </Space>
 
-          {/* Right: Logout Icon */}
+          {/* Right: Logout */}
           <Button
             type="text"
             icon={<LogoutOutlined />}
