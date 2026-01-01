@@ -1,4 +1,4 @@
-import { Card, Tooltip, Empty, Spin } from 'antd'
+import { Tooltip, Empty, Spin } from 'antd'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import { formatValue } from '../../lib/chart-utils'
@@ -57,11 +57,10 @@ export function TopPagesWidget({
   const formatType = sortBy === 'sessions' ? 'number' : 'duration'
 
   return (
-    <Card
-      title={<span className="text-sm font-medium text-gray-600">{title}</span>}
-      className="shadow-sm"
-      styles={{ body: { padding: 0 }, header: { minHeight: 'auto', padding: '12px 16px' } }}
-    >
+    <div className="rounded-md overflow-hidden bg-white">
+      <div className="px-4 py-3">
+        <span className="text-sm font-medium text-gray-600">{title}</span>
+      </div>
       {loading && data.length === 0 ? (
         <div className="flex items-center justify-center py-12">
           <Spin />
@@ -134,6 +133,6 @@ export function TopPagesWidget({
           })}
         </div>
       )}
-    </Card>
+    </div>
   )
 }

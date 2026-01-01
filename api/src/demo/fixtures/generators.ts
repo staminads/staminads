@@ -374,6 +374,12 @@ function generateSessionEvents(
     user_agent: device.userAgent,
     language: geo.language,
     timezone: geo.timezone,
+    // Geo location (demo fixtures use random geo data)
+    country: geo.country ?? '',
+    region: geo.region ?? '',
+    city: geo.city ?? '',
+    latitude: geo.latitude ?? null,
+    longitude: geo.longitude ?? null,
     browser: device.browser,
     browser_type: device.browserType ?? '',
     os: device.os,

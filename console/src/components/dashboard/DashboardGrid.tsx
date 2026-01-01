@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
-import { Alert, Card } from 'antd'
+import { Alert } from 'antd'
 import { analyticsQueryOptions } from '../../lib/queries'
 import { determineGranularity } from '../../lib/chart-utils'
 import { determineGranularityForRange, computeDateRange } from '../../lib/date-utils'
@@ -160,7 +160,7 @@ export function DashboardGrid({
 
   return (
     <div className={isFetching ? 'opacity-75 transition-opacity' : ''}>
-      <Card className="shadow-sm" styles={{ body: { padding: 0 } }}>
+      <div className="rounded-md overflow-hidden bg-white">
         <MetricSummary
           data={dashboardData}
           loading={!response && isFetching}
@@ -180,7 +180,7 @@ export function DashboardGrid({
             height={240}
           />
         </div>
-      </Card>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
         <TopPagesWidget

@@ -3,6 +3,8 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  OnModuleInit,
+  OnModuleDestroy,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { ClickHouseService } from '../../database/clickhouse.service';
@@ -25,13 +27,110 @@ function toClickHouseDateTime(date: Date = new Date()): string {
 }
 
 @Injectable()
-export class FilterBackfillService {
+export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
   private runningProcessors = new Map<string, FilterBackfillProcessor>();
+  private readonly staleThresholdMinutes = parseInt(
+    process.env.BACKFILL_STALE_THRESHOLD_MINUTES || '5',
+    10,
+  );
 
   constructor(
     private readonly clickhouse: ClickHouseService,
     private readonly workspacesService: WorkspacesService,
   ) {}
+
+  /**
+   * On module init, recover any stale tasks that were left running.
+   */
+  async onModuleInit(): Promise<void> {
+    await this.recoverStaleTasks();
+  }
+
+  /**
+   * On module destroy, gracefully cancel running tasks and kill mutations.
+   */
+  async onModuleDestroy(): Promise<void> {
+    if (this.runningProcessors.size === 0) return;
+
+    console.log(
+      `Shutting down: cancelling ${this.runningProcessors.size} running backfill(s)...`,
+    );
+
+    // First, cancel all processors and kill their mutations
+    const killPromises: Promise<void>[] = [];
+    for (const [taskId, processor] of this.runningProcessors.entries()) {
+      processor.cancel();
+
+      // Query task to get workspace_id for mutation killing
+      this.clickhouse
+        .querySystem<BackfillTask>(
+          `SELECT * FROM backfill_tasks FINAL WHERE id = {id:String}`,
+          { id: taskId },
+        )
+        .then((tasks) => {
+          if (tasks.length > 0) {
+            killPromises.push(
+              processor.killWorkspaceMutations(tasks[0].workspace_id),
+            );
+          }
+        })
+        .catch((error) => {
+          console.warn(`Failed to get task ${taskId} for mutation cleanup:`, error);
+        });
+    }
+
+    // Wait for kill operations (with timeout)
+    await Promise.race([
+      Promise.all(killPromises),
+      new Promise<void>((r) => setTimeout(r, 5000)),
+    ]);
+
+    // Update task statuses
+    for (const [taskId] of this.runningProcessors.entries()) {
+      try {
+        const tasks = await this.clickhouse.querySystem<BackfillTask>(
+          `SELECT * FROM backfill_tasks FINAL WHERE id = {id:String}`,
+          { id: taskId },
+        );
+        if (tasks.length > 0 && tasks[0].status === 'running') {
+          await this.updateTaskStatus(tasks[0], 'cancelled', 'Service shutdown');
+        }
+      } catch (error) {
+        console.warn(`Failed to cancel task ${taskId} on shutdown:`, error);
+      }
+    }
+  }
+
+  /**
+   * Recover stale tasks that were left in 'running' status.
+   * Only recovers tasks older than the stale threshold to avoid race conditions.
+   */
+  private async recoverStaleTasks(): Promise<void> {
+    // Wait for any in-flight startBackfill() calls to complete
+    await new Promise((r) => setTimeout(r, 2000));
+
+    const staleTasks = await this.clickhouse.querySystem<BackfillTask>(
+      `SELECT * FROM backfill_tasks FINAL
+       WHERE status = 'running'
+       AND updated_at < now() - INTERVAL {threshold:UInt32} MINUTE`,
+      { threshold: this.staleThresholdMinutes },
+    );
+
+    for (const task of staleTasks) {
+      console.warn(
+        `Recovering stale backfill task ${task.id} (workspace: ${task.workspace_id}, last updated: ${task.updated_at})`,
+      );
+      await this.updateTaskStatus(
+        task,
+        'failed',
+        'Task stale - recovered on service restart',
+      );
+    }
+
+    if (staleTasks.length > 0) {
+      console.log(`Recovered ${staleTasks.length} stale backfill task(s)`);
+    }
+  }
 
   /**
    * Start a new backfill task for a workspace.
@@ -87,22 +186,50 @@ export class FilterBackfillService {
     setTimeout(async () => {
       const processor = new FilterBackfillProcessor(this.clickhouse, this);
       this.runningProcessors.set(taskId, processor);
+      const startTime = Date.now();
+      let finalStatus: 'completed' | 'failed' | 'cancelled' = 'failed';
 
       try {
         await processor.process(task);
-        // Mark completed (only if not cancelled)
         if (!processor.isCancelled()) {
-          await this.updateTaskStatus(task, 'completed');
+          await this.updateTaskStatusWithRetry(task, 'completed');
+          finalStatus = 'completed';
+        } else {
+          await this.updateTaskStatusWithRetry(task, 'cancelled');
+          finalStatus = 'cancelled';
         }
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-        // Sanitize error message: remove special chars, truncate
-        const sanitizedError = errorMsg
-          .slice(0, 200)
-          .replace(/[^a-zA-Z0-9\s\-_:,()]/g, '')
-          .trim() || 'Unknown error';
-        await this.updateTaskStatus(task, 'failed', sanitizedError);
+        console.error(`Backfill task ${task.id} failed:`, errorMsg);
+        // Only strip control chars, keep useful chars like @, ., /
+        const sanitizedError =
+          errorMsg
+            .slice(0, 200)
+            .replace(/[\x00-\x1F\x7F]/g, '')
+            .trim() || 'Unknown error';
+        try {
+          await this.updateTaskStatusWithRetry(task, 'failed', sanitizedError);
+        } catch (statusError) {
+          // Last resort: log critical error. Stale recovery will handle on restart.
+          console.error('CRITICAL: Cannot update task status after retries', {
+            taskId: task.id,
+            workspaceId: task.workspace_id,
+            originalError: sanitizedError,
+            statusError:
+              statusError instanceof Error ? statusError.message : statusError,
+          });
+        }
+        finalStatus = 'failed';
       } finally {
+        // Metrics logging
+        console.log('Backfill task finished', {
+          taskId: task.id,
+          workspaceId: task.workspace_id,
+          status: finalStatus,
+          durationMs: Date.now() - startTime,
+          sessionsProcessed: task.processed_sessions,
+          eventsProcessed: task.processed_events,
+        });
         this.runningProcessors.delete(taskId);
       }
     }, 0);
@@ -128,6 +255,40 @@ export class FilterBackfillService {
       error_message: errorMessage ?? task.error_message,
     };
     await this.clickhouse.insertSystem('backfill_tasks', [updatedTask]);
+  }
+
+  /**
+   * Update task status with retry logic and exponential backoff.
+   * Throws after exhausting retries - caller must handle the failure.
+   */
+  async updateTaskStatusWithRetry(
+    task: BackfillTask,
+    status: 'running' | 'completed' | 'failed' | 'cancelled',
+    errorMessage?: string,
+    maxRetries = 5,
+  ): Promise<void> {
+    let lastError: Error | undefined;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await this.updateTaskStatus(task, status, errorMessage);
+        return;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        console.warn(
+          `Status update attempt ${attempt}/${maxRetries} failed for task ${task.id}: ${lastError.message}`,
+        );
+        if (attempt < maxRetries) {
+          // Exponential backoff: 1s, 2s, 4s, 8s, 16s
+          await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+        }
+      }
+    }
+
+    // Throw after exhausting retries - caller must handle
+    throw new Error(
+      `Failed to update task ${task.id} to '${status}' after ${maxRetries} attempts: ${lastError?.message}`,
+    );
   }
 
   /**
@@ -195,6 +356,8 @@ export class FilterBackfillService {
     const processor = this.runningProcessors.get(taskId);
     if (processor) {
       processor.cancel();
+      // Kill any active mutations immediately
+      await processor.killWorkspaceMutations(task.workspace_id);
     }
 
     // Insert new row with cancelled status (ReplacingMergeTree will deduplicate)

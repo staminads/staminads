@@ -3,9 +3,10 @@ import { EventsController } from './events.controller';
 import { EventsService } from './events.service';
 import { EventBufferService } from './event-buffer.service';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
+import { GeoModule } from '../geo';
 
 @Module({
-  imports: [WorkspacesModule],
+  imports: [WorkspacesModule, GeoModule],
   controllers: [EventsController],
   providers: [EventsService, EventBufferService],
   exports: [EventsService, EventBufferService],

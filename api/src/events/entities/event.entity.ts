@@ -65,6 +65,13 @@ export interface TrackingEvent {
   language: string;
   timezone: string;
 
+  // Geo location (derived from IP, IP never stored)
+  country: string;
+  region: string;
+  city: string;
+  latitude: number | null;
+  longitude: number | null;
+
   // Engagement
   max_scroll: number;
 

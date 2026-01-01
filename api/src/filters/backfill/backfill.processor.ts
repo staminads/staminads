@@ -28,20 +28,22 @@ function toClickHouseDate(date: Date): string {
 
 /**
  * Format date as partition name for events table (YYYYMMDD).
+ * Uses UTC to match ClickHouse's toYYYYMMDD(created_at) partitioning.
  */
 function formatEventPartition(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
   return `${year}${month}${day}`;
 }
 
 /**
  * Format date as partition name for sessions table (YYYYMM).
+ * Uses UTC to match ClickHouse's toYYYYMM(created_at) partitioning.
  */
 function formatSessionPartition(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
   return `${year}${month}`;
 }
 
@@ -72,6 +74,98 @@ export class FilterBackfillProcessor {
    */
   cancel(): void {
     this.cancelled = true;
+  }
+
+  /**
+   * Kill all pending mutations for a workspace.
+   * Best effort - doesn't throw on failure.
+   */
+  async killWorkspaceMutations(workspaceId: string): Promise<void> {
+    const dbName = this.clickhouse.getWorkspaceDatabaseName(workspaceId);
+    try {
+      await this.clickhouse.commandGlobal(
+        `KILL MUTATION WHERE database = '${dbName}' AND is_done = 0`,
+      );
+    } catch (error) {
+      console.warn(`Failed to kill mutations for workspace ${workspaceId}:`, error);
+      // Best effort - don't throw
+    }
+  }
+
+  /**
+   * Check if a regex pattern uses features unsupported by RE2 (ClickHouse's regex engine).
+   * RE2 doesn't support lookahead/lookbehind assertions.
+   */
+  private hasUnsupportedRE2Features(pattern: string): boolean {
+    // RE2 doesn't support lookahead (?=, (?!) or lookbehind (?<, (?<!)
+    return /\(\?[=!<]/.test(pattern);
+  }
+
+  /**
+   * Validate all filters before backfill processing.
+   * Catches issues that would cause mutations to fail partway through.
+   * @throws Error if any filter is invalid
+   */
+  private validateFiltersForBackfill(filters: FilterDefinition[]): void {
+    const errors: string[] = [];
+
+    for (const filter of filters) {
+      // Skip disabled filters
+      if (!filter.enabled) continue;
+
+      // Validate each condition
+      for (const condition of filter.conditions) {
+        // Validate field names exist
+        if (!condition.field || condition.field.trim() === '') {
+          errors.push(
+            `Filter "${filter.name}" (${filter.id}): Empty field name in condition`,
+          );
+        }
+
+        // Validate regex patterns
+        if (condition.operator === 'regex') {
+          // Test JavaScript regex compilation
+          try {
+            new RegExp(condition.value);
+          } catch (e) {
+            errors.push(
+              `Filter "${filter.name}" (${filter.id}): Invalid regex pattern "${condition.value}" - ${e instanceof Error ? e.message : 'unknown error'}`,
+            );
+          }
+
+          // Check RE2 compatibility (ClickHouse uses RE2)
+          if (this.hasUnsupportedRE2Features(condition.value)) {
+            errors.push(
+              `Filter "${filter.name}" (${filter.id}): Regex pattern uses lookahead/lookbehind, not supported by ClickHouse RE2`,
+            );
+          }
+        }
+      }
+
+      // Validate operations
+      for (const operation of filter.operations) {
+        if (!operation.dimension || operation.dimension.trim() === '') {
+          errors.push(
+            `Filter "${filter.name}" (${filter.id}): Empty dimension in operation`,
+          );
+        }
+
+        // Validate value is present for set_value and set_default_value
+        if (
+          (operation.action === 'set_value' ||
+            operation.action === 'set_default_value') &&
+          (operation.value === undefined || operation.value === null)
+        ) {
+          errors.push(
+            `Filter "${filter.name}" (${filter.id}): Missing value for ${operation.action} on ${operation.dimension}`,
+          );
+        }
+      }
+    }
+
+    if (errors.length > 0) {
+      throw new Error(`Filter validation failed:\n${errors.join('\n')}`);
+    }
   }
 
   /**
@@ -106,7 +200,18 @@ export class FilterBackfillProcessor {
    * Internal processing logic.
    */
   private async processInternal(task: BackfillTask): Promise<void> {
-    const filters: FilterDefinition[] = JSON.parse(task.filters_snapshot);
+    // Parse filters from snapshot
+    let filters: FilterDefinition[];
+    try {
+      filters = JSON.parse(task.filters_snapshot);
+    } catch (error) {
+      throw new Error(
+        `Invalid filters_snapshot: ${error instanceof Error ? error.message : 'parse error'}`,
+      );
+    }
+
+    // Validate filters before any mutations
+    this.validateFiltersForBackfill(filters);
 
     // Compile filters to SQL once (deterministic, no need to recompile per chunk)
     const compiled = compileFiltersToSQL(filters);
@@ -125,18 +230,31 @@ export class FilterBackfillProcessor {
     // Get total counts and mark as running
     await this.updateTotalCounts(task);
 
-    // Process each chunk
-    for (const chunkDate of chunks) {
-      if (this.cancelled) {
-        break;
-      }
+    // Process each chunk - kill mutations on any error
+    try {
+      for (const chunkDate of chunks) {
+        if (this.cancelled) {
+          break;
+        }
 
-      await this.processDateChunk(task, compiled, chunkDate);
+        try {
+          await this.processDateChunk(task, compiled, chunkDate);
+        } catch (error) {
+          const dateStr = toClickHouseDate(chunkDate);
+          const msg = error instanceof Error ? error.message : String(error);
+          throw new Error(`Failed processing chunk ${dateStr}: ${msg}`);
+        }
+      }
+    } catch (error) {
+      // Kill any pending mutations before propagating the error
+      await this.killWorkspaceMutations(task.workspace_id);
+      throw error;
     }
   }
 
   /**
    * Generate date chunks for the lookback period.
+   * Uses UTC to match ClickHouse partitioning.
    */
   generateDateChunks(
     lookbackDays: number,
@@ -144,13 +262,23 @@ export class FilterBackfillProcessor {
     endDate: Date,
   ): Date[] {
     const chunks: Date[] = [];
-    const startDate = new Date(endDate);
-    startDate.setDate(startDate.getDate() - lookbackDays + 1);
 
-    let current = new Date(startDate);
-    while (current <= endDate) {
+    // Normalize to UTC midnight
+    const endUTC = new Date(
+      Date.UTC(
+        endDate.getUTCFullYear(),
+        endDate.getUTCMonth(),
+        endDate.getUTCDate(),
+      ),
+    );
+
+    const startUTC = new Date(endUTC);
+    startUTC.setUTCDate(startUTC.getUTCDate() - lookbackDays + 1);
+
+    let current = new Date(startUTC);
+    while (current <= endUTC) {
       chunks.push(new Date(current));
-      current.setDate(current.getDate() + chunkSizeDays);
+      current.setUTCDate(current.getUTCDate() + chunkSizeDays);
     }
 
     return chunks;
@@ -158,11 +286,12 @@ export class FilterBackfillProcessor {
 
   /**
    * Check if a date is within the events TTL (7 days).
+   * Uses UTC for consistency with partition key generation.
    */
   isWithinEventsTTL(date: Date): boolean {
     const now = new Date();
     const ttlBoundary = new Date(now);
-    ttlBoundary.setDate(ttlBoundary.getDate() - EVENTS_TTL_DAYS);
+    ttlBoundary.setUTCDate(ttlBoundary.getUTCDate() - EVENTS_TTL_DAYS);
 
     return date >= ttlBoundary;
   }
@@ -298,13 +427,12 @@ export class FilterBackfillProcessor {
       await this.ensureMutationCapacity(task.workspace_id);
 
       // Execute single mutation for entire partition
-      // CRITICAL: Must update updated_at for ReplacingMergeTree deduplication
+      // Note: Cannot update updated_at (ReplacingMergeTree version column)
       // WHERE 1=1: Process all rows. ELSE ${dimension} in CASE prevents data loss.
       await this.clickhouse.commandWorkspaceWithParams(
         task.workspace_id,
         `ALTER TABLE sessions UPDATE
-           ${setClause},
-           updated_at = now64(3)
+           ${setClause}
          IN PARTITION '${partition}'
          WHERE 1=1`,
         {},
@@ -332,6 +460,7 @@ export class FilterBackfillProcessor {
   /**
    * Ensure there is capacity for new mutations.
    * Waits if there are too many concurrent mutations running.
+   * Kills mutations and throws on timeout.
    */
   private async ensureMutationCapacity(workspaceId: string): Promise<void> {
     const dbName = this.clickhouse.getWorkspaceDatabaseName(workspaceId);
@@ -349,11 +478,15 @@ export class FilterBackfillProcessor {
       }
       await sleep(MUTATION_CAPACITY_POLL_MS);
     }
+
+    // Timeout: kill mutations before throwing
+    await this.killWorkspaceMutations(workspaceId);
     throw new Error('Timeout waiting for mutation capacity');
   }
 
   /**
    * Wait for all pending mutations on a table to complete.
+   * Kills mutations and throws on timeout.
    */
   private async waitForMutations(
     workspaceId: string,
@@ -380,5 +513,9 @@ export class FilterBackfillProcessor {
 
       await sleep(100);
     }
+
+    // Timeout: kill mutations before throwing
+    await this.killWorkspaceMutations(workspaceId);
+    throw new Error(`Timeout waiting for ${table} mutations to complete`);
   }
 }

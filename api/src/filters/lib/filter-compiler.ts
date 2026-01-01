@@ -70,7 +70,10 @@ export function compileCondition(c: FilterCondition): string {
   // Handle is_direct (boolean field stored as Bool in ClickHouse)
   if (field === 'is_direct') {
     if (c.operator === 'equals') {
-      return `is_direct = ${c.value === 'true' ? 1 : 0}`;
+      // Handle both string 'true'/'false' and boolean true/false (from JSON parsing)
+      const boolValue =
+        (c.value as unknown) === true || c.value === 'true' || c.value === '1';
+      return `is_direct = ${boolValue ? 1 : 0}`;
     }
     // contains/regex don't make sense for boolean
     return '0 = 1';
@@ -267,7 +270,13 @@ function buildBooleanCaseExpression(branches: CaseBranch[]): string {
 
     switch (b.action) {
       case 'set_value':
-        thenValue = b.value === 'true' ? '1' : '0';
+        // Handle both string 'true'/'false' and boolean true/false (from JSON parsing)
+        thenValue =
+          (b.value as unknown) === true ||
+          b.value === 'true' ||
+          b.value === '1'
+            ? '1'
+            : '0';
         break;
 
       case 'unset_value':
@@ -276,7 +285,13 @@ function buildBooleanCaseExpression(branches: CaseBranch[]): string {
 
       case 'set_default_value':
         condition = `${condition} AND is_direct = 0`;
-        thenValue = b.value === 'true' ? '1' : '0';
+        // Handle both string 'true'/'false' and boolean true/false (from JSON parsing)
+        thenValue =
+          (b.value as unknown) === true ||
+          b.value === 'true' ||
+          b.value === '1'
+            ? '1'
+            : '0';
         break;
 
       default:

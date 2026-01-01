@@ -6,6 +6,7 @@ import { TrackEventDto } from './dto/track-event.dto';
 import { TrackingEvent } from './entities/event.entity';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { Workspace } from '../workspaces/entities/workspace.entity';
+import { GeoService, GeoLocation, EMPTY_GEO } from '../geo';
 import {
   extractFieldValues,
   applyFilterResults,
@@ -48,11 +49,24 @@ export class EventsService {
     private readonly clickhouse: ClickHouseService,
     private readonly buffer: EventBufferService,
     private readonly workspacesService: WorkspacesService,
+    private readonly geoService: GeoService,
   ) {}
 
-  async track(dto: TrackEventDto): Promise<{ success: boolean }> {
+  async track(
+    dto: TrackEventDto,
+    clientIp: string | null,
+  ): Promise<{ success: boolean }> {
     const workspace = await this.getWorkspaceConfig(dto.workspace_id);
-    const event = this.buildEvent(dto, workspace);
+
+    // Perform geo lookup with workspace settings (IP is never stored)
+    const geo = this.geoService.lookupWithSettings(clientIp, {
+      geo_enabled: workspace.geo_enabled,
+      geo_store_city: workspace.geo_store_city,
+      geo_store_region: workspace.geo_store_region,
+      geo_coordinates_precision: workspace.geo_coordinates_precision,
+    });
+
+    const event = this.buildEvent(dto, workspace, geo);
     await this.buffer.add(event);
 
     return { success: true };
@@ -60,6 +74,7 @@ export class EventsService {
 
   async trackBatch(
     dtos: TrackEventDto[],
+    clientIp: string | null,
   ): Promise<{ success: boolean; count: number }> {
     if (dtos.length === 0) {
       return { success: true, count: 0 };
@@ -74,7 +89,16 @@ export class EventsService {
     }
 
     const workspace = await this.getWorkspaceConfig(workspaceId);
-    const events = dtos.map((dto) => this.buildEvent(dto, workspace));
+
+    // Perform geo lookup once for the batch (same IP for all events)
+    const geo = this.geoService.lookupWithSettings(clientIp, {
+      geo_enabled: workspace.geo_enabled,
+      geo_store_city: workspace.geo_store_city,
+      geo_store_region: workspace.geo_store_region,
+      geo_coordinates_precision: workspace.geo_coordinates_precision,
+    });
+
+    const events = dtos.map((dto) => this.buildEvent(dto, workspace, geo));
     await this.buffer.addBatch(events);
 
     return { success: true, count: events.length };
@@ -121,7 +145,11 @@ export class EventsService {
   /**
    * Build a tracking event from a DTO, applying filters and custom dimensions.
    */
-  private buildEvent(dto: TrackEventDto, workspace: Workspace): TrackingEvent {
+  private buildEvent(
+    dto: TrackEventDto,
+    workspace: Workspace,
+    geo: GeoLocation,
+  ): TrackingEvent {
     const referrerParsed = parseUrl(dto.referrer);
     const landingParsed = parseUrl(dto.landing_page);
     const now = toClickHouseDateTime();
@@ -170,6 +198,13 @@ export class EventsService {
       // Browser APIs
       language: dto.language ?? '',
       timezone: dto.timezone ?? '',
+
+      // Geo location (derived from IP, IP never stored)
+      country: geo.country ?? '',
+      region: geo.region ?? '',
+      city: geo.city ?? '',
+      latitude: geo.latitude,
+      longitude: geo.longitude,
 
       // Engagement
       max_scroll: dto.max_scroll ?? 0,

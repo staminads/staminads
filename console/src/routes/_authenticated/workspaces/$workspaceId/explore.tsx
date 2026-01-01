@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
-import { Card, Alert } from 'antd'
+import { Alert } from 'antd'
 import { workspaceQueryOptions, analyticsQueryOptions } from '../../../../lib/queries'
 import { useExploreParams } from '../../../../hooks/useExploreParams'
 import { ExploreFilters } from '../../../../components/explore/ExploreFilters'
@@ -108,7 +108,7 @@ function Explore() {
     queryKey: ['explore', 'totals', workspaceId, dateRange, filters, timezone, showComparison],
     queryFn: () => api.analytics.query({
       workspace_id: workspaceId,
-      metrics: ['sessions', 'median_duration'],
+      metrics: ['sessions', 'median_duration', 'bounce_rate', 'max_scroll'],
       dimensions: [], // Empty = no grouping = totals
       filters,
       dateRange,
@@ -136,14 +136,24 @@ function Explore() {
       const prevSessions = Number(prev.sessions) || 0
       const currDuration = Number(curr.median_duration) || 0
       const prevDuration = Number(prev.median_duration) || 0
+      const currBounceRate = Number(curr.bounce_rate) || 0
+      const prevBounceRate = Number(prev.bounce_rate) || 0
+      const currMaxScroll = Number(curr.max_scroll) || 0
+      const prevMaxScroll = Number(prev.max_scroll) || 0
 
       return {
         sessions: currSessions,
         median_duration: currDuration,
+        bounce_rate: currBounceRate,
+        max_scroll: currMaxScroll,
         sessions_prev: prevSessions,
         median_duration_prev: prevDuration,
+        bounce_rate_prev: prevBounceRate,
+        max_scroll_prev: prevMaxScroll,
         sessions_change: prevSessions > 0 ? ((currSessions - prevSessions) / prevSessions) * 100 : undefined,
         median_duration_change: prevDuration > 0 ? ((currDuration - prevDuration) / prevDuration) * 100 : undefined,
+        bounce_rate_change: prevBounceRate > 0 ? ((currBounceRate - prevBounceRate) / prevBounceRate) * 100 : undefined,
+        max_scroll_change: prevMaxScroll > 0 ? ((currMaxScroll - prevMaxScroll) / prevMaxScroll) * 100 : undefined,
       }
     }
 
@@ -151,6 +161,8 @@ function Explore() {
     return {
       sessions: Number(row.sessions) || 0,
       median_duration: Number(row.median_duration) || 0,
+      bounce_rate: Number(row.bounce_rate) || 0,
+      max_scroll: Number(row.max_scroll) || 0,
     }
   })()
 
@@ -372,10 +384,9 @@ function Explore() {
         totals={totals}
         showComparison={showComparison}
         loading={isInitialFetching && !totals}
-        timescoreReference={workspace.timescore_reference ?? 60}
       />
 
-      <Card className="shadow-sm" styles={{ body: { padding: 0 } }}>
+      <div className="rounded-md overflow-hidden">
         <ExploreTable
           data={reportData}
           dimensions={dimensions}
@@ -389,7 +400,7 @@ function Explore() {
           customDimensionLabels={workspace.custom_dimensions}
           totals={totals}
         />
-      </Card>
+      </div>
     </div>
   )
 }

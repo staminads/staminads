@@ -22,4 +22,10 @@ export interface Workspace {
   status: WorkspaceStatus;
   custom_dimensions?: CustomDimensionLabels | null;
   filters?: FilterDefinition[];
+
+  // Geo settings
+  geo_enabled: boolean;
+  geo_store_city: boolean;
+  geo_store_region: boolean;
+  geo_coordinates_precision: number;
 }

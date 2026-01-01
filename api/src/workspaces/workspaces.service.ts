@@ -17,6 +17,16 @@ const DEFAULT_CUSTOM_DIMENSION_LABELS: CustomDimensionLabels = {
   '2': 'Channel',
 };
 
+/**
+ * Default geo settings for new workspaces.
+ */
+const DEFAULT_GEO_SETTINGS = {
+  geo_enabled: true,
+  geo_store_city: true,
+  geo_store_region: true,
+  geo_coordinates_precision: 2,
+};
+
 interface WorkspaceRow extends Omit<Workspace, 'custom_dimensions' | 'filters'> {
   custom_dimensions: string; // JSON string from ClickHouse
   filters: string; // JSON string from ClickHouse
@@ -76,6 +86,14 @@ export class WorkspacesService {
       status: 'initializing',
       custom_dimensions: DEFAULT_CUSTOM_DIMENSION_LABELS,
       filters: [],
+      // Geo settings with defaults
+      geo_enabled: dto.geo_enabled ?? DEFAULT_GEO_SETTINGS.geo_enabled,
+      geo_store_city: dto.geo_store_city ?? DEFAULT_GEO_SETTINGS.geo_store_city,
+      geo_store_region:
+        dto.geo_store_region ?? DEFAULT_GEO_SETTINGS.geo_store_region,
+      geo_coordinates_precision:
+        dto.geo_coordinates_precision ??
+        DEFAULT_GEO_SETTINGS.geo_coordinates_precision,
     };
 
     // 1. Create workspace database first

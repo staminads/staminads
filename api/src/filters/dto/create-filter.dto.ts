@@ -10,7 +10,7 @@ import {
   Max,
   IsIn,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { SOURCE_FIELDS, WRITABLE_DIMENSIONS } from '../entities/filter.entity';
 
 export class FilterConditionDto {
@@ -36,6 +36,12 @@ export class FilterOperationDto {
   action: string;
 
   @IsOptional()
+  @Transform(({ value }) => {
+    // Normalize boolean values to strings for is_direct field
+    if (value === true || value === 'true' || value === '1') return 'true';
+    if (value === false || value === 'false' || value === '0') return 'false';
+    return value;
+  })
   @IsString()
   value?: string;
 }

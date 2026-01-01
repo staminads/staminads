@@ -123,6 +123,14 @@ export class ClickHouseService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Execute a global command without table name qualification.
+   * Use for ClickHouse system commands like KILL MUTATION.
+   */
+  async commandGlobal(sql: string): Promise<void> {
+    await this.client.command({ query: sql });
+  }
+
+  /**
    * Query a workspace database.
    * Note: SQL should use unqualified table names (e.g., 'sessions' not 'database.sessions').
    * Tables are automatically qualified with the workspace database name.
