@@ -4,6 +4,11 @@ import { SYSTEM_SCHEMAS, WORKSPACE_SCHEMAS } from '../src/database/schemas';
 const TEST_SYSTEM_DATABASE = 'staminads_test_system';
 const TEST_WORKSPACE_DATABASE = 'staminads_test_ws';
 
+// Additional workspace databases for specific tests
+const ADDITIONAL_WORKSPACE_DATABASES = [
+  'staminads_ws_backfill_test_ws',
+];
+
 let client: ClickHouseClient;
 
 async function getClient(): Promise<ClickHouseClient> {
@@ -15,6 +20,14 @@ async function getClient(): Promise<ClickHouseClient> {
     });
   }
   return client;
+}
+
+async function createWorkspaceDatabase(ch: ClickHouseClient, dbName: string): Promise<void> {
+  await ch.command({ query: `CREATE DATABASE IF NOT EXISTS ${dbName}` });
+  for (const schema of Object.values(WORKSPACE_SCHEMAS)) {
+    const query = schema.replace(/{database}/g, dbName);
+    await ch.command({ query });
+  }
 }
 
 export async function setup(): Promise<void> {
@@ -29,24 +42,28 @@ export async function setup(): Promise<void> {
     await ch.command({ query });
   }
 
-  // Create test workspace database
-  await ch.command({ query: `CREATE DATABASE IF NOT EXISTS ${TEST_WORKSPACE_DATABASE}` });
+  // Create main test workspace database
+  await createWorkspaceDatabase(ch, TEST_WORKSPACE_DATABASE);
 
-  // Create workspace tables
-  for (const schema of Object.values(WORKSPACE_SCHEMAS)) {
-    const query = schema.replace(/{database}/g, TEST_WORKSPACE_DATABASE);
-    await ch.command({ query });
+  // Create additional workspace databases for specific tests
+  for (const db of ADDITIONAL_WORKSPACE_DATABASES) {
+    await createWorkspaceDatabase(ch, db);
   }
 
-  console.log(`Test databases ${TEST_SYSTEM_DATABASE} and ${TEST_WORKSPACE_DATABASE} initialized`);
+  const allDatabases = [TEST_WORKSPACE_DATABASE, ...ADDITIONAL_WORKSPACE_DATABASES].join(', ');
+  console.log(`Test databases ${TEST_SYSTEM_DATABASE} and ${allDatabases} initialized`);
 }
 
 export async function teardown(): Promise<void> {
   const ch = await getClient();
   await ch.command({ query: `DROP DATABASE IF EXISTS ${TEST_SYSTEM_DATABASE}` });
   await ch.command({ query: `DROP DATABASE IF EXISTS ${TEST_WORKSPACE_DATABASE}` });
+  for (const db of ADDITIONAL_WORKSPACE_DATABASES) {
+    await ch.command({ query: `DROP DATABASE IF EXISTS ${db}` });
+  }
   await ch.close();
-  console.log(`Test databases ${TEST_SYSTEM_DATABASE} and ${TEST_WORKSPACE_DATABASE} dropped`);
+  const allDatabases = [TEST_WORKSPACE_DATABASE, ...ADDITIONAL_WORKSPACE_DATABASES].join(', ');
+  console.log(`Test databases ${TEST_SYSTEM_DATABASE} and ${allDatabases} dropped`);
 }
 
 // Default export for Jest globalSetup

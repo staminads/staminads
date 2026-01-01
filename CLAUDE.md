@@ -96,3 +96,18 @@ cd api
 cp .env.example .env  # then edit with your values
 npm run start:dev
 ```
+
+## Development Guidelines
+
+### Running the API Server
+
+**Do not start the API server unless explicitly required.** For most tasks (code changes, builds, unit tests), starting the server is unnecessary.
+
+When the server is needed:
+- Run in **foreground** (no `&`), so it can be stopped with Ctrl+C
+- Use a **custom port** (e.g., 4000) to avoid conflicts: `PORT=4000 npm run start:dev`
+- Kill it after use
+
+### Web Server Ports
+
+Port 3000 is reserved for the main API. When starting any temporary web server (e.g., for testing, previewing, or debugging), use a different port (e.g., 4000, 5000, 8080) and kill it after use.

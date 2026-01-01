@@ -24,9 +24,9 @@ import {
 import { CreateFilterDto } from './dto/create-filter.dto';
 import { UpdateFilterDto } from './dto/update-filter.dto';
 import { ReorderFiltersDto } from './dto/reorder-filters.dto';
-import { TestFilterDto, TestFilterResult } from './dto/test-filter.dto';
 import { StartBackfillDto } from './backfill/dto/start-backfill.dto';
 import { BackfillTaskProgress } from './backfill/backfill-task.entity';
+import { BackfillSummary } from './backfill/backfill.service';
 
 @ApiTags('filters')
 @ApiSecurity('jwt-auth')
@@ -98,13 +98,6 @@ export class FiltersController {
     return { success: true };
   }
 
-  @Post('filters.test')
-  @ApiOperation({ summary: 'Test rules against sample values' })
-  @ApiResponse({ status: 200, description: 'Test result' })
-  async test(@Body() dto: TestFilterDto): Promise<TestFilterResult> {
-    return this.service.test(dto);
-  }
-
   @Get('filters.listTags')
   @ApiOperation({ summary: 'List unique tags across all filters' })
   @ApiQuery({ name: 'workspace_id', type: String, required: true })
@@ -158,5 +151,18 @@ export class FiltersController {
       throw new BadRequestException('workspace_id is required');
     }
     return this.backfillService.listTasks(workspaceId);
+  }
+
+  @Get('filters.backfillSummary')
+  @ApiOperation({ summary: 'Get backfill status summary for workspace' })
+  @ApiQuery({ name: 'workspace_id', type: String, required: true })
+  @ApiResponse({ status: 200, description: 'Backfill summary' })
+  async backfillSummary(
+    @Query('workspace_id') workspaceId: string,
+  ): Promise<BackfillSummary> {
+    if (!workspaceId) {
+      throw new BadRequestException('workspace_id is required');
+    }
+    return this.backfillService.getBackfillSummary(workspaceId);
   }
 }

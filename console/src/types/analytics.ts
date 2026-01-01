@@ -12,6 +12,8 @@ export const FILTER_OPERATORS = [
   'isNull',
   'isNotNull',
   'between',
+  'isEmpty',
+  'isNotEmpty',
 ] as const
 
 export type FilterOperator = (typeof FILTER_OPERATORS)[number]
@@ -66,6 +68,7 @@ export interface AnalyticsQuery {
   timezone?: string
   order?: Record<string, 'asc' | 'desc'>
   limit?: number
+  havingMinSessions?: number
 }
 
 export interface AnalyticsResponse {
@@ -93,4 +96,24 @@ export interface DimensionDefinition {
   name: string
   type: 'string' | 'number' | 'boolean'
   category: string
+}
+
+export interface ExtremesQuery {
+  workspace_id: string
+  metric: string
+  groupBy: string[]
+  dateRange: DateRange
+  filters?: Filter[]
+  timezone?: string
+  havingMinSessions?: number
+}
+
+export interface ExtremesResponse {
+  min: number | null
+  max: number | null
+  meta: {
+    metric: string
+    groupBy: string[]
+    dateRange: { start: string; end: string }
+  }
 }

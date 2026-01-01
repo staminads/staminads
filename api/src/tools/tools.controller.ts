@@ -2,10 +2,14 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Get,
   HttpCode,
   Post,
+  Query,
+  Res,
 } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { Public } from '../common/decorators/public.decorator';
 import { WebsiteMetaDto, WebsiteMetaResponse } from './dto/website-meta.dto';
 import { ToolsService } from './tools.service';
@@ -29,5 +33,24 @@ export class ToolsController {
         `Failed to fetch website metadata: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
+  }
+
+  @Public()
+  @Get('tools.favicon')
+  @ApiOperation({ summary: 'Fetch and proxy website favicon' })
+  @ApiQuery({ name: 'url', type: String, required: true, description: 'Website URL to fetch favicon for' })
+  @ApiResponse({ status: 200, description: 'Favicon image binary' })
+  async favicon(
+    @Query('url') url: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { buffer, contentType } = await this.toolsService.getFavicon(url);
+
+    res.set({
+      'Content-Type': contentType,
+      'Cache-Control': 'public, max-age=604800, immutable', // 7 days
+    });
+
+    res.send(buffer);
   }
 }

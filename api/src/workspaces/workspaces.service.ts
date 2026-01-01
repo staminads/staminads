@@ -2,13 +2,20 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { ClickHouseService } from '../database/clickhouse.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
-import { Workspace } from './entities/workspace.entity';
-import { CustomDimensionDefinition } from '../custom-dimensions/entities/custom-dimension.entity';
+import { Workspace, CustomDimensionLabels } from './entities/workspace.entity';
 import { FilterDefinition } from '../filters/entities/filter.entity';
 
 function toClickHouseDateTime(date: Date = new Date()): string {
   return date.toISOString().replace('T', ' ').replace('Z', '');
 }
+
+/**
+ * Default custom dimension labels for new workspaces.
+ */
+const DEFAULT_CUSTOM_DIMENSION_LABELS: CustomDimensionLabels = {
+  '1': 'Channel Group',
+  '2': 'Channel',
+};
 
 interface WorkspaceRow extends Omit<Workspace, 'custom_dimensions' | 'filters'> {
   custom_dimensions: string; // JSON string from ClickHouse
@@ -19,8 +26,8 @@ function parseWorkspace(row: WorkspaceRow): Workspace {
   return {
     ...row,
     custom_dimensions: row.custom_dimensions
-      ? (JSON.parse(row.custom_dimensions) as CustomDimensionDefinition[])
-      : [],
+      ? (JSON.parse(row.custom_dimensions) as CustomDimensionLabels)
+      : null,
     filters: row.filters
       ? (JSON.parse(row.filters) as FilterDefinition[])
       : [],
@@ -32,7 +39,7 @@ function serializeWorkspace(
 ): Omit<Workspace, 'custom_dimensions' | 'filters'> & { custom_dimensions: string; filters: string } {
   return {
     ...workspace,
-    custom_dimensions: JSON.stringify(workspace.custom_dimensions ?? []),
+    custom_dimensions: JSON.stringify(workspace.custom_dimensions ?? {}),
     filters: JSON.stringify(workspace.filters ?? []),
   };
 }
@@ -67,7 +74,7 @@ export class WorkspacesService {
       updated_at: now,
       timescore_reference: 60,
       status: 'initializing',
-      custom_dimensions: [],
+      custom_dimensions: DEFAULT_CUSTOM_DIMENSION_LABELS,
       filters: [],
     };
 

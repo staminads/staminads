@@ -31,12 +31,6 @@ export const analyticsQueryOptions = (query: AnalyticsQuery) =>
     queryFn: () => api.analytics.query(query),
   })
 
-export const customDimensionsQueryOptions = (workspaceId: string) =>
-  queryOptions({
-    queryKey: ['customDimensions', workspaceId],
-    queryFn: () => api.customDimensions.list(workspaceId),
-  })
-
 export const filtersQueryOptions = (workspaceId: string, tags?: string[]) =>
   queryOptions({
     queryKey: ['filters', workspaceId, { tags }],
@@ -47,4 +41,11 @@ export const filterTagsQueryOptions = (workspaceId: string) =>
   queryOptions({
     queryKey: ['filters', workspaceId, 'tags'],
     queryFn: () => api.filters.listTags(workspaceId),
+  })
+
+export const backfillSummaryQueryOptions = (workspaceId: string) =>
+  queryOptions({
+    queryKey: ['backfill', 'summary', workspaceId],
+    queryFn: () => api.filters.backfillSummary(workspaceId),
+    staleTime: 5000,
   })

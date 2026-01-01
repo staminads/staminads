@@ -1,5 +1,5 @@
 import { Card, Tooltip, Empty, Spin } from 'antd'
-import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons'
+import { ChevronUp, ChevronDown } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import { formatValue } from '../../lib/chart-utils'
 
@@ -118,10 +118,10 @@ export function TopPagesWidget({
                       {formatValue(value, formatType)}
                     </span>
                     {showComparison && (
-                      <span className={`text-xs w-12 text-right ${change !== null ? (change >= 0 ? 'text-green-600' : 'text-red-500') : 'text-transparent'}`}>
+                      <span className={`text-xs w-12 text-right ${change !== null ? (change >= 0 ? 'text-green-600' : 'text-orange-500') : 'text-transparent'}`}>
                         {change !== null ? (
                           <>
-                            {change >= 0 ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
+                            {change >= 0 ? <ChevronUp size={12} className="mr-0.5 inline" /> : <ChevronDown size={12} className="mr-0.5 inline" />}
                             {Math.abs(change).toFixed(0)}%
                           </>
                         ) : '—'}

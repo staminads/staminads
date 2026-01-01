@@ -1,4 +1,5 @@
 import { AnalyticsQueryDto } from '../dto/analytics-query.dto';
+import { ExtremesQueryDto } from '../dto/extremes-query.dto';
 import { METRICS } from '../constants/metrics';
 import { DIMENSIONS } from '../constants/dimensions';
 import { buildFilters } from './filter-builder';
@@ -147,6 +148,62 @@ ${havingClause}
 ${orderBy}
 ${limitClause}
   `.trim();
+
+  const params: Record<string, unknown> = {
+    date_start: query.dateRange.start,
+    date_end: query.dateRange.end,
+    ...filterParams,
+  };
+
+  return { sql, params };
+}
+
+export function buildExtremesQuery(
+  query: ExtremesQueryDto & { dateRange: { start?: string; end?: string } },
+): BuiltQuery {
+  const metric = METRICS[query.metric];
+  if (!metric) throw new Error(`Unknown metric: ${query.metric}`);
+
+  // Validate and get dimension columns
+  const groupByCols = query.groupBy.map((d) => {
+    const dim = DIMENSIONS[d];
+    if (!dim) throw new Error(`Unknown dimension: ${d}`);
+    return dim.column;
+  });
+
+  // Build filters
+  const { sql: filterSql, params: filterParams } = buildFilters(
+    query.filters || [],
+  );
+
+  // WHERE conditions
+  const whereConditions = [
+    'created_at >= {date_start:DateTime64(3)}',
+    'created_at <= {date_end:DateTime64(3)}',
+  ];
+  if (filterSql) {
+    whereConditions.push(filterSql);
+  }
+
+  // HAVING clause (for minimum sessions filter)
+  const havingClause = query.havingMinSessions
+    ? `HAVING count() >= ${query.havingMinSessions}`
+    : '';
+
+  // Inner query: group by dimensions, compute metric
+  const innerSql = `
+SELECT ${metric.sql} as value
+FROM sessions FINAL
+WHERE ${whereConditions.join('\n  AND ')}
+GROUP BY ${groupByCols.join(', ')}
+${havingClause}`.trim();
+
+  // Outer query: find min/max
+  const sql = `
+SELECT min(value) as min, max(value) as max
+FROM (
+  ${innerSql}
+) sub`.trim();
 
   const params: Record<string, unknown> = {
     date_start: query.dateRange.start,

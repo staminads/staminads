@@ -1,7 +1,13 @@
-import { CustomDimensionDefinition } from '../../custom-dimensions/entities/custom-dimension.entity';
 import { FilterDefinition } from '../../filters/entities/filter.entity';
 
 export type WorkspaceStatus = 'initializing' | 'active' | 'inactive' | 'error';
+
+/**
+ * Custom dimension labels map.
+ * Maps slot number (as string) to label.
+ * Example: { "1": "Channel Group", "2": "Channel" }
+ */
+export type CustomDimensionLabels = Record<string, string>;
 
 export interface Workspace {
   id: string;
@@ -14,6 +20,6 @@ export interface Workspace {
   updated_at: string;
   timescore_reference: number;
   status: WorkspaceStatus;
-  custom_dimensions?: CustomDimensionDefinition[];
+  custom_dimensions?: CustomDimensionLabels | null;
   filters?: FilterDefinition[];
 }

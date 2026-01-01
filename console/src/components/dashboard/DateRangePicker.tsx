@@ -38,6 +38,7 @@ interface DateRangePickerProps {
   customEnd?: string
   onPeriodChange: (period: DatePreset) => void
   onCustomRangeChange: (start: string, end: string) => void
+  size?: 'small' | 'middle' | 'large'
 }
 
 export function DateRangePicker({
@@ -48,6 +49,7 @@ export function DateRangePicker({
   customEnd,
   onPeriodChange,
   onCustomRangeChange,
+  size,
 }: DateRangePickerProps) {
   const [open, setOpen] = useState(false)
   const [customModalOpen, setCustomModalOpen] = useState(false)
@@ -142,7 +144,7 @@ export function DateRangePicker({
         dropdownRender={() => dropdownContent}
         placement="bottomLeft"
       >
-        <Button variant="filled" color="default" className="flex items-center gap-2">
+        <Button variant="filled" color="default" size={size} className="flex items-center gap-2">
           <span>{displayLabel}</span>
           <DownOutlined className="text-gray-400 text-xs" />
         </Button>

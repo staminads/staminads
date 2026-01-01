@@ -117,6 +117,7 @@ describe('Analytics E2E', () => {
         utm_id: null,
         utm_id_from: null,
         channel: i % 3 === 0 ? 'Paid Search' : i % 3 === 1 ? 'Social' : 'Direct',
+        channel_group: i % 3 === 0 ? 'search-paid' : i % 3 === 1 ? 'social-organic' : 'direct',
         screen_width: 1920,
         screen_height: 1080,
         viewport_width: 1920,
@@ -453,8 +454,166 @@ describe('Analytics E2E', () => {
 
       expect(Array.isArray(response.body)).toBe(true);
       expect(response.body.find((d: { name: string }) => d.name === 'channel')).toBeDefined();
+      expect(response.body.find((d: { name: string }) => d.name === 'channel_group')).toBeDefined();
       expect(response.body.find((d: { name: string }) => d.name === 'device')).toBeDefined();
       expect(response.body.find((d: { name: string }) => d.name === 'utm_source')).toBeDefined();
+    });
+  });
+
+  describe('POST /api/analytics.extremes', () => {
+    it('returns min and max values', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/analytics.extremes')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metric: 'median_duration',
+          groupBy: ['utm_source'],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('min');
+      expect(response.body).toHaveProperty('max');
+      expect(response.body).toHaveProperty('meta');
+      expect(response.body.meta.metric).toBe('median_duration');
+      expect(response.body.meta.groupBy).toEqual(['utm_source']);
+      expect(typeof response.body.min).toBe('number');
+      expect(typeof response.body.max).toBe('number');
+      expect(response.body.max).toBeGreaterThanOrEqual(response.body.min);
+    });
+
+    it('returns extremes for sessions metric', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/analytics.extremes')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metric: 'sessions',
+          groupBy: ['device'],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      expect(response.body.min).toBe(15);
+      expect(response.body.max).toBe(15);
+    });
+
+    it('applies filters correctly', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/analytics.extremes')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metric: 'sessions',
+          groupBy: ['utm_campaign'],
+          filters: [{ dimension: 'device', operator: 'equals', values: ['mobile'] }],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('min');
+      expect(response.body).toHaveProperty('max');
+    });
+
+    it('resolves date preset', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/analytics.extremes')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metric: 'median_duration',
+          groupBy: ['channel'],
+          dateRange: { preset: 'last_30_days' },
+        })
+        .expect(200);
+
+      expect(response.body.meta.dateRange.start).toBeDefined();
+      expect(response.body.meta.dateRange.end).toBeDefined();
+    });
+
+    it('handles multiple groupBy dimensions', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/analytics.extremes')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metric: 'sessions',
+          groupBy: ['device', 'channel'],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('min');
+      expect(response.body).toHaveProperty('max');
+      expect(response.body.meta.groupBy).toEqual(['device', 'channel']);
+    });
+
+    it('returns null for empty result', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/analytics.extremes')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metric: 'median_duration',
+          groupBy: ['utm_source'],
+          dateRange: { start: '1990-01-01', end: '1990-01-02' },
+        })
+        .expect(200);
+
+      expect(response.body.min).toBeNull();
+      expect(response.body.max).toBeNull();
+    });
+
+    it('rejects unknown metric', async () => {
+      await request(app.getHttpServer())
+        .post('/api/analytics.extremes')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metric: 'unknown_metric',
+          groupBy: ['device'],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(400);
+    });
+
+    it('rejects unknown dimension in groupBy', async () => {
+      await request(app.getHttpServer())
+        .post('/api/analytics.extremes')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metric: 'sessions',
+          groupBy: ['unknown_dimension'],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(400);
+    });
+
+    it('rejects empty groupBy array', async () => {
+      await request(app.getHttpServer())
+        .post('/api/analytics.extremes')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metric: 'sessions',
+          groupBy: [],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(400);
+    });
+
+    it('requires authentication', async () => {
+      await request(app.getHttpServer())
+        .post('/api/analytics.extremes')
+        .send({
+          workspace_id: workspaceId,
+          metric: 'median_duration',
+          groupBy: ['device'],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(401);
     });
   });
 });

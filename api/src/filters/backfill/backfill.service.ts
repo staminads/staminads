@@ -10,6 +10,15 @@ import { WorkspacesService } from '../../workspaces/workspaces.service';
 import { StartBackfillDto } from './dto/start-backfill.dto';
 import { BackfillTask, BackfillTaskProgress } from './backfill-task.entity';
 import { FilterBackfillProcessor } from './backfill.processor';
+import { FilterDefinition } from '../entities/filter.entity';
+import { computeFilterVersion } from '../lib/filter-evaluator';
+
+export interface BackfillSummary {
+  needsBackfill: boolean;
+  currentFilterVersion: string;
+  lastCompletedFilterVersion: string | null;
+  activeTask: BackfillTaskProgress | null;
+}
 
 function toClickHouseDateTime(date: Date = new Date()): string {
   return date.toISOString().replace('T', ' ').replace('Z', '');
@@ -32,9 +41,9 @@ export class FilterBackfillService {
     // Validate workspace exists
     const workspace = await this.workspacesService.get(dto.workspace_id);
 
-    // Check for running tasks in system database
+    // Check for running tasks in system database (use FINAL for ReplacingMergeTree)
     const runningTasks = await this.clickhouse.querySystem<{ id: string }>(
-      `SELECT id FROM backfill_tasks
+      `SELECT id FROM backfill_tasks FINAL
        WHERE workspace_id = {workspace_id:String}
        AND status IN ('pending', 'running')
        LIMIT 1`,
@@ -51,7 +60,7 @@ export class FilterBackfillService {
     const taskId = randomUUID();
     const now = toClickHouseDateTime();
 
-    const task = {
+    const task: BackfillTask = {
       id: taskId,
       workspace_id: dto.workspace_id,
       status: 'pending',
@@ -64,6 +73,7 @@ export class FilterBackfillService {
       processed_events: 0,
       current_date_chunk: null,
       created_at: now,
+      updated_at: now,
       started_at: null,
       completed_at: null,
       error_message: null,
@@ -74,28 +84,24 @@ export class FilterBackfillService {
     await this.clickhouse.insertSystem('backfill_tasks', [task]);
 
     // Spawn processor asynchronously
-    const fullTask: BackfillTask = {
-      ...task,
-      status: 'pending' as const,
-    };
-
     setTimeout(async () => {
-      const processor = new FilterBackfillProcessor(this.clickhouse);
+      const processor = new FilterBackfillProcessor(this.clickhouse, this);
       this.runningProcessors.set(taskId, processor);
 
       try {
-        await processor.process(fullTask);
+        await processor.process(task);
         // Mark completed (only if not cancelled)
         if (!processor.isCancelled()) {
-          await this.clickhouse.commandSystem(
-            `ALTER TABLE backfill_tasks UPDATE status = 'completed', completed_at = now64(3) WHERE id = '${taskId}'`,
-          );
+          await this.updateTaskStatus(task, 'completed');
         }
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-        await this.clickhouse.commandSystem(
-          `ALTER TABLE backfill_tasks UPDATE status = 'failed', error_message = '${errorMsg.replace(/'/g, "''")}', completed_at = now64(3) WHERE id = '${taskId}'`,
-        );
+        // Sanitize error message: remove special chars, truncate
+        const sanitizedError = errorMsg
+          .slice(0, 200)
+          .replace(/[^a-zA-Z0-9\s\-_:,()]/g, '')
+          .trim() || 'Unknown error';
+        await this.updateTaskStatus(task, 'failed', sanitizedError);
       } finally {
         this.runningProcessors.delete(taskId);
       }
@@ -105,11 +111,49 @@ export class FilterBackfillService {
   }
 
   /**
+   * Update task status by inserting a new row (ReplacingMergeTree pattern).
+   * The new row with higher updated_at will replace the old one.
+   */
+  async updateTaskStatus(
+    task: BackfillTask,
+    status: 'running' | 'completed' | 'failed' | 'cancelled',
+    errorMessage?: string,
+  ): Promise<void> {
+    const now = toClickHouseDateTime();
+    const updatedTask: BackfillTask = {
+      ...task,
+      status,
+      updated_at: now,
+      completed_at: status === 'completed' || status === 'failed' || status === 'cancelled' ? now : task.completed_at,
+      error_message: errorMessage ?? task.error_message,
+    };
+    await this.clickhouse.insertSystem('backfill_tasks', [updatedTask]);
+  }
+
+  /**
+   * Update task progress by inserting a new row (ReplacingMergeTree pattern).
+   */
+  async updateTaskProgress(
+    task: BackfillTask,
+    updates: Partial<Pick<BackfillTask, 'total_sessions' | 'processed_sessions' | 'total_events' | 'processed_events' | 'current_date_chunk' | 'started_at' | 'status'>>,
+  ): Promise<void> {
+    const now = toClickHouseDateTime();
+    const updatedTask: BackfillTask = {
+      ...task,
+      ...updates,
+      updated_at: now,
+    };
+    await this.clickhouse.insertSystem('backfill_tasks', [updatedTask]);
+    // Update the task reference for subsequent updates
+    Object.assign(task, updatedTask);
+  }
+
+  /**
    * Get the status and progress of a backfill task.
    */
   async getTaskStatus(taskId: string): Promise<BackfillTaskProgress> {
     const tasks = await this.clickhouse.querySystem<BackfillTask>(
-      `SELECT * FROM backfill_tasks WHERE id = {id:String}`,
+      `SELECT * FROM backfill_tasks FINAL WHERE id = {id:String}`,
       { id: taskId },
     );
 
@@ -125,7 +169,7 @@ export class FilterBackfillService {
    */
   async cancelTask(taskId: string): Promise<{ success: boolean }> {
     const tasks = await this.clickhouse.querySystem<BackfillTask>(
-      `SELECT * FROM backfill_tasks WHERE id = {id:String}`,
+      `SELECT * FROM backfill_tasks FINAL WHERE id = {id:String}`,
       { id: taskId },
     );
 
@@ -153,9 +197,8 @@ export class FilterBackfillService {
       processor.cancel();
     }
 
-    await this.clickhouse.commandSystem(
-      `ALTER TABLE backfill_tasks UPDATE status = 'cancelled', completed_at = now64(3) WHERE id = '${taskId}'`,
-    );
+    // Insert new row with cancelled status (ReplacingMergeTree will deduplicate)
+    await this.updateTaskStatus(task, 'cancelled');
 
     return { success: true };
   }
@@ -165,13 +208,59 @@ export class FilterBackfillService {
    */
   async listTasks(workspaceId: string): Promise<BackfillTaskProgress[]> {
     const tasks = await this.clickhouse.querySystem<BackfillTask>(
-      `SELECT * FROM backfill_tasks
+      `SELECT * FROM backfill_tasks FINAL
        WHERE workspace_id = {workspace_id:String}
        ORDER BY created_at DESC`,
       { workspace_id: workspaceId },
     );
 
     return tasks.map((task) => this.toProgress(task));
+  }
+
+  /**
+   * Get backfill summary for a workspace.
+   * Returns whether backfill is needed, current/last versions, and any active task.
+   */
+  async getBackfillSummary(workspaceId: string): Promise<BackfillSummary> {
+    // Get current filter version from workspace
+    const workspace = await this.workspacesService.get(workspaceId);
+    const currentVersion = computeFilterVersion(workspace.filters ?? []);
+
+    // Get all tasks for workspace, ordered by created_at DESC (use FINAL for ReplacingMergeTree)
+    const tasks = await this.clickhouse.querySystem<BackfillTask>(
+      `SELECT * FROM backfill_tasks FINAL
+       WHERE workspace_id = {workspace_id:String}
+       ORDER BY created_at DESC`,
+      { workspace_id: workspaceId },
+    );
+
+    // Find active task (pending or running)
+    const activeTaskRaw = tasks.find(
+      (t) => t.status === 'pending' || t.status === 'running',
+    );
+
+    // Find last completed task
+    const lastCompleted = tasks.find((t) => t.status === 'completed');
+
+    // Compute last completed filter version
+    let lastCompletedFilterVersion: string | null = null;
+    if (lastCompleted) {
+      const lastFilters: FilterDefinition[] = JSON.parse(
+        lastCompleted.filters_snapshot || '[]',
+      );
+      lastCompletedFilterVersion = computeFilterVersion(lastFilters);
+    }
+
+    // Determine if backfill is needed
+    const needsBackfill =
+      !lastCompleted || lastCompletedFilterVersion !== currentVersion;
+
+    return {
+      needsBackfill,
+      currentFilterVersion: currentVersion,
+      lastCompletedFilterVersion,
+      activeTask: activeTaskRaw ? this.toProgress(activeTaskRaw) : null,
+    };
   }
 
   /**
@@ -210,6 +299,12 @@ export class FilterBackfillService {
       estimatedRemainingSeconds = Math.round(remainingSessions / sessionsPerSecond);
     }
 
+    // Compute filter version from snapshot
+    const filters: FilterDefinition[] = JSON.parse(
+      task.filters_snapshot || '[]',
+    );
+    const filterVersion = computeFilterVersion(filters);
+
     return {
       id: task.id,
       status: task.status,
@@ -227,6 +322,7 @@ export class FilterBackfillService {
       completed_at: task.completed_at,
       error_message: task.error_message,
       estimated_remaining_seconds: estimatedRemainingSeconds,
+      filter_version: filterVersion,
     };
   }
 }

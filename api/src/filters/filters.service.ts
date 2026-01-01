@@ -19,7 +19,6 @@ import {
 import { CreateFilterDto } from './dto/create-filter.dto';
 import { UpdateFilterDto } from './dto/update-filter.dto';
 import { ReorderFiltersDto } from './dto/reorder-filters.dto';
-import { TestFilterDto, TestFilterResult } from './dto/test-filter.dto';
 import { computeFilterVersion, evaluateConditions } from './lib/filter-evaluator';
 
 function toClickHouseDateTime(date: Date = new Date()): string {
@@ -239,64 +238,6 @@ export class FiltersService {
     }
 
     return Array.from(tagSet).sort();
-  }
-
-  /**
-   * Test filter conditions against sample values.
-   */
-  async test(dto: TestFilterDto): Promise<TestFilterResult> {
-    let conditions = dto.conditions;
-    let operations = dto.operations;
-
-    // If testing an existing filter, get its conditions and operations
-    if (dto.filter_id) {
-      const filter = await this.get(dto.workspace_id, dto.filter_id);
-      conditions = filter.conditions as any;
-      operations = filter.operations as any;
-    }
-
-    if (!conditions || conditions.length === 0) {
-      throw new BadRequestException('No conditions provided to test');
-    }
-
-    if (!operations || operations.length === 0) {
-      throw new BadRequestException('No operations provided to test');
-    }
-
-    // Evaluate conditions against test values (AND logic)
-    const matches = evaluateConditions(conditions as any, dto.testValues);
-
-    // Compute operation results
-    const operationResults = operations.map((op) => {
-      let resultValue: string | null = null;
-
-      if (matches) {
-        switch (op.action) {
-          case 'set_value':
-            resultValue = op.value ?? null;
-            break;
-          case 'unset_value':
-            resultValue = null;
-            break;
-          case 'set_default_value':
-            // For testing, assume dimension is currently null
-            resultValue = op.value ?? null;
-            break;
-        }
-      }
-
-      return {
-        dimension: op.dimension,
-        action: op.action,
-        resultValue,
-      };
-    });
-
-    return {
-      inputValues: dto.testValues,
-      matches,
-      operationResults,
-    };
   }
 
   /**

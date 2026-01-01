@@ -30,6 +30,9 @@ import {
   GeoProfile,
 } from './geo-languages';
 import { TrackingEvent } from '../../events/entities/event.entity';
+import { FilterDefinition } from '../../filters/entities/filter.entity';
+import { evaluateFilters, computeFilterVersion } from '../../filters/lib/filter-evaluator';
+import { getDemoFilters } from './demo-filters';
 
 // Base session duration categories (in seconds)
 const DURATION_CATEGORIES = [
@@ -68,6 +71,32 @@ function toClickHouseDateTime(date: Date): string {
 
 // SDK version - current version
 const SDK_VERSION = '1.2.0';
+
+// Cache filters to avoid regenerating for each session
+let _cachedFilters: FilterDefinition[] | null = null;
+let _cachedFilterVersion: string | null = null;
+
+/**
+ * Get cached demo filters. This ensures the same filter IDs are used
+ * for both session generation and workspace creation, so the filter_version
+ * stored in sessions matches the computed version from workspace filters.
+ */
+export function getCachedFilters(): { filters: FilterDefinition[]; version: string } {
+  if (!_cachedFilters) {
+    _cachedFilters = getDemoFilters();
+    _cachedFilterVersion = computeFilterVersion(_cachedFilters);
+  }
+  return { filters: _cachedFilters, version: _cachedFilterVersion! };
+}
+
+/**
+ * Clear the filter cache. Used when regenerating demo data to ensure
+ * fresh filter IDs are generated.
+ */
+export function clearFilterCache(): void {
+  _cachedFilters = null;
+  _cachedFilterVersion = null;
+}
 
 // Max scroll distribution based on engagement
 function generateMaxScroll(duration: number): number {
@@ -286,36 +315,58 @@ function generateSessionEvents(
   // Generate viewport from screen dimensions
   const viewport = generateViewport(device.screenWidth, device.screenHeight);
 
-  // Base event properties (shared across all events in session)
-  const baseProps: Omit<TrackingEvent, 'created_at' | 'name' | 'path' | 'duration' | 'max_scroll'> = {
-    session_id: sessionId,
-    workspace_id: workspaceId,
-    referrer: referrerUrl,
-    referrer_domain: referrer.domain,
-    referrer_path: referrerPath,
-    is_direct: isDirect,
-    landing_page: landingPage,
-    landing_domain: 'www.apple.com',
-    landing_path: page.path,
+  // Build field values for filter rule evaluation
+  const fieldValues: Record<string, string | null | undefined> = {
     utm_source: utm?.source ?? null,
     utm_medium: utm?.medium ?? null,
     utm_campaign: utm?.campaign ?? null,
     utm_term: utm?.term ?? null,
     utm_content: utm?.content ?? null,
-    utm_id: null,
-    utm_id_from: null,
-    // Custom dimensions (computed at runtime from workspace definitions)
-    cd_1: null,
-    cd_2: null,
-    cd_3: null,
-    cd_4: null,
-    cd_5: null,
-    cd_6: null,
-    cd_7: null,
-    cd_8: null,
-    cd_9: null,
-    cd_10: null,
-    filter_version: null,
+    referrer_domain: referrer.domain,
+    referrer_path: referrer.path ?? null,
+    is_direct: isDirect ? 'true' : 'false',
+    landing_page: landingPage,
+    landing_domain: 'www.apple.com',
+    landing_path: page.path,
+  };
+
+  // Compute custom dimension values using filters (channel, channel_group, cd_3 = Product Category)
+  const { filters, version: filterVersion } = getCachedFilters();
+  const cdValues = evaluateFilters(filters, fieldValues);
+
+  // Base event properties (shared across all events in session)
+  const baseProps: Omit<TrackingEvent, 'created_at' | 'name' | 'path' | 'duration' | 'max_scroll'> = {
+    session_id: sessionId,
+    workspace_id: workspaceId,
+    referrer: referrerUrl ?? '',
+    referrer_domain: referrer.domain ?? '',
+    referrer_path: referrerPath ?? '',
+    is_direct: isDirect,
+    landing_page: landingPage,
+    landing_domain: 'www.apple.com',
+    landing_path: page.path,
+    utm_source: utm?.source ?? '',
+    utm_medium: utm?.medium ?? '',
+    utm_campaign: utm?.campaign ?? '',
+    utm_term: utm?.term ?? '',
+    utm_content: utm?.content ?? '',
+    utm_id: '',
+    utm_id_from: '',
+    // Channel classification (computed from demo filters)
+    channel: (cdValues.channel as string) ?? '',
+    channel_group: (cdValues.channel_group as string) ?? '',
+    // Custom dimensions (cd_1 = Product Category; cd_2-cd_10 available for user use)
+    cd_1: (cdValues.cd_1 as string) ?? '',  // Product Category
+    cd_2: '',
+    cd_3: '',
+    cd_4: '',
+    cd_5: '',
+    cd_6: '',
+    cd_7: '',
+    cd_8: '',
+    cd_9: '',
+    cd_10: '',
+    filter_version: filterVersion,
     screen_width: device.screenWidth,
     screen_height: device.screenHeight,
     viewport_width: viewport.width,
@@ -324,10 +375,10 @@ function generateSessionEvents(
     language: geo.language,
     timezone: geo.timezone,
     browser: device.browser,
-    browser_type: device.browserType,
+    browser_type: device.browserType ?? '',
     os: device.os,
     device: device.device,
-    connection_type: generateConnectionType(),
+    connection_type: generateConnectionType() ?? '',
     sdk_version: SDK_VERSION,
   };
 
@@ -338,7 +389,7 @@ function generateSessionEvents(
     name: 'screen_view',
     path: page.path,
     duration: 0,
-    max_scroll: null,
+    max_scroll: 0,
   });
 
   // Event 2: scroll (50% chance, happens after some time)

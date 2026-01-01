@@ -10,3 +10,38 @@ body {
   color: var(--foreground);
   background: var(--background);
 }
+
+/* Ant Design Table Customizations */
+.ant-table-tbody>tr:hover>td {
+  background-color: transparent !important;
+  border-bottom: 1px solid var(--primary) !important;
+}
+
+.ant-table-cell {
+  vertical-align: middle;
+}
+
+/* Make expand icon display inline with first column content */
+.ant-table-cell-with-append {
+  display: flex !important;
+  align-items: center;
+}
+
+.ant-tag {
+  border: none !important;
+}
+
+/* Actions cell hover visibility */
+.ant-table-row:hover .actions-cell .ant-space {
+  opacity: 1;
+}
+
+.actions-cell .ant-space {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+/* Menu border removal */
+.ant-menu {
+  border-inline-end: none !important;
+}

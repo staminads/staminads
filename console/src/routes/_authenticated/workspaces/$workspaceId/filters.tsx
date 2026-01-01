@@ -1,17 +1,26 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { useState, useMemo } from 'react'
-import { Button, Empty, Select, Space } from 'antd'
-import { PlusOutlined, FilterOutlined } from '@ant-design/icons'
-import { filtersQueryOptions, filterTagsQueryOptions } from '../../../../lib/queries'
-import { FilterList, FilterFormModal } from '../../../../components/filters'
+import { Button, Empty, Segmented, Input, Space } from 'antd'
+import { PlusOutlined, ExperimentOutlined, SearchOutlined } from '@ant-design/icons'
+import { filtersQueryOptions, filterTagsQueryOptions, workspaceQueryOptions } from '../../../../lib/queries'
+import { FilterTable, FilterFormModal, TestFilterModal, BackfillStatus } from '../../../../components/filters'
 import type { FilterWithStaleness } from '../../../../types/filters'
 
+interface FiltersSearch {
+  tag?: string
+}
+
 export const Route = createFileRoute('/_authenticated/workspaces/$workspaceId/filters')({
+  validateSearch: (search: Record<string, unknown>): FiltersSearch => ({
+    tag: (search.tag as string) || undefined,
+  }),
   loader: async ({ context, params }) => {
     await Promise.all([
       context.queryClient.ensureQueryData(filtersQueryOptions(params.workspaceId)),
       context.queryClient.ensureQueryData(filterTagsQueryOptions(params.workspaceId)),
+      context.queryClient.ensureQueryData(workspaceQueryOptions(params.workspaceId)),
+      // backfillSummary is prefetched in parent layout ($workspaceId.tsx)
     ])
   },
   component: FiltersPage,
@@ -19,23 +28,31 @@ export const Route = createFileRoute('/_authenticated/workspaces/$workspaceId/fi
 
 function FiltersPage() {
   const { workspaceId } = Route.useParams()
+  const { tag: urlTag } = Route.useSearch()
+  const navigate = useNavigate()
   const { data: filters } = useSuspenseQuery(filtersQueryOptions(workspaceId))
   const { data: tags } = useSuspenseQuery(filterTagsQueryOptions(workspaceId))
+  const { data: workspace } = useSuspenseQuery(workspaceQueryOptions(workspaceId))
 
-  const [selectedTags, setSelectedTags] = useState<string[]>([])
+  // Use URL tag if valid, otherwise default to 'all'
+  const selectedTag = urlTag && tags.includes(urlTag) ? urlTag : 'all'
+
   const [modalOpen, setModalOpen] = useState(false)
   const [editingFilter, setEditingFilter] = useState<FilterWithStaleness | undefined>()
+  const [searchText, setSearchText] = useState('')
+  const [testModalOpen, setTestModalOpen] = useState(false)
+
+  const setSelectedTag = (tag: string) => {
+    navigate({
+      search: { tag: tag === 'all' ? undefined : tag },
+      replace: true,
+    })
+  }
 
   const filteredFilters = useMemo(() => {
-    if (selectedTags.length === 0) return filters
-    return filters.filter((f) =>
-      selectedTags.some((tag) => f.tags.includes(tag))
-    )
-  }, [filters, selectedTags])
-
-  const sortedFilters = useMemo(() => {
-    return [...filteredFilters].sort((a, b) => a.order - b.order)
-  }, [filteredFilters])
+    if (selectedTag === 'all') return filters
+    return filters.filter((f) => f.tags.includes(selectedTag))
+  }, [filters, selectedTag])
 
   const handleCreate = () => {
     setEditingFilter(undefined)
@@ -52,7 +69,10 @@ function FiltersPage() {
     setEditingFilter(undefined)
   }
 
-  const tagOptions = tags.map((tag) => ({ value: tag, label: tag }))
+  const segmentedOptions = [
+    { value: 'all', label: 'All' },
+    ...tags.map((tag) => ({ value: tag, label: tag })),
+  ]
 
   return (
     <div className="p-6">
@@ -60,36 +80,48 @@ function FiltersPage() {
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Filters</h1>
           <p className="text-gray-500 mt-1">
-            Define filters to set custom dimensions and modify traffic source fields
+            Define filters to map channels, set custom dimensions, and modify traffic source fields
           </p>
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-          Create Filter
-        </Button>
+        <Space>
+          <Button type="primary" ghost icon={<ExperimentOutlined />} onClick={() => setTestModalOpen(true)}>
+            Test
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+            Create Filter
+          </Button>
+        </Space>
       </div>
 
+      <BackfillStatus workspaceId={workspaceId} />
+
       {filters.length > 0 && (
-        <div className="mb-4">
-          <Space>
-            <FilterOutlined className="text-gray-400" />
-            <Select
-              mode="multiple"
-              value={selectedTags}
-              onChange={setSelectedTags}
-              options={tagOptions}
-              placeholder="Filter by tags..."
-              className="min-w-48"
-              allowClear
+        <div className="mb-4 flex items-center gap-4">
+          {tags.length > 0 && (
+            <Segmented
+              value={selectedTag}
+              onChange={(value) => setSelectedTag(String(value))}
+              options={segmentedOptions}
             />
-          </Space>
+          )}
+          <Input
+            placeholder="Search..."
+            allowClear
+            prefix={<SearchOutlined className="text-gray-400" />}
+            onChange={(e) => setSearchText(e.target.value)}
+            style={{ width: 250 }}
+            className="ml-auto"
+          />
         </div>
       )}
 
-      {sortedFilters.length > 0 ? (
-        <FilterList
+      {filteredFilters.length > 0 ? (
+        <FilterTable
           workspaceId={workspaceId}
-          filters={sortedFilters}
+          filters={filteredFilters}
           onEdit={handleEdit}
+          searchText={searchText}
+          customDimensionLabels={workspace.custom_dimensions}
         />
       ) : filters.length > 0 ? (
         <Empty
@@ -116,8 +148,17 @@ function FiltersPage() {
         workspaceId={workspaceId}
         filter={editingFilter}
         existingTags={tags}
+        customDimensionLabels={workspace.custom_dimensions}
         open={modalOpen}
         onClose={handleCloseModal}
+      />
+
+      <TestFilterModal
+        workspaceId={workspaceId}
+        filters={filters}
+        customDimensionLabels={workspace.custom_dimensions}
+        open={testModalOpen}
+        onClose={() => setTestModalOpen(false)}
       />
     </div>
   )

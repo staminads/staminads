@@ -34,6 +34,9 @@ export interface FilterWithStaleness extends FilterDefinition {
 
 // Dimensions that filters can write to
 export const WRITABLE_DIMENSIONS = [
+  // Channel classification
+  'channel',
+  'channel_group',
   // Custom dimension slots
   'cd_1',
   'cd_2',

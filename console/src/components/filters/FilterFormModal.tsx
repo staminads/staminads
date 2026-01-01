@@ -12,11 +12,13 @@ import type {
   FilterOperation,
 } from '../../types/filters'
 import { SUGGESTED_TAGS } from '../../types/filters'
+import type { CustomDimensionLabels } from '../../types/workspace'
 
 interface FilterFormModalProps {
   workspaceId: string
   filter?: FilterWithStaleness
   existingTags: string[]
+  customDimensionLabels?: CustomDimensionLabels | null
   open: boolean
   onClose: () => void
 }
@@ -34,6 +36,7 @@ export function FilterFormModal({
   workspaceId,
   filter,
   existingTags,
+  customDimensionLabels,
   open,
   onClose,
 }: FilterFormModalProps) {
@@ -68,7 +71,7 @@ export function FilterFormModal({
             { field: 'utm_source', operator: 'equals', value: '' },
           ],
           operations: [
-            { dimension: 'cd_1', action: 'set_value', value: '' },
+            { dimension: 'channel', action: 'set_value', value: '' },
           ],
         })
       }
@@ -147,7 +150,7 @@ export function FilterFormModal({
         title={isEditing ? 'Edit Filter' : 'Create Filter'}
         open={open}
         onClose={onClose}
-        width={640}
+        width={800}
         placement="right"
         destroyOnClose
         footer={
@@ -203,6 +206,7 @@ export function FilterFormModal({
           <Form.Item
             name="conditions"
             label="Conditions"
+            validateTrigger={[]}
             rules={[
               { required: true, message: 'At least one condition is required' },
               {
@@ -229,6 +233,7 @@ export function FilterFormModal({
           <Form.Item
             name="operations"
             label="Operations"
+            validateTrigger={[]}
             rules={[
               { required: true, message: 'At least one operation is required' },
               {
@@ -249,6 +254,7 @@ export function FilterFormModal({
             <OperationsBuilder
               value={form.getFieldValue('operations') || []}
               onChange={(operations) => form.setFieldValue('operations', operations)}
+              customDimensionLabels={customDimensionLabels}
             />
           </Form.Item>
         </Form>
@@ -258,6 +264,7 @@ export function FilterFormModal({
         workspaceId={workspaceId}
         conditions={currentConditions}
         operations={currentOperations}
+        customDimensionLabels={customDimensionLabels}
         open={testModalOpen}
         onClose={() => setTestModalOpen(false)}
       />

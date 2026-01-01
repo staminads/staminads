@@ -1,5 +1,12 @@
 export type WorkspaceStatus = 'initializing' | 'active' | 'inactive' | 'error'
 
+/**
+ * Custom dimension labels map.
+ * Maps slot number (as string) to label.
+ * Example: { "1": "Channel Group", "2": "Channel" }
+ */
+export type CustomDimensionLabels = Record<string, string>
+
 export interface Workspace {
   id: string
   name: string
@@ -11,6 +18,7 @@ export interface Workspace {
   updated_at: string
   timescore_reference: number
   status: WorkspaceStatus
+  custom_dimensions?: CustomDimensionLabels | null
 }
 
 export interface CreateWorkspaceInput {
@@ -29,4 +37,6 @@ export interface UpdateWorkspaceInput {
   timezone?: string
   currency?: string
   logo_url?: string
+  custom_dimensions?: CustomDimensionLabels
+  timescore_reference?: number
 }

@@ -10,7 +10,6 @@ import {
   extractFieldValues,
   applyFilterResults,
 } from '../filters/lib/filter-evaluator';
-import { computeCustomDimensions } from '../custom-dimensions/lib/rule-evaluator';
 
 function toClickHouseDateTime(date: Date = new Date()): string {
   return date.toISOString().replace('T', ' ').replace('Z', '');
@@ -137,70 +136,73 @@ export class EventsService {
       duration: dto.duration ?? 0,
 
       // Traffic source
-      referrer: dto.referrer ?? null,
-      referrer_domain: dto.referrer_domain ?? referrerParsed.domain,
-      referrer_path: dto.referrer_path ?? referrerParsed.path,
+      referrer: dto.referrer ?? '',
+      referrer_domain: dto.referrer_domain ?? referrerParsed.domain ?? '',
+      referrer_path: dto.referrer_path ?? referrerParsed.path ?? '',
       is_direct: dto.is_direct ?? !dto.referrer,
 
       // Landing page
       landing_page: dto.landing_page,
-      landing_domain: dto.landing_domain ?? landingParsed.domain,
-      landing_path: dto.landing_path ?? landingParsed.path,
+      landing_domain: dto.landing_domain ?? landingParsed.domain ?? '',
+      landing_path: dto.landing_path ?? landingParsed.path ?? '',
 
       // UTM
-      utm_source: dto.utm_source ?? null,
-      utm_medium: dto.utm_medium ?? null,
-      utm_campaign: dto.utm_campaign ?? null,
-      utm_term: dto.utm_term ?? null,
-      utm_content: dto.utm_content ?? null,
-      utm_id: dto.utm_id ?? null,
-      utm_id_from: dto.utm_id_from ?? null,
+      utm_source: dto.utm_source ?? '',
+      utm_medium: dto.utm_medium ?? '',
+      utm_campaign: dto.utm_campaign ?? '',
+      utm_term: dto.utm_term ?? '',
+      utm_content: dto.utm_content ?? '',
+      utm_id: dto.utm_id ?? '',
+      utm_id_from: dto.utm_id_from ?? '',
 
       // Device
-      screen_width: dto.screen_width ?? null,
-      screen_height: dto.screen_height ?? null,
-      viewport_width: dto.viewport_width ?? null,
-      viewport_height: dto.viewport_height ?? null,
-      device: dto.device ?? null,
-      browser: dto.browser ?? null,
-      browser_type: dto.browser_type ?? null,
-      os: dto.os ?? null,
-      user_agent: dto.user_agent ?? null,
-      connection_type: dto.connection_type ?? null,
+      screen_width: dto.screen_width ?? 0,
+      screen_height: dto.screen_height ?? 0,
+      viewport_width: dto.viewport_width ?? 0,
+      viewport_height: dto.viewport_height ?? 0,
+      device: dto.device ?? '',
+      browser: dto.browser ?? '',
+      browser_type: dto.browser_type ?? '',
+      os: dto.os ?? '',
+      user_agent: dto.user_agent ?? '',
+      connection_type: dto.connection_type ?? '',
 
       // Browser APIs
-      language: dto.language ?? null,
-      timezone: dto.timezone ?? null,
+      language: dto.language ?? '',
+      timezone: dto.timezone ?? '',
 
       // Engagement
-      max_scroll: dto.max_scroll ?? null,
+      max_scroll: dto.max_scroll ?? 0,
 
       // SDK
-      sdk_version: dto.sdk_version ?? null,
+      sdk_version: dto.sdk_version ?? '',
 
       // Properties
       properties: dto.properties ?? {},
 
+      // Channel classification (will be set below)
+      channel: '',
+      channel_group: '',
+
       // Custom dimensions (will be set below)
-      cd_1: null,
-      cd_2: null,
-      cd_3: null,
-      cd_4: null,
-      cd_5: null,
-      cd_6: null,
-      cd_7: null,
-      cd_8: null,
-      cd_9: null,
-      cd_10: null,
-      filter_version: null,
+      cd_1: '',
+      cd_2: '',
+      cd_3: '',
+      cd_4: '',
+      cd_5: '',
+      cd_6: '',
+      cd_7: '',
+      cd_8: '',
+      cd_9: '',
+      cd_10: '',
+      filter_version: '',
     };
 
     // Apply filters if workspace has them configured
     const filters = workspace.filters ?? [];
-    const customDimensions = workspace.custom_dimensions ?? [];
 
     if (filters.length > 0) {
-      // Use new filters system (priority-based)
+      // Use filters system (priority-based)
       const fieldValues = extractFieldValues(baseEvent as unknown as Record<string, unknown>);
       const { customDimensions: cdValues, modifiedFields } = applyFilterResults(
         filters,
@@ -219,11 +221,6 @@ export class EventsService {
           (baseEvent as any)[field] = value;
         }
       }
-    } else if (customDimensions.length > 0) {
-      // Fall back to legacy custom dimensions system
-      const fieldValues = extractFieldValues(baseEvent as unknown as Record<string, unknown>);
-      const cdValues = computeCustomDimensions(customDimensions, fieldValues);
-      Object.assign(baseEvent, cdValues);
     }
 
     return baseEvent;

@@ -59,24 +59,6 @@ export interface ReorderFiltersInput {
   filter_ids: string[]
 }
 
-export interface TestFilterInput {
-  workspace_id: string
-  filter_id?: string // Test an existing filter
-  conditions?: FilterCondition[] // Test conditions
-  operations?: FilterOperation[] // Operations for testing
-  testValues: Record<string, string | null>
-}
-
-export interface TestFilterResult {
-  inputValues: Record<string, string | null>
-  matches: boolean
-  operationResults: Array<{
-    dimension: string
-    action: string
-    resultValue: string | null
-  }>
-}
-
 // Source fields that can be used in filter conditions
 export const SOURCE_FIELDS = [
   // UTM
@@ -111,6 +93,9 @@ export const SOURCE_FIELDS = [
 
 // Dimensions that filters can write to
 export const WRITABLE_DIMENSIONS = [
+  // Channel classification
+  { value: 'channel', label: 'Channel', category: 'Channel' },
+  { value: 'channel_group', label: 'Channel Group', category: 'Channel' },
   // Custom dimension slots
   { value: 'cd_1', label: 'Custom Dimension 1', category: 'Custom' },
   { value: 'cd_2', label: 'Custom Dimension 2', category: 'Custom' },
@@ -160,3 +145,32 @@ export const SUGGESTED_TAGS = [
   'page category',
   'funnel',
 ] as const
+
+// Backfill types
+export type BackfillTaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+
+export interface BackfillTaskProgress {
+  id: string
+  status: BackfillTaskStatus
+  progress_percent: number
+  sessions: { processed: number; total: number }
+  events: { processed: number; total: number }
+  current_chunk: string | null
+  started_at: string | null
+  completed_at: string | null
+  error_message: string | null
+  estimated_remaining_seconds: number | null
+  filter_version: string
+}
+
+export interface BackfillSummary {
+  needsBackfill: boolean
+  currentFilterVersion: string
+  lastCompletedFilterVersion: string | null
+  activeTask: BackfillTaskProgress | null
+}
+
+export interface StartBackfillInput {
+  workspace_id: string
+  lookback_days: number
+}

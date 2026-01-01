@@ -232,9 +232,11 @@ export function extractFieldValues(
 
 /**
  * Build the complete custom dimension values object for an event.
- * Initializes all cd_* slots to null and applies filter results.
+ * Initializes channel and all cd_* slots to null and applies filter results.
  */
 export interface CustomDimensionValues {
+  channel: string | null;
+  channel_group: string | null;
   cd_1: string | null;
   cd_2: string | null;
   cd_3: string | null;
@@ -262,6 +264,8 @@ export function applyFilterResults(
 
   // Initialize custom dimension values
   const customDimensions: CustomDimensionValues = {
+    channel: null,
+    channel_group: null,
     cd_1: null,
     cd_2: null,
     cd_3: null,
@@ -281,6 +285,12 @@ export function applyFilterResults(
   // Apply filter results
   for (const [dimension, value] of Object.entries(filterResult)) {
     if (dimension === 'filter_version') continue;
+
+    // Check if it's a channel dimension
+    if (dimension === 'channel' || dimension === 'channel_group') {
+      customDimensions[dimension] = value;
+      continue;
+    }
 
     // Check if it's a custom dimension slot
     const cdMatch = dimension.match(/^cd_(\d+)$/);

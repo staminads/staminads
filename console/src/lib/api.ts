@@ -1,22 +1,21 @@
 import type { Workspace, CreateWorkspaceInput, UpdateWorkspaceInput } from '../types/workspace'
-import type { AnalyticsQuery, AnalyticsResponse, MetricDefinition, DimensionDefinition } from '../types/analytics'
 import type {
-  CustomDimensionDefinition,
-  CustomDimensionWithStaleness,
-  CreateCustomDimensionInput,
-  UpdateCustomDimensionInput,
-  ReorderCustomDimensionsInput,
-  TestCustomDimensionInput,
-  TestResult,
-} from '../types/custom-dimensions'
+  AnalyticsQuery,
+  AnalyticsResponse,
+  MetricDefinition,
+  DimensionDefinition,
+  ExtremesQuery,
+  ExtremesResponse,
+} from '../types/analytics'
 import type {
   FilterDefinition,
   FilterWithStaleness,
   CreateFilterInput,
   UpdateFilterInput,
   ReorderFiltersInput,
-  TestFilterInput,
-  TestFilterResult,
+  BackfillSummary,
+  BackfillTaskProgress,
+  StartBackfillInput,
 } from '../types/filters'
 
 export interface WebsiteMetaResponse {
@@ -34,7 +33,10 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
       ...options?.headers,
     },
   })
-  if (!res.ok) throw new Error('Request failed')
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}))
+    throw new Error(errorData.message || 'Request failed')
+  }
   return res.json()
 }
 
@@ -64,6 +66,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    extremes: (data: ExtremesQuery) =>
+      request<ExtremesResponse>('analytics.extremes', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
     metrics: () => request<Record<string, MetricDefinition>>('analytics.metrics'),
     dimensions: () => request<Record<string, DimensionDefinition>>('analytics.dimensions'),
   },
@@ -72,40 +79,6 @@ export const api = {
       request<WebsiteMetaResponse>('tools.websiteMeta', {
         method: 'POST',
         body: JSON.stringify({ url }),
-      }),
-  },
-  customDimensions: {
-    list: (workspaceId: string) =>
-      request<CustomDimensionWithStaleness[]>(`customDimensions.list?workspace_id=${workspaceId}`),
-    get: (workspaceId: string, id: string) =>
-      request<CustomDimensionWithStaleness>(`customDimensions.get?workspace_id=${workspaceId}&id=${id}`),
-    create: (data: CreateCustomDimensionInput) =>
-      request<CustomDimensionDefinition>('customDimensions.create', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }),
-    update: (data: UpdateCustomDimensionInput) =>
-      request<CustomDimensionDefinition>('customDimensions.update', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }),
-    delete: (workspaceId: string, id: string) =>
-      request<{ success: boolean }>(`customDimensions.delete?workspace_id=${workspaceId}&id=${id}`, {
-        method: 'POST',
-      }),
-    reorder: (data: ReorderCustomDimensionsInput) =>
-      request<{ success: boolean }>('customDimensions.reorder', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }),
-    test: (data: TestCustomDimensionInput) =>
-      request<TestResult>('customDimensions.test', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }),
-    backfill: (workspaceId: string, id: string) =>
-      request<{ updated: number }>(`customDimensions.backfill?workspace_id=${workspaceId}&id=${id}`, {
-        method: 'POST',
       }),
   },
   filters: {
@@ -137,12 +110,20 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    test: (data: TestFilterInput) =>
-      request<TestFilterResult>('filters.test', {
+    listTags: (workspaceId: string) =>
+      request<string[]>(`filters.listTags?workspace_id=${workspaceId}`),
+    backfillSummary: (workspaceId: string) =>
+      request<BackfillSummary>(`filters.backfillSummary?workspace_id=${workspaceId}`),
+    backfillStart: (data: StartBackfillInput) =>
+      request<{ task_id: string }>('filters.backfillStart', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    listTags: (workspaceId: string) =>
-      request<string[]>(`filters.listTags?workspace_id=${workspaceId}`),
+    backfillStatus: (taskId: string) =>
+      request<BackfillTaskProgress>(`filters.backfillStatus?task_id=${taskId}`),
+    backfillCancel: (taskId: string) =>
+      request<{ success: boolean }>(`filters.backfillCancel?task_id=${taskId}`, {
+        method: 'POST',
+      }),
   },
 }

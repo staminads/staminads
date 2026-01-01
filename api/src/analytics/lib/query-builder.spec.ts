@@ -1,5 +1,6 @@
-import { buildAnalyticsQuery } from './query-builder';
+import { buildAnalyticsQuery, buildExtremesQuery } from './query-builder';
 import { AnalyticsQueryDto } from '../dto/analytics-query.dto';
+import { ExtremesQueryDto } from '../dto/extremes-query.dto';
 
 describe('buildAnalyticsQuery', () => {
   const baseQuery: AnalyticsQueryDto = {
@@ -286,5 +287,99 @@ describe('buildAnalyticsQuery', () => {
       // No dimensions, no granularity = no GROUP BY
     });
     expect(sql).not.toContain('HAVING');
+  });
+});
+
+describe('buildExtremesQuery', () => {
+  const baseExtremesQuery: ExtremesQueryDto & {
+    dateRange: { start: string; end: string };
+  } = {
+    workspace_id: 'test-ws',
+    metric: 'median_duration',
+    groupBy: ['utm_source'],
+    dateRange: { start: '2025-12-01', end: '2025-12-28' },
+  };
+
+  it('builds min/max query with subquery', () => {
+    const { sql, params } = buildExtremesQuery(baseExtremesQuery);
+
+    expect(sql).toContain('min(value) as min');
+    expect(sql).toContain('max(value) as max');
+    expect(sql).toContain('FROM (');
+    expect(sql).toContain(') sub');
+    expect(sql).toContain('GROUP BY utm_source');
+    expect(params.date_start).toBe('2025-12-01');
+    expect(params.date_end).toBe('2025-12-28');
+  });
+
+  it('includes correct metric SQL in inner query', () => {
+    const { sql } = buildExtremesQuery(baseExtremesQuery);
+
+    // median_duration uses: round(median(duration), 1)
+    expect(sql).toContain('round(median(duration), 1) as value');
+  });
+
+  it('handles sessions metric', () => {
+    const { sql } = buildExtremesQuery({
+      ...baseExtremesQuery,
+      metric: 'sessions',
+    });
+
+    expect(sql).toContain('count() as value');
+  });
+
+  it('includes HAVING in inner query when havingMinSessions specified', () => {
+    const { sql } = buildExtremesQuery({
+      ...baseExtremesQuery,
+      havingMinSessions: 10,
+    });
+
+    expect(sql).toContain('HAVING count() >= 10');
+    // Verify HAVING is in inner query (before ) sub)
+    const innerQuery = sql.split(') sub')[0];
+    expect(innerQuery).toContain('HAVING count() >= 10');
+  });
+
+  it('omits HAVING when havingMinSessions not specified', () => {
+    const { sql } = buildExtremesQuery(baseExtremesQuery);
+
+    expect(sql).not.toContain('HAVING');
+  });
+
+  it('applies filters to inner query', () => {
+    const { sql, params } = buildExtremesQuery({
+      ...baseExtremesQuery,
+      filters: [{ dimension: 'device', operator: 'equals', values: ['mobile'] }],
+    });
+
+    expect(sql).toContain('device = {f0:String}');
+    expect(params.f0).toBe('mobile');
+  });
+
+  it('handles multiple groupBy dimensions', () => {
+    const { sql } = buildExtremesQuery({
+      ...baseExtremesQuery,
+      groupBy: ['utm_source', 'device'],
+    });
+
+    expect(sql).toContain('GROUP BY utm_source, device');
+  });
+
+  it('throws for unknown metric', () => {
+    expect(() =>
+      buildExtremesQuery({
+        ...baseExtremesQuery,
+        metric: 'unknown_metric',
+      }),
+    ).toThrow('Unknown metric: unknown_metric');
+  });
+
+  it('throws for unknown dimension in groupBy', () => {
+    expect(() =>
+      buildExtremesQuery({
+        ...baseExtremesQuery,
+        groupBy: ['unknown_dimension'],
+      }),
+    ).toThrow('Unknown dimension: unknown_dimension');
   });
 });

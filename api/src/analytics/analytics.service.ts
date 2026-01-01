@@ -2,7 +2,8 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { ClickHouseService } from '../database/clickhouse.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
-import { buildAnalyticsQuery } from './lib/query-builder';
+import { ExtremesQueryDto, ExtremesResponse } from './dto/extremes-query.dto';
+import { buildAnalyticsQuery, buildExtremesQuery } from './lib/query-builder';
 import {
   resolveDatePreset,
   fillGaps,
@@ -257,6 +258,63 @@ export class AnalyticsService {
   }
 
   getAvailableDimensions() {
-    return Object.values(DIMENSIONS);
+    return DIMENSIONS;
+  }
+
+  async extremes(dto: ExtremesQueryDto): Promise<ExtremesResponse> {
+    // Validate workspace exists and get timezone
+    const workspace = await this.workspacesService.get(dto.workspace_id);
+    const tz = dto.timezone || workspace.timezone || 'UTC';
+
+    // Validate metric
+    if (!METRICS[dto.metric]) {
+      throw new BadRequestException(`Unknown metric: ${dto.metric}`);
+    }
+
+    // Validate dimensions
+    for (const dim of dto.groupBy) {
+      if (!DIMENSIONS[dim]) {
+        throw new BadRequestException(`Unknown dimension: ${dim}`);
+      }
+    }
+
+    // Resolve date range from preset if needed
+    const resolvedDateRange = { ...dto.dateRange };
+    if (dto.dateRange.preset) {
+      const resolved = resolveDatePreset(dto.dateRange.preset, tz);
+      resolvedDateRange.start = resolved.start;
+      resolvedDateRange.end = resolved.end;
+    }
+
+    // Convert ISO dates to ClickHouse format
+    if (resolvedDateRange.start?.includes('T')) {
+      resolvedDateRange.start = toClickHouseDateTime(resolvedDateRange.start);
+    }
+    if (resolvedDateRange.end?.includes('T')) {
+      resolvedDateRange.end = toClickHouseDateTime(resolvedDateRange.end);
+    }
+
+    // Build query with resolved dates
+    const queryDto = { ...dto, dateRange: resolvedDateRange };
+    const { sql, params } = buildExtremesQuery(queryDto);
+
+    // Execute query
+    const result = await this.clickhouse.queryWorkspace<{
+      min: number;
+      max: number;
+    }>(dto.workspace_id, sql, params);
+
+    return {
+      min: result[0]?.min ?? null,
+      max: result[0]?.max ?? null,
+      meta: {
+        metric: dto.metric,
+        groupBy: dto.groupBy,
+        dateRange: {
+          start: resolvedDateRange.start!,
+          end: resolvedDateRange.end!,
+        },
+      },
+    };
   }
 }

@@ -2,12 +2,17 @@ import { ClickHouseService } from '../../database/clickhouse.service';
 import { BackfillTask } from './backfill-task.entity';
 import { FilterDefinition } from '../entities/filter.entity';
 import {
-  extractFieldValues,
-  applyFilterResults,
-  CustomDimensionValues,
-} from '../lib/filter-evaluator';
+  compileFiltersToSQL,
+  CompiledFilters,
+} from '../lib/filter-compiler';
+
+// Import type only to avoid circular dependency
+import type { FilterBackfillService } from './backfill.service';
 
 const EVENTS_TTL_DAYS = 7;
+const MUTATION_CONCURRENCY_LIMIT = 50; // Buffer below ClickHouse's 100
+const MUTATION_CAPACITY_POLL_MS = 500;
+const MUTATION_CAPACITY_TIMEOUT_MS = 60000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -21,16 +26,39 @@ function toClickHouseDate(date: Date): string {
   return date.toISOString().split('T')[0];
 }
 
-interface FilteredEventUpdate {
-  id: unknown;
-  customDimensions: CustomDimensionValues;
-  modifiedFields: Record<string, string | null>;
+/**
+ * Format date as partition name for events table (YYYYMMDD).
+ */
+function formatEventPartition(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}${month}${day}`;
+}
+
+/**
+ * Format date as partition name for sessions table (YYYYMM).
+ */
+function formatSessionPartition(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  return `${year}${month}`;
 }
 
 export class FilterBackfillProcessor {
   private cancelled = false;
+  private processedSessionPartitions = new Set<string>();
 
-  constructor(private readonly clickhouse: ClickHouseService) {}
+  /**
+   * Static lock map to prevent concurrent backfills on the same workspace.
+   * Key: workspace_id, Value: Promise that resolves when backfill completes.
+   */
+  private static workspaceLocks = new Map<string, Promise<void>>();
+
+  constructor(
+    private readonly clickhouse: ClickHouseService,
+    private readonly backfillService: FilterBackfillService,
+  ) {}
 
   /**
    * Check if the processor has been cancelled.
@@ -47,10 +75,44 @@ export class FilterBackfillProcessor {
   }
 
   /**
-   * Process a backfill task.
+   * Process a backfill task with workspace-level locking.
+   * Prevents concurrent backfills on the same workspace.
    */
   async process(task: BackfillTask): Promise<void> {
+    const lockKey = task.workspace_id;
+
+    // Wait for any existing backfill on this workspace to complete
+    const existingLock = FilterBackfillProcessor.workspaceLocks.get(lockKey);
+    if (existingLock) {
+      await existingLock;
+    }
+
+    // Create our lock
+    let releaseLock!: () => void;
+    const lockPromise = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    FilterBackfillProcessor.workspaceLocks.set(lockKey, lockPromise);
+
+    try {
+      await this.processInternal(task);
+    } finally {
+      releaseLock();
+      FilterBackfillProcessor.workspaceLocks.delete(lockKey);
+    }
+  }
+
+  /**
+   * Internal processing logic.
+   */
+  private async processInternal(task: BackfillTask): Promise<void> {
     const filters: FilterDefinition[] = JSON.parse(task.filters_snapshot);
+
+    // Compile filters to SQL once (deterministic, no need to recompile per chunk)
+    const compiled = compileFiltersToSQL(filters);
+
+    // Reset session partition tracking for this task
+    this.processedSessionPartitions.clear();
 
     // Calculate date range
     const endDate = new Date();
@@ -60,7 +122,7 @@ export class FilterBackfillProcessor {
       endDate,
     );
 
-    // Get total counts
+    // Get total counts and mark as running
     await this.updateTotalCounts(task);
 
     // Process each chunk
@@ -69,7 +131,7 @@ export class FilterBackfillProcessor {
         break;
       }
 
-      await this.processDateChunk(task, filters, chunkDate);
+      await this.processDateChunk(task, compiled, chunkDate);
     }
   }
 
@@ -129,15 +191,13 @@ export class FilterBackfillProcessor {
     if (result.length > 0) {
       const { total_sessions, total_events } = result[0];
 
-      // Update task in system database
-      await this.clickhouse.commandSystem(
-        `ALTER TABLE backfill_tasks UPDATE
-           total_sessions = ${parseInt(total_sessions, 10)},
-           total_events = ${parseInt(total_events, 10)},
-           started_at = now64(3),
-           status = 'running'
-         WHERE id = '${task.id}'`,
-      );
+      // Update task using service (INSERT pattern for ReplacingMergeTree)
+      await this.backfillService.updateTaskProgress(task, {
+        total_sessions: parseInt(total_sessions, 10),
+        total_events: parseInt(total_events, 10),
+        started_at: toClickHouseDateTime(),
+        status: 'running',
+      });
     }
   }
 
@@ -146,220 +206,172 @@ export class FilterBackfillProcessor {
    */
   async processDateChunk(
     task: BackfillTask,
-    filters: FilterDefinition[],
+    compiled: CompiledFilters,
     chunkDate: Date,
   ): Promise<void> {
     const dateStr = toClickHouseDate(chunkDate);
 
-    // Update current chunk in system database
-    await this.clickhouse.commandSystem(
-      `ALTER TABLE backfill_tasks UPDATE current_date_chunk = '${dateStr}' WHERE id = '${task.id}'`,
-    );
+    // Update current chunk using service
+    await this.backfillService.updateTaskProgress(task, {
+      current_date_chunk: dateStr,
+    });
 
     // Process events first (if within TTL)
+    let eventsProcessed = 0;
     if (this.isWithinEventsTTL(chunkDate)) {
-      await this.processEventsForDate(task, filters, chunkDate);
+      eventsProcessed = await this.processEventsForDate(task, compiled, chunkDate);
     }
 
     // Then process sessions
-    await this.processSessionsForDate(task, filters, chunkDate);
+    const sessionsProcessed = await this.processSessionsForDate(task, compiled, chunkDate);
 
-    // Update progress
-    await this.updateProgress(task.id);
+    // Update progress with actual counts
+    await this.backfillService.updateTaskProgress(task, {
+      processed_sessions: task.processed_sessions + sessionsProcessed,
+      processed_events: task.processed_events + eventsProcessed,
+    });
   }
 
   /**
-   * Process events for a specific date.
+   * Process events for a specific date using SQL-compiled filters.
+   * Executes a single partition-based mutation instead of fetching/updating IDs.
+   * Returns the number of events in the partition.
    */
   private async processEventsForDate(
     task: BackfillTask,
-    filters: FilterDefinition[],
+    compiled: CompiledFilters,
     chunkDate: Date,
-  ): Promise<void> {
-    const dateStr = toClickHouseDate(chunkDate);
-    let offset = 0;
+  ): Promise<number> {
+    const { setClause } = compiled;
 
-    while (true) {
-      if (this.cancelled) break;
+    // Format partition name (YYYYMMDD for events)
+    const partition = formatEventPartition(chunkDate);
 
-      // Fetch batch of events from workspace database
-      const events = await this.clickhouse.queryWorkspace<Record<string, unknown>>(
-        task.workspace_id,
-        `SELECT *
-         FROM events
-         WHERE toDate(created_at) = {date:Date}
-         ORDER BY id
-         LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
-        {
-          date: dateStr,
-          limit: task.batch_size,
-          offset,
-        },
-      );
+    // Check mutation capacity before starting
+    await this.ensureMutationCapacity(task.workspace_id);
 
-      if (events.length === 0) break;
+    // Execute single mutation for entire partition
+    // WHERE 1=1: Process all rows. ELSE ${dimension} in CASE prevents data loss.
+    await this.clickhouse.commandWorkspaceWithParams(
+      task.workspace_id,
+      `ALTER TABLE events UPDATE
+         ${setClause}
+       IN PARTITION '${partition}'
+       WHERE 1=1`,
+      {},
+    );
 
-      // Compute new filter values
-      const updates = this.computeBatch(events, filters);
+    // Wait for mutation to complete
+    await this.waitForMutations(task.workspace_id, 'events');
 
-      // Build and execute UPDATE query
-      await this.updateEvents(task.workspace_id, updates);
+    // Get count for progress tracking
+    const result = await this.clickhouse.queryWorkspace<{ count: string }>(
+      task.workspace_id,
+      `SELECT count() as count FROM events
+       WHERE toYYYYMMDD(created_at) = {partition:UInt32}`,
+      { partition: parseInt(partition, 10) },
+    );
 
-      offset += events.length;
-
-      if (events.length < task.batch_size) break;
-    }
+    return parseInt(result[0]?.count ?? '0', 10);
   }
 
   /**
-   * Process sessions for a specific date.
+   * Process sessions for a specific date using SQL-compiled filters.
+   * Sessions use ReplacingMergeTree(updated_at), so we must update updated_at.
+   * Sessions use monthly partitions, so we deduplicate to avoid redundant mutations.
+   * Returns the number of sessions for this date (for progress tracking).
    */
   private async processSessionsForDate(
     task: BackfillTask,
-    filters: FilterDefinition[],
+    compiled: CompiledFilters,
     chunkDate: Date,
-  ): Promise<void> {
+  ): Promise<number> {
+    // Format partition name (YYYYMM for sessions - monthly partitions)
+    const partition = formatSessionPartition(chunkDate);
+
+    // Check if this partition was already processed (sessions use monthly partitions)
+    // Multiple dates in the same month would otherwise trigger redundant mutations
+    if (!this.processedSessionPartitions.has(partition)) {
+      const { setClause } = compiled;
+
+      // Check mutation capacity before starting
+      await this.ensureMutationCapacity(task.workspace_id);
+
+      // Execute single mutation for entire partition
+      // CRITICAL: Must update updated_at for ReplacingMergeTree deduplication
+      // WHERE 1=1: Process all rows. ELSE ${dimension} in CASE prevents data loss.
+      await this.clickhouse.commandWorkspaceWithParams(
+        task.workspace_id,
+        `ALTER TABLE sessions UPDATE
+           ${setClause},
+           updated_at = now64(3)
+         IN PARTITION '${partition}'
+         WHERE 1=1`,
+        {},
+      );
+
+      // Wait for mutation to complete
+      await this.waitForMutations(task.workspace_id, 'sessions');
+
+      // Mark partition as processed
+      this.processedSessionPartitions.add(partition);
+    }
+
+    // Always get count for progress tracking (per-date, not per-partition)
     const dateStr = toClickHouseDate(chunkDate);
-    let offset = 0;
+    const result = await this.clickhouse.queryWorkspace<{ count: string }>(
+      task.workspace_id,
+      `SELECT count() as count FROM sessions FINAL
+       WHERE toDate(created_at) = {date:Date}`,
+      { date: dateStr },
+    );
 
-    while (true) {
-      if (this.cancelled) break;
-
-      // Fetch batch of sessions from workspace database
-      const sessions = await this.clickhouse.queryWorkspace<Record<string, unknown>>(
-        task.workspace_id,
-        `SELECT *
-         FROM sessions FINAL
-         WHERE toDate(created_at) = {date:Date}
-         ORDER BY id
-         LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
-        {
-          date: dateStr,
-          limit: task.batch_size,
-          offset,
-        },
-      );
-
-      if (sessions.length === 0) break;
-
-      // Compute new filter values and merge with session data
-      const updatedSessions = sessions.map((session) => {
-        const fieldValues = extractFieldValues(session);
-        const { customDimensions, modifiedFields } = applyFilterResults(
-          filters,
-          fieldValues,
-          session,
-        );
-
-        // Build updated session with all modifications
-        const updated = {
-          ...session,
-          ...customDimensions,
-          updated_at: toClickHouseDateTime(),
-        };
-
-        // Apply modified standard fields
-        for (const [field, value] of Object.entries(modifiedFields)) {
-          if (field === 'is_direct') {
-            (updated as Record<string, unknown>)[field] = value === 'true';
-          } else {
-            (updated as Record<string, unknown>)[field] = value;
-          }
-        }
-
-        return updated;
-      });
-
-      // Insert updated sessions to workspace database (ReplacingMergeTree will deduplicate)
-      await this.clickhouse.insertWorkspace(
-        task.workspace_id,
-        'sessions',
-        updatedSessions,
-      );
-
-      offset += sessions.length;
-
-      if (sessions.length < task.batch_size) break;
-    }
+    return parseInt(result[0]?.count ?? '0', 10);
   }
 
   /**
-   * Update events with new filter values using ALTER UPDATE.
+   * Ensure there is capacity for new mutations.
+   * Waits if there are too many concurrent mutations running.
    */
-  private async updateEvents(
-    workspaceId: string,
-    updates: FilteredEventUpdate[],
-  ): Promise<void> {
-    if (updates.length === 0) return;
+  private async ensureMutationCapacity(workspaceId: string): Promise<void> {
+    const dbName = this.clickhouse.getWorkspaceDatabaseName(workspaceId);
+    const start = Date.now();
 
-    // For batch updates, we use individual ALTER UPDATE per record
-    for (const update of updates) {
-      const setClausesParts: string[] = [];
-
-      // Add custom dimension updates
-      for (let i = 1; i <= 10; i++) {
-        const cdKey = `cd_${i}` as keyof CustomDimensionValues;
-        const versionKey = `cd_${i}_version` as keyof CustomDimensionValues;
-        const cdValue = update.customDimensions[cdKey];
-        const versionValue = update.customDimensions[versionKey];
-
-        setClausesParts.push(
-          `${cdKey} = ${cdValue === null ? 'NULL' : `'${cdValue}'`}`,
-        );
-        setClausesParts.push(
-          `${versionKey} = ${versionValue === null ? 'NULL' : `'${versionValue}'`}`,
-        );
-      }
-
-      // Add filter_version
-      const filterVersion = update.customDimensions.filter_version;
-      setClausesParts.push(
-        `filter_version = ${filterVersion === null ? 'NULL' : `'${filterVersion}'`}`,
+    while (Date.now() - start < MUTATION_CAPACITY_TIMEOUT_MS) {
+      const result = await this.clickhouse.queryGlobal<{ count: string }>(
+        `SELECT count() as count FROM system.mutations
+         WHERE database = {db:String} AND is_done = 0`,
+        { db: dbName },
       );
 
-      // Add modified standard fields
-      for (const [field, value] of Object.entries(update.modifiedFields)) {
-        if (field === 'is_direct') {
-          setClausesParts.push(`${field} = ${value === 'true' ? 1 : 0}`);
-        } else {
-          setClausesParts.push(
-            `${field} = ${value === null ? 'NULL' : `'${value}'`}`,
-          );
-        }
+      if (parseInt(result[0]?.count ?? '0', 10) < MUTATION_CONCURRENCY_LIMIT) {
+        return;
       }
-
-      // Execute on workspace database
-      await this.clickhouse.commandWorkspace(
-        workspaceId,
-        `ALTER TABLE events UPDATE ${setClausesParts.join(', ')}
-         WHERE id = '${update.id}'`,
-      );
+      await sleep(MUTATION_CAPACITY_POLL_MS);
     }
-
-    // Wait for mutations to complete
-    await this.waitForMutations(workspaceId);
+    throw new Error('Timeout waiting for mutation capacity');
   }
 
   /**
-   * Wait for all pending mutations to complete.
+   * Wait for all pending mutations on a table to complete.
    */
   private async waitForMutations(
     workspaceId: string,
+    table: 'events' | 'sessions',
     timeoutMs = 60000,
   ): Promise<void> {
     const start = Date.now();
     const dbName = this.clickhouse.getWorkspaceDatabaseName(workspaceId);
 
     while (Date.now() - start < timeoutMs) {
-      // Query system.mutations for the workspace database
-      const result = await this.clickhouse.queryWorkspace<{ is_done: number }>(
-        workspaceId,
+      // Query system.mutations directly (global system table, not workspace table)
+      const result = await this.clickhouse.queryGlobal<{ is_done: number }>(
         `SELECT is_done FROM system.mutations
-         WHERE database = '${dbName}'
-         AND table = 'events'
+         WHERE database = {db:String}
+         AND table = {table:String}
          AND is_done = 0
          LIMIT 1`,
-        {},
+        { db: dbName, table },
       );
 
       if (result.length === 0 || result[0].is_done === 1) {
@@ -367,53 +379,6 @@ export class FilterBackfillProcessor {
       }
 
       await sleep(100);
-    }
-  }
-
-  /**
-   * Compute filter values for a batch of records.
-   */
-  computeBatch(
-    records: Record<string, unknown>[],
-    filters: FilterDefinition[],
-  ): FilteredEventUpdate[] {
-    return records.map((record) => {
-      const fieldValues = extractFieldValues(record);
-      const { customDimensions, modifiedFields } = applyFilterResults(
-        filters,
-        fieldValues,
-        record,
-      );
-
-      return {
-        id: record.id,
-        customDimensions,
-        modifiedFields,
-      };
-    });
-  }
-
-  /**
-   * Update progress in the task record.
-   */
-  private async updateProgress(taskId: string): Promise<void> {
-    // Get current counts from system database
-    const result = await this.clickhouse.querySystem<{
-      processed_sessions: string;
-      processed_events: string;
-    }>(
-      `SELECT processed_sessions, processed_events FROM backfill_tasks WHERE id = {id:String}`,
-      { id: taskId },
-    );
-
-    if (result.length > 0) {
-      // Increment counts (simplified - in practice we'd track actual processed counts)
-      await this.clickhouse.commandSystem(
-        `ALTER TABLE backfill_tasks UPDATE
-           processed_sessions = processed_sessions + 1,
-           processed_events = processed_events + 1
-         WHERE id = '${taskId}'`,
-      );
     }
   }
 }

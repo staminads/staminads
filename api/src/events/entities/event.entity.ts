@@ -9,63 +9,67 @@ export interface TrackingEvent {
   duration: number;
 
   // Traffic source
-  referrer: string | null;
-  referrer_domain: string | null;
-  referrer_path: string | null;
+  referrer: string;
+  referrer_domain: string;
+  referrer_path: string;
   is_direct: boolean;
 
   // Landing page
   landing_page: string;
-  landing_domain: string | null;
-  landing_path: string | null;
+  landing_domain: string;
+  landing_path: string;
 
   // UTM parameters
-  utm_source: string | null;
-  utm_medium: string | null;
-  utm_campaign: string | null;
-  utm_term: string | null;
-  utm_content: string | null;
-  utm_id: string | null;
-  utm_id_from: string | null;
+  utm_source: string;
+  utm_medium: string;
+  utm_campaign: string;
+  utm_term: string;
+  utm_content: string;
+  utm_id: string;
+  utm_id_from: string;
+
+  // Channel classification
+  channel: string;
+  channel_group: string;
 
   // Custom dimensions (cd_1 through cd_10)
-  cd_1: string | null;
-  cd_2: string | null;
-  cd_3: string | null;
-  cd_4: string | null;
-  cd_5: string | null;
-  cd_6: string | null;
-  cd_7: string | null;
-  cd_8: string | null;
-  cd_9: string | null;
-  cd_10: string | null;
+  cd_1: string;
+  cd_2: string;
+  cd_3: string;
+  cd_4: string;
+  cd_5: string;
+  cd_6: string;
+  cd_7: string;
+  cd_8: string;
+  cd_9: string;
+  cd_10: string;
 
   // Filter version for staleness tracking
-  filter_version: string | null;
+  filter_version: string;
 
   // Screen/Viewport
-  screen_width: number | null;
-  screen_height: number | null;
-  viewport_width: number | null;
-  viewport_height: number | null;
+  screen_width: number;
+  screen_height: number;
+  viewport_width: number;
+  viewport_height: number;
 
   // Device
-  device: string | null;
-  browser: string | null;
-  browser_type: string | null;
-  os: string | null;
-  user_agent: string | null;
-  connection_type: string | null;
+  device: string;
+  browser: string;
+  browser_type: string;
+  os: string;
+  user_agent: string;
+  connection_type: string;
 
   // Browser APIs
-  language: string | null;
-  timezone: string | null;
+  language: string;
+  timezone: string;
 
   // Engagement
-  max_scroll: number | null;
+  max_scroll: number;
 
   // SDK
-  sdk_version: string | null;
+  sdk_version: string;
 
   // Flexible properties
   properties?: Record<string, string>;

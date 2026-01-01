@@ -1,5 +1,5 @@
 import { Statistic, Skeleton } from 'antd'
-import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons'
+import { ChevronUp, ChevronDown } from 'lucide-react'
 import { formatValue } from '../../lib/chart-utils'
 import { METRICS, type DashboardData, type MetricKey } from '../../types/dashboard'
 
@@ -57,16 +57,10 @@ export function MetricSummary({
                       precision={1}
                       valueStyle={{
                         fontSize: '12px',
-                        color: isPositive ? '#10b981' : '#ef4444',
+                        color: isPositive ? '#10b981' : '#f97316',
                         fontWeight: 500,
                       }}
-                      prefix={
-                        changePercent >= 0 ? (
-                          <ArrowUpOutlined style={{ fontSize: '10px' }} />
-                        ) : (
-                          <ArrowDownOutlined style={{ fontSize: '10px' }} />
-                        )
-                      }
+                      prefix={changePercent >= 0 ? <ChevronUp size={12} style={{ marginRight: '2px' }} /> : <ChevronDown size={12} style={{ marginRight: '2px' }} />}
                       suffix="%"
                     />
                   )}

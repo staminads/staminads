@@ -107,6 +107,22 @@ export class ClickHouseService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Query global ClickHouse tables (e.g., system.mutations) without table name qualification.
+   * Use this for querying ClickHouse system tables that exist outside of workspace databases.
+   */
+  async queryGlobal<T>(
+    sql: string,
+    params?: Record<string, unknown>,
+  ): Promise<T[]> {
+    const result = await this.client.query({
+      query: sql,
+      query_params: params,
+      format: 'JSONEachRow',
+    });
+    return result.json() as Promise<T[]>;
+  }
+
+  /**
    * Query a workspace database.
    * Note: SQL should use unqualified table names (e.g., 'sessions' not 'database.sessions').
    * Tables are automatically qualified with the workspace database name.
@@ -134,11 +150,13 @@ export class ClickHouseService implements OnModuleInit, OnModuleDestroy {
   private qualifyTableNames(sql: string, database: string): string {
     // Replace FROM table with FROM database.table
     // Replace INTO table with INTO database.table
-    // Handle common patterns: FROM, INTO, UPDATE, ALTER TABLE
+    // Handle common patterns: FROM, INTO, UPDATE (at start), ALTER TABLE
+    // Note: Don't replace UPDATE after ALTER TABLE (e.g., ALTER TABLE x UPDATE col = ...)
     return sql
       .replace(/\bFROM\s+(\w+)\b/gi, `FROM ${database}.$1`)
       .replace(/\bINTO\s+(\w+)\b/gi, `INTO ${database}.$1`)
-      .replace(/\bUPDATE\s+(\w+)\b/gi, `UPDATE ${database}.$1`)
+      // Only match UPDATE at the start of the statement (standalone UPDATE table SET...)
+      .replace(/^(\s*)UPDATE\s+(\w+)\b/gi, `$1UPDATE ${database}.$2`)
       .replace(/\bALTER\s+TABLE\s+(\w+)\b/gi, `ALTER TABLE ${database}.$1`);
   }
 
@@ -174,7 +192,9 @@ export class ClickHouseService implements OnModuleInit, OnModuleDestroy {
    */
   async commandSystem(sql: string): Promise<void> {
     // Replace {database} placeholder if present
-    const finalSql = sql.replace(/{database}/g, this.systemDatabase);
+    let finalSql = sql.replace(/{database}/g, this.systemDatabase);
+    // Qualify unqualified table names
+    finalSql = this.qualifyTableNames(finalSql, this.systemDatabase);
     await this.client.command({ query: finalSql });
   }
 
@@ -184,8 +204,30 @@ export class ClickHouseService implements OnModuleInit, OnModuleDestroy {
   async commandWorkspace(workspaceId: string, sql: string): Promise<void> {
     const dbName = this.getWorkspaceDatabaseName(workspaceId);
     // Replace {database} placeholder if present
-    const finalSql = sql.replace(/{database}/g, dbName);
+    let finalSql = sql.replace(/{database}/g, dbName);
+    // Qualify unqualified table names
+    finalSql = this.qualifyTableNames(finalSql, dbName);
     await this.client.command({ query: finalSql });
+  }
+
+  /**
+   * Execute a parameterized command on a workspace database.
+   * Use this for commands with dynamic values to avoid SQL injection.
+   */
+  async commandWorkspaceWithParams(
+    workspaceId: string,
+    sql: string,
+    params?: Record<string, unknown>,
+  ): Promise<void> {
+    const dbName = this.getWorkspaceDatabaseName(workspaceId);
+    // Replace {database} placeholder if present
+    let finalSql = sql.replace(/{database}/g, dbName);
+    // Qualify unqualified table names
+    finalSql = this.qualifyTableNames(finalSql, dbName);
+    await this.client.command({
+      query: finalSql,
+      query_params: params,
+    });
   }
 
   // ============================================

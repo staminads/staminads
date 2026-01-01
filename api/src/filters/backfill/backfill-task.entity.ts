@@ -18,6 +18,7 @@ export interface BackfillTask {
   processed_events: number;
   current_date_chunk: string | null;
   created_at: string;
+  updated_at: string; // Used by ReplacingMergeTree for row versioning
   started_at: string | null;
   completed_at: string | null;
   error_message: string | null;
@@ -42,4 +43,5 @@ export interface BackfillTaskProgress {
   completed_at: string | null;
   error_message: string | null;
   estimated_remaining_seconds: number | null;
+  filter_version: string;
 }

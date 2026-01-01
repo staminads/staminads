@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ClickHouseService } from '../database/clickhouse.service';
-import { generateEvents } from './fixtures/generators';
+import { generateEvents, getCachedFilters, clearFilterCache } from './fixtures/generators';
 import { TrackingEvent } from '../events/entities/event.entity';
+import { DEMO_CUSTOM_DIMENSION_LABELS } from './fixtures/demo-filters';
 
 const DEMO_WORKSPACE_ID = 'demo-apple';
 const DEMO_WORKSPACE_NAME = 'Apple Demo';
@@ -37,6 +38,9 @@ export class DemoService {
 
   async generate() {
     const startTime = Date.now();
+
+    // Clear filter cache to ensure fresh filter IDs for this generation
+    clearFilterCache();
 
     // Delete existing demo workspace if it exists
     await this.deleteExistingDemo();
@@ -132,8 +136,8 @@ export class DemoService {
       logo_url: 'https://www.apple.com/ac/structured-data/images/knowledge_graph_logo.png',
       timescore_reference: 60,
       status: 'active',
-      custom_dimensions: '[]',
-      filters: '[]',
+      custom_dimensions: JSON.stringify(DEMO_CUSTOM_DIMENSION_LABELS),
+      filters: JSON.stringify(getCachedFilters().filters),
       created_at: now,
       updated_at: now,
     };

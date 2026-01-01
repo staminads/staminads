@@ -19,6 +19,10 @@ export const DIMENSIONS: Record<string, DimensionDefinition> = {
   utm_term: { name: 'utm_term', column: 'utm_term', type: 'string', category: 'UTM' },
   utm_content: { name: 'utm_content', column: 'utm_content', type: 'string', category: 'UTM' },
 
+  // Channel
+  channel: { name: 'channel', column: 'channel', type: 'string', category: 'Channel' },
+  channel_group: { name: 'channel_group', column: 'channel_group', type: 'string', category: 'Channel' },
+
   // Pages
   landing_page: { name: 'landing_page', column: 'landing_page', type: 'string', category: 'Pages' },
   landing_domain: { name: 'landing_domain', column: 'landing_domain', type: 'string', category: 'Pages' },

@@ -3,11 +3,16 @@ import type { DatePreset, Granularity, AnalyticsResponse } from './analytics'
 export type ComparisonMode = 'previous_period' | 'previous_year' | 'none'
 
 export interface WorkspaceSearch {
+  // Shared params (dashboard + explore)
   period?: DatePreset
   timezone?: string
   comparison?: ComparisonMode
   customStart?: string
   customEnd?: string
+  // Explore-specific params
+  dimensions?: string // Comma-separated dimension list
+  filters?: string // JSON-encoded Filter[]
+  minSessions?: string // Stored as string in URL, parsed to number
 }
 
 export type MetricKey = 'sessions' | 'median_duration' | 'bounce_rate' | 'max_scroll'
@@ -101,20 +106,6 @@ export const PRESET_GROUPS: DatePreset[][] = [
   ['this_month', 'last_month'],
   ['this_year', 'last_12_months'],
   ['all_time', 'custom'],
-]
-
-export const COMMON_TIMEZONES = [
-  'UTC',
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'Europe/London',
-  'Europe/Paris',
-  'Europe/Berlin',
-  'Asia/Tokyo',
-  'Asia/Shanghai',
-  'Australia/Sydney',
 ]
 
 // Helper to extract dashboard data from API response

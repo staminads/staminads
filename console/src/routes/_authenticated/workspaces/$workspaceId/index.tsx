@@ -19,7 +19,6 @@ function Dashboard() {
     customStart,
     customEnd,
     setPeriod,
-    setTimezone,
     setComparison,
     setCustomRange,
     isPending,
@@ -32,13 +31,11 @@ function Dashboard() {
         <DashboardFilters
           period={period}
           timezone={timezone}
-          workspaceTimezone={workspace.timezone}
           workspaceCreatedAt={workspace.created_at}
           comparison={comparison}
           customStart={customStart}
           customEnd={customEnd}
           onPeriodChange={setPeriod}
-          onTimezoneChange={setTimezone}
           onComparisonChange={setComparison}
           onCustomRangeChange={setCustomRange}
           isPending={isPending}
