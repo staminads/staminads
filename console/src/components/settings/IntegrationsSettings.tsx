@@ -75,11 +75,6 @@ export function IntegrationsSettings({ workspace }: IntegrationsSettingsProps) {
         max_requests_per_hour: 60,
         max_tokens_per_day: 100000,
       },
-      usage: {
-        requests_this_hour: 0,
-        tokens_today: 0,
-        last_reset: new Date().toISOString(),
-      },
     }
 
     // Build updated integration

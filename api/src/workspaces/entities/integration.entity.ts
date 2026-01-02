@@ -24,15 +24,6 @@ export interface IntegrationLimits {
 }
 
 /**
- * Usage tracking for AI integrations.
- */
-export interface IntegrationUsage {
-  requests_this_hour: number;
-  tokens_today: number;
-  last_reset: string;
-}
-
-/**
  * Anthropic Claude integration settings.
  */
 export interface AnthropicSettings {
@@ -49,7 +40,6 @@ export interface AnthropicIntegration extends BaseIntegration {
   type: 'anthropic';
   settings: AnthropicSettings;
   limits: IntegrationLimits;
-  usage: IntegrationUsage;
 }
 
 /**
@@ -63,15 +53,6 @@ export type Integration = AnthropicIntegration;
 export const DEFAULT_ANTHROPIC_LIMITS: IntegrationLimits = {
   max_requests_per_hour: 60,
   max_tokens_per_day: 100000,
-};
-
-/**
- * Default usage for new integrations.
- */
-export const DEFAULT_INTEGRATION_USAGE: IntegrationUsage = {
-  requests_this_hour: 0,
-  tokens_today: 0,
-  last_reset: new Date().toISOString(),
 };
 
 /**

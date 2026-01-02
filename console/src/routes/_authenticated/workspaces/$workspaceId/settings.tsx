@@ -6,6 +6,7 @@ import { SearchOutlined, EditOutlined } from '@ant-design/icons'
 import { api } from '../../../../lib/api'
 import { workspaceQueryOptions } from '../../../../lib/queries'
 import { IntegrationsSettings } from '../../../../components/settings/IntegrationsSettings'
+import { TimeScoreDistribution } from '../../../../components/settings/TimeScoreDistribution'
 import { z } from 'zod'
 
 const settingsSearchSchema = z.object({
@@ -255,6 +256,13 @@ function Settings() {
           >
             <InputNumber min={1} style={{ width: '100%' }} />
           </Form.Item>
+
+          <div className="mb-6 -mt-2">
+            <TimeScoreDistribution
+              workspaceId={workspaceId}
+              timescoreReference={workspace.timescore_reference ?? 60}
+            />
+          </div>
 
           <Form.Item
             name="bounce_threshold"

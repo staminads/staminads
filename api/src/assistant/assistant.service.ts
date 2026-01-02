@@ -95,7 +95,7 @@ export class AssistantService implements OnModuleInit, OnModuleDestroy {
     }
 
     // Check rate limits
-    checkRateLimits(integration);
+    checkRateLimits(dto.workspace_id, integration);
 
     // Create job
     const jobId = randomUUID();
@@ -368,10 +368,8 @@ export class AssistantService implements OnModuleInit, OnModuleDestroy {
     );
     res.write(formatSSE(usageEvent(totalInputTokens, totalOutputTokens, costUsd)));
 
-    // Update usage
-    const updatedUsage = updateUsage(integration.usage, totalTokens);
-    integration.usage = updatedUsage;
-    // Note: In production, persist updated usage to database
+    // Update in-memory usage tracking
+    updateUsage(job.workspace_id, integration.id, totalTokens);
 
     // Mark job complete if not already
     if (job.status !== 'completed') {

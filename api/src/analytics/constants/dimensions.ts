@@ -41,6 +41,9 @@ export const DIMENSIONS: Record<string, DimensionDefinition> = {
   viewport_height: { name: 'viewport_height', column: 'viewport_height', type: 'number', category: 'Device' },
   connection_type: { name: 'connection_type', column: 'connection_type', type: 'string', category: 'Device' },
 
+  // Session
+  duration: { name: 'duration', column: 'duration', type: 'number', category: 'Session' },
+
   // Time
   year: { name: 'year', column: 'year', type: 'number', category: 'Time' },
   month: { name: 'month', column: 'month', type: 'number', category: 'Time' },
