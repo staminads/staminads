@@ -1,7 +1,18 @@
+export interface MetricContext {
+  bounce_threshold: number;
+}
+
 export interface MetricDefinition {
   name: string;
-  sql: string;
+  sql: string | ((ctx: MetricContext) => string);
   description: string;
+}
+
+export function getMetricSql(
+  metric: MetricDefinition,
+  ctx: MetricContext,
+): string {
+  return typeof metric.sql === 'function' ? metric.sql(ctx) : metric.sql;
 }
 
 export const METRICS: Record<string, MetricDefinition> = {
@@ -27,7 +38,8 @@ export const METRICS: Record<string, MetricDefinition> = {
   },
   bounce_rate: {
     name: 'bounce_rate',
-    sql: 'round(countIf(duration < 10) * 100.0 / count(), 2)',
-    description: 'Percentage of sessions under 10 seconds',
+    sql: (ctx: MetricContext) =>
+      `round(countIf(duration < ${ctx.bounce_threshold}) * 100.0 / count(), 2)`,
+    description: 'Percentage of sessions under bounce threshold',
   },
 };

@@ -98,7 +98,7 @@ function Settings() {
     },
   })
 
-  const onFinish = (values: { name: string; website: string; logo_url?: string; timezone: string; currency: string; timescore_reference?: number }) => {
+  const onFinish = (values: { name: string; website: string; logo_url?: string; timezone: string; currency: string; timescore_reference?: number; bounce_threshold?: number }) => {
     updateWorkspaceMutation.mutate({
       id: workspaceId,
       ...values,
@@ -183,6 +183,7 @@ function Settings() {
             timezone: workspace.timezone,
             currency: workspace.currency,
             timescore_reference: workspace.timescore_reference,
+            bounce_threshold: workspace.bounce_threshold ?? 10,
           }}
         >
           <Form.Item
@@ -251,6 +252,14 @@ function Settings() {
             name="timescore_reference"
             label="TimeScore Reference (seconds)"
             tooltip="Target median session duration for heat map coloring in Explore. Higher values = higher bar for 'green' engagement."
+          >
+            <InputNumber min={1} style={{ width: '100%' }} />
+          </Form.Item>
+
+          <Form.Item
+            name="bounce_threshold"
+            label="Bounce Threshold (seconds)"
+            tooltip="Sessions shorter than this duration are counted as bounces. Default is 10 seconds."
           >
             <InputNumber min={1} style={{ width: '100%' }} />
           </Form.Item>

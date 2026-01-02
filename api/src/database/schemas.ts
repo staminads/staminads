@@ -9,6 +9,7 @@ export const SYSTEM_SCHEMAS: Record<string, string> = {
       currency String,
       logo_url String DEFAULT '',
       timescore_reference UInt32 DEFAULT 60,
+      bounce_threshold UInt32 DEFAULT 10,
       status Enum8('initializing' = 1, 'active' = 2, 'inactive' = 3, 'error' = 4),
       custom_dimensions String DEFAULT '[]',
       filters String DEFAULT '[]',

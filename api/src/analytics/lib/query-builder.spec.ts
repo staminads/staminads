@@ -1,12 +1,17 @@
 import { buildAnalyticsQuery, buildExtremesQuery } from './query-builder';
 import { AnalyticsQueryDto } from '../dto/analytics-query.dto';
 import { ExtremesQueryDto } from '../dto/extremes-query.dto';
+import { MetricContext } from '../constants/metrics';
 
 describe('buildAnalyticsQuery', () => {
   const baseQuery: AnalyticsQueryDto = {
     workspace_id: 'test-ws',
     metrics: ['sessions'],
     dateRange: { start: '2025-12-01', end: '2025-12-28' },
+  };
+
+  const defaultContext: MetricContext = {
+    bounce_threshold: 10,
   };
 
   it('builds basic query with metrics only', () => {
@@ -20,10 +25,14 @@ describe('buildAnalyticsQuery', () => {
   });
 
   it('includes multiple metrics', () => {
-    const { sql } = buildAnalyticsQuery({
-      ...baseQuery,
-      metrics: ['sessions', 'avg_duration', 'bounce_rate'],
-    });
+    const { sql } = buildAnalyticsQuery(
+      {
+        ...baseQuery,
+        metrics: ['sessions', 'avg_duration', 'bounce_rate'],
+      },
+      undefined,
+      defaultContext,
+    );
     expect(sql).toContain('count() as sessions');
     expect(sql).toContain('round(avg(duration), 1) as avg_duration');
     expect(sql).toContain(

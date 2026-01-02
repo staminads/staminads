@@ -101,6 +101,7 @@ describe('Workspaces Integration', () => {
         logo_url: dto.logo_url,
         status: 'active',
         timescore_reference: 60,
+        bounce_threshold: 10,
       });
       expect(response.body.created_at).toBeDefined();
       expect(response.body.updated_at).toBeDefined();
@@ -126,7 +127,27 @@ describe('Workspaces Integration', () => {
         logo_url: dto.logo_url,
         status: 'active',
         timescore_reference: 60,
+        bounce_threshold: 10,
       });
+    });
+
+    it('creates workspace with custom bounce_threshold', async () => {
+      const dto = {
+        id: 'test-ws-bounce',
+        name: 'Bounce Test',
+        website: 'https://bounce-test.com',
+        timezone: 'UTC',
+        currency: 'USD',
+        bounce_threshold: 30,
+      };
+
+      const response = await request(app.getHttpServer())
+        .post('/api/workspaces.create')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(dto)
+        .expect(201);
+
+      expect(response.body.bounce_threshold).toBe(30);
     });
 
     it('creates workspace without optional logo_url', async () => {
@@ -450,6 +471,31 @@ describe('Workspaces Integration', () => {
       expect(response.body.timescore_reference).toBe(120);
     });
 
+    it('updates bounce_threshold', async () => {
+      // Create workspace first
+      const createDto = {
+        id: 'bounce-update-test',
+        name: 'Bounce Update Test',
+        website: 'https://bounce-update.com',
+        timezone: 'UTC',
+        currency: 'USD',
+      };
+      await request(app.getHttpServer())
+        .post('/api/workspaces.create')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(createDto)
+        .expect(201);
+
+      // Update bounce_threshold
+      const response = await request(app.getHttpServer())
+        .post('/api/workspaces.update')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ id: 'bounce-update-test', bounce_threshold: 20 })
+        .expect(201);
+
+      expect(response.body.bounce_threshold).toBe(20);
+    });
+
     it('returns 404 for non-existent workspace', async () => {
       await request(app.getHttpServer())
         .post('/api/workspaces.update')
@@ -540,6 +586,7 @@ describe('Workspaces Integration', () => {
       expect(columnMap['currency']).toBe('String');
       expect(columnMap['logo_url']).toBe('String');
       expect(columnMap['timescore_reference']).toMatch(/UInt32/);
+      expect(columnMap['bounce_threshold']).toMatch(/UInt32/);
       expect(columnMap['status']).toMatch(/Enum8/);
       expect(columnMap['created_at']).toMatch(/DateTime64/);
       expect(columnMap['updated_at']).toMatch(/DateTime64/);

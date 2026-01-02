@@ -9,7 +9,7 @@ import {
   fillGaps,
   shiftPresetToPreviousPeriod,
 } from './lib/date-utils';
-import { METRICS } from './constants/metrics';
+import { METRICS, MetricContext } from './constants/metrics';
 import { DIMENSIONS } from './constants/dimensions';
 
 // Convert ISO date string to ClickHouse DateTime64 format
@@ -91,13 +91,18 @@ export class AnalyticsService {
       dateRange: resolvedDateRange,
     };
 
+    // Build metric context from workspace settings
+    const metricContext: MetricContext = {
+      bounce_threshold: workspace.bounce_threshold ?? 10,
+    };
+
     // Handle comparison period
     if (dto.compareDateRange) {
-      return this.queryWithComparison(queryDto, tz);
+      return this.queryWithComparison(queryDto, tz, metricContext);
     }
 
     // Build and execute query (pass timezone for granularity grouping)
-    const { sql, params } = buildAnalyticsQuery(queryDto, tz);
+    const { sql, params } = buildAnalyticsQuery(queryDto, tz, metricContext);
     // Query the workspace-specific database
     let data = await this.clickhouse.queryWorkspace<Record<string, unknown>>(
       dto.workspace_id,
@@ -139,6 +144,7 @@ export class AnalyticsService {
   private async queryWithComparison(
     dto: AnalyticsQueryDto & { dateRange: { start?: string; end?: string } },
     tz: string,
+    metricContext: MetricContext,
   ): Promise<AnalyticsResponse> {
     // Resolve comparison date range
     const compareDateRange = { ...dto.compareDateRange! };
@@ -173,6 +179,7 @@ export class AnalyticsService {
     const { sql: currentSql, params: currentParams } = buildAnalyticsQuery(
       dto,
       tz,
+      metricContext,
     );
 
     // Build previous period query
@@ -186,6 +193,7 @@ export class AnalyticsService {
     const { sql: previousSql, params: previousParams } = buildAnalyticsQuery(
       previousDto,
       tz,
+      metricContext,
     );
 
     // Execute both queries against workspace database
@@ -294,9 +302,14 @@ export class AnalyticsService {
       resolvedDateRange.end = toClickHouseDateTime(resolvedDateRange.end);
     }
 
+    // Build metric context from workspace settings
+    const metricContext: MetricContext = {
+      bounce_threshold: workspace.bounce_threshold ?? 10,
+    };
+
     // Build query with resolved dates
     const queryDto = { ...dto, dateRange: resolvedDateRange };
-    const { sql, params } = buildExtremesQuery(queryDto);
+    const { sql, params } = buildExtremesQuery(queryDto, metricContext);
 
     // Execute query
     const result = await this.clickhouse.queryWorkspace<{

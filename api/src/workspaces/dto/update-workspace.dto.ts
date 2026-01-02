@@ -71,4 +71,9 @@ export class UpdateWorkspaceDto {
   @Min(0)
   @Max(2)
   geo_coordinates_precision?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  bounce_threshold?: number;
 }

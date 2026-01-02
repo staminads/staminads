@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Table, Empty, Spin, Tooltip, Button } from 'antd'
-import { SquarePlus, SquareMinus, Loader2, ChevronUp, ChevronDown } from 'lucide-react'
+import { SquarePlus, SquareMinus, Loader2, ChevronUp, ChevronDown, TriangleAlert } from 'lucide-react'
 import { EyeOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { HeatMapCell } from './HeatMapCell'
@@ -23,6 +23,7 @@ interface ExploreTableProps {
   totals?: ExploreTotals
   onBreakdownClick?: (row: ExploreRow) => void
   onBreakdownHover?: (row: ExploreRow) => void
+  minSessions?: number
 }
 
 function formatPercentage(value: number): string {
@@ -74,7 +75,8 @@ export function ExploreTable({
   customDimensionLabels,
   totals,
   onBreakdownClick,
-  onBreakdownHover
+  onBreakdownHover,
+  minSessions
 }: ExploreTableProps) {
   const columns: ColumnsType<ExploreRow> = useMemo(() => {
     // Get the current dimension being displayed (the last one that has data)
@@ -255,6 +257,17 @@ export function ExploreTable({
 
           if (isLoading) {
             return <Loader2 size={14} className="mr-2 animate-spin text-gray-400" />
+          }
+
+          // Show warning icon if children were filtered by min sessions
+          if (expanded && record.childrenFilteredByMinSessions) {
+            return (
+              <Tooltip title={`All sub-items have fewer than ${minSessions} sessions. Lower the threshold to see them.`}>
+                <span className="mr-2 text-amber-500 cursor-help">
+                  <TriangleAlert size={14} />
+                </span>
+              </Tooltip>
+            )
           }
 
           return (

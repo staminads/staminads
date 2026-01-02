@@ -24,6 +24,7 @@ export interface ExploreRow {
   childrenLoaded: boolean // Whether children have been fetched
   children?: ExploreRow[] // Child rows
   isLoading?: boolean // Currently fetching children
+  childrenFilteredByMinSessions?: boolean // Children were likely filtered out by min sessions threshold
 
   // Dimension values - dynamic keys based on selected dimensions
   [dimensionKey: string]: unknown

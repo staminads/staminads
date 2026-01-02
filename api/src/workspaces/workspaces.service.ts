@@ -105,6 +105,7 @@ export class WorkspacesService {
       created_at: now,
       updated_at: now,
       timescore_reference: 60,
+      bounce_threshold: dto.bounce_threshold ?? 10,
       status: 'initializing',
       custom_dimensions: DEFAULT_CUSTOM_DIMENSION_LABELS,
       filters: [],

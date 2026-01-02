@@ -143,11 +143,21 @@ export function transformApiRowsToExploreRows(
     const dimValue = row[currentDimension]
     const key = generateRowKey(parentKey, dimValue, index)
 
+    // Store ALL dimension values from the API response (including parent dimensions)
+    // This is needed for building correct filters when expanding deeper levels
+    const dimensionValues: Record<string, unknown> = {}
+    for (let i = 0; i <= currentDimensionIndex; i++) {
+      const dim = dimensions[i]
+      if (dim && row[dim] !== undefined) {
+        dimensionValues[dim] = row[dim]
+      }
+    }
+
     const exploreRow: ExploreRow = {
       key,
       parentDimensionIndex: currentDimensionIndex,
       childrenLoaded: false,
-      [currentDimension]: dimValue,
+      ...dimensionValues,
       // Current period metrics
       sessions: (row.sessions as number) ?? 0,
       median_duration: (row.median_duration as number) ?? 0,
@@ -219,6 +229,7 @@ export function insertChildrenIntoTree(
   rows: ExploreRow[],
   parentKey: string,
   children: ExploreRow[],
+  childrenFilteredByMinSessions?: boolean,
 ): ExploreRow[] {
   return rows.map((row) => {
     if (row.key === parentKey) {
@@ -227,12 +238,13 @@ export function insertChildrenIntoTree(
         childrenLoaded: true,
         children,
         isLoading: false,
+        childrenFilteredByMinSessions,
       }
     }
     if (row.children) {
       return {
         ...row,
-        children: insertChildrenIntoTree(row.children, parentKey, children),
+        children: insertChildrenIntoTree(row.children, parentKey, children, childrenFilteredByMinSessions),
       }
     }
     return row

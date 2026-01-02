@@ -17,6 +17,7 @@ export interface Workspace {
   created_at: string
   updated_at: string
   timescore_reference: number
+  bounce_threshold: number
   status: WorkspaceStatus
   custom_dimensions?: CustomDimensionLabels | null
 }
@@ -39,4 +40,5 @@ export interface UpdateWorkspaceInput {
   logo_url?: string
   custom_dimensions?: CustomDimensionLabels
   timescore_reference?: number
+  bounce_threshold?: number
 }

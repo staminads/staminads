@@ -1,6 +1,6 @@
 import { AnalyticsQueryDto } from '../dto/analytics-query.dto';
 import { ExtremesQueryDto } from '../dto/extremes-query.dto';
-import { METRICS } from '../constants/metrics';
+import { METRICS, getMetricSql, MetricContext } from '../constants/metrics';
 import { DIMENSIONS } from '../constants/dimensions';
 import { buildFilters } from './filter-builder';
 
@@ -47,12 +47,14 @@ const GRANULARITY_SQL: Record<
 export function buildAnalyticsQuery(
   query: AnalyticsQueryDto,
   timezone?: string,
+  metricContext?: MetricContext,
 ): BuiltQuery {
   // Validate and build metrics SQL
   const metricsSql = query.metrics.map((m) => {
     const metric = METRICS[m];
     if (!metric) throw new Error(`Unknown metric: ${m}`);
-    return `${metric.sql} as ${m}`;
+    const sql = metricContext ? getMetricSql(metric, metricContext) : metric.sql;
+    return `${sql} as ${m}`;
   });
 
   // Validate and get dimension columns
@@ -160,9 +162,13 @@ ${limitClause}
 
 export function buildExtremesQuery(
   query: ExtremesQueryDto & { dateRange: { start?: string; end?: string } },
+  metricContext?: MetricContext,
 ): BuiltQuery {
   const metric = METRICS[query.metric];
   if (!metric) throw new Error(`Unknown metric: ${query.metric}`);
+  const metricSql = metricContext
+    ? getMetricSql(metric, metricContext)
+    : metric.sql;
 
   // Validate and get dimension columns
   const groupByCols = query.groupBy.map((d) => {
@@ -192,7 +198,7 @@ export function buildExtremesQuery(
 
   // Inner query: group by dimensions, compute metric
   const innerSql = `
-SELECT ${metric.sql} as value
+SELECT ${metricSql} as value
 FROM sessions FINAL
 WHERE ${whereConditions.join('\n  AND ')}
 GROUP BY ${groupByCols.join(', ')}

@@ -19,6 +19,7 @@ interface Workspace {
   currency: string;
   logo_url: string | null;
   timescore_reference: number;
+  bounce_threshold: number;
   status: string;
   custom_dimensions: string;
   filters: string;
@@ -154,6 +155,7 @@ export class DemoService {
       currency: 'USD',
       logo_url: 'https://www.apple.com/ac/structured-data/images/knowledge_graph_logo.png',
       timescore_reference: 60,
+      bounce_threshold: 10,
       status: 'active',
       custom_dimensions: JSON.stringify(DEMO_CUSTOM_DIMENSION_LABELS),
       filters: JSON.stringify(getCachedFilters().filters),

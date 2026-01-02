@@ -21,3 +21,13 @@ A source of traffic can be any dimensions or combination of dimensions such as:
 /api          NestJS TypeScript API
 /console      Frontend React Typescript Antd
 ```
+
+## Roadmap
+
+- custom bounce rate in secs
+- warning on children dimensions having less than minimum sessions
+- export to CSV
+- SDK
+- docs
+- day of week as "Monday..." in Explore results
+- "not-mapped" template in explore

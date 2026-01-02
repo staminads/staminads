@@ -359,8 +359,11 @@ function Explore() {
           showComparison,
         )
 
+        // Check if children were likely filtered out by min sessions threshold
+        const childrenFilteredByMinSessions = childRows.length === 0 && minSessions > 1
+
         // Insert children into tree
-        setReportData((prev) => insertChildrenIntoTree(prev, record.key, childRows))
+        setReportData((prev) => insertChildrenIntoTree(prev, record.key, childRows, childrenFilteredByMinSessions))
 
         // Update max if children have higher median_duration values
         const childrenMax = Math.max(...childRows.map(r => r.median_duration), 0)
@@ -505,6 +508,7 @@ function Explore() {
           totals={totals}
           onBreakdownClick={openBreakdown}
           onBreakdownHover={prefetchBreakdown}
+          minSessions={minSessions}
         />
       </div>
 
