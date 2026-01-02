@@ -767,7 +767,7 @@ describe('Backfill Integration', () => {
 
       // Verify sessions have updated channel values
       const result = await workspaceClient.query({
-        query: `SELECT id, utm_source, channel, channel_group, channel_version
+        query: `SELECT id, utm_source, channel, channel_group
                 FROM sessions FINAL
                 WHERE workspace_id = {ws:String}
                 ORDER BY id`,
@@ -782,7 +782,6 @@ describe('Backfill Integration', () => {
       const session1 = rows.find((r) => r.id === 'session-1');
       expect(session1?.channel).toBe('Google');
       expect(session1?.channel_group).toBe('Paid Search');
-      expect(session1?.channel_version).toBeDefined();
 
       // Session 2: facebook -> Facebook / Paid Social
       const session2 = rows.find((r) => r.id === 'session-2');

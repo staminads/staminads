@@ -2,6 +2,8 @@ import {
   FilterCondition,
   FilterDefinition,
   FilterAction,
+  VALID_SOURCE_FIELDS,
+  VALID_WRITABLE_DIMENSIONS,
 } from '../entities/filter.entity';
 import { computeFilterVersion } from './filter-evaluator';
 
@@ -61,9 +63,35 @@ export function escapeRegex(pattern: string): string {
 }
 
 /**
+ * Validate that a field name is a valid source field.
+ * Defense-in-depth: DTO already validates, but compiler should too.
+ * @throws Error if field is invalid
+ */
+export function validateSourceField(field: string): void {
+  if (!VALID_SOURCE_FIELDS.has(field)) {
+    throw new Error(
+      `Invalid source field: ${field}. Allowed: ${[...VALID_SOURCE_FIELDS].join(', ')}`,
+    );
+  }
+}
+
+/**
+ * Validate that a dimension is a valid writable dimension.
+ * @throws Error if dimension is invalid
+ */
+export function validateDimension(dimension: string): void {
+  if (!VALID_WRITABLE_DIMENSIONS.has(dimension)) {
+    throw new Error(
+      `Invalid dimension: ${dimension}. Allowed: ${[...VALID_WRITABLE_DIMENSIONS].join(', ')}`,
+    );
+  }
+}
+
+/**
  * Compile a single condition to ClickHouse SQL.
  */
 export function compileCondition(c: FilterCondition): string {
+  validateSourceField(c.field);
   const field = c.field;
   const value = escapeSQL(c.value);
 
@@ -169,6 +197,7 @@ export function compileFiltersToSQL(
     const conditionSQL = compileConditions(filter.conditions);
 
     for (const op of filter.operations) {
+      validateDimension(op.dimension);
       const branches = dimensionBranches.get(op.dimension) ?? [];
       branches.push({
         conditionSQL,
@@ -182,9 +211,7 @@ export function compileFiltersToSQL(
   // 3. Compute version hash for this filter configuration
   const version = computeFilterVersion(sorted);
 
-  // 4. Build SET clauses for custom dimensions
-  //    - Dimensions WITH filters: set value + version
-  //    - Dimensions WITHOUT filters: only update version (preserve existing value)
+  // 4. Build SET clauses for custom dimensions that have filters targeting them
   const setClauses: string[] = [];
 
   for (const dim of CUSTOM_DIMENSIONS) {
@@ -193,8 +220,6 @@ export function compileFiltersToSQL(
       // Has filters targeting this dimension: use CASE WHEN
       setClauses.push(`${dim} = ${buildCaseExpression(dim, branches)}`);
     }
-    // Always update version column to mark as processed
-    setClauses.push(`${dim}_version = '${version}'`);
   }
 
   // 5. Build SET clauses for modified standard fields (utm_*, referrer_domain, is_direct)

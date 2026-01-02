@@ -230,7 +230,6 @@ export class EventsService {
       cd_8: '',
       cd_9: '',
       cd_10: '',
-      filter_version: '',
     };
 
     // Apply filters if workspace has them configured

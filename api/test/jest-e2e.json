@@ -11,5 +11,6 @@
   "testTimeout": 30000,
   "moduleNameMapper": {
     "^src/(.*)$": "<rootDir>/../src/$1"
-  }
+  },
+  "forceExit": true
 }

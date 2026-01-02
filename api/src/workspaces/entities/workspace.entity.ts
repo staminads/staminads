@@ -1,4 +1,5 @@
 import { FilterDefinition } from '../../filters/entities/filter.entity';
+import { Integration } from './integration.entity';
 
 export type WorkspaceStatus = 'initializing' | 'active' | 'inactive' | 'error';
 
@@ -22,6 +23,7 @@ export interface Workspace {
   status: WorkspaceStatus;
   custom_dimensions?: CustomDimensionLabels | null;
   filters?: FilterDefinition[];
+  integrations?: Integration[];
 
   // Geo settings
   geo_enabled: boolean;

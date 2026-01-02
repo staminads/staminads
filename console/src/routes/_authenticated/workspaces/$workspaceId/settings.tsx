@@ -1,13 +1,20 @@
 import { useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useSuspenseQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Form, Input, InputNumber, Button, Select, message, Table, Tag, Modal, Avatar } from 'antd'
 import { SearchOutlined, EditOutlined } from '@ant-design/icons'
 import { api } from '../../../../lib/api'
 import { workspaceQueryOptions } from '../../../../lib/queries'
+import { IntegrationsSettings } from '../../../../components/settings/IntegrationsSettings'
+import { z } from 'zod'
+
+const settingsSearchSchema = z.object({
+  section: z.enum(['workspace', 'dimensions', 'integrations']).optional().default('workspace'),
+})
 
 export const Route = createFileRoute('/_authenticated/workspaces/$workspaceId/settings')({
   component: Settings,
+  validateSearch: settingsSearchSchema,
 })
 
 const timezoneOptions = [
@@ -43,19 +50,25 @@ const currencyOptions = [
   { value: 'BRL', label: 'BRL - Brazilian Real' },
 ]
 
-type SettingsSection = 'workspace' | 'dimensions'
+type SettingsSection = 'workspace' | 'dimensions' | 'integrations'
 
 const menuItems = [
   { key: 'workspace' as const, label: 'Workspace' },
   { key: 'dimensions' as const, label: 'Custom Dimensions' },
+  { key: 'integrations' as const, label: 'Integrations' },
 ]
 
 function Settings() {
   const { workspaceId } = Route.useParams()
+  const { section } = Route.useSearch()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { data: workspace } = useSuspenseQuery(workspaceQueryOptions(workspaceId))
 
-  const [activeSection, setActiveSection] = useState<SettingsSection>('workspace')
+  const setActiveSection = (newSection: SettingsSection) => {
+    navigate({ search: { section: newSection } })
+  }
+
   const [form] = Form.useForm()
   const [detectingLogo, setDetectingLogo] = useState(false)
   const [editingSlot, setEditingSlot] = useState<number | null>(null)
@@ -344,7 +357,7 @@ function Settings() {
         <div className="w-56 flex-shrink-0">
           <nav className="space-y-1">
             {menuItems.map((item) => {
-              const isActive = activeSection === item.key
+              const isActive = section === item.key
               return (
                 <button
                   key={item.key}
@@ -364,8 +377,9 @@ function Settings() {
 
         {/* Content Area */}
         <div className="flex-1 min-w-0">
-          {activeSection === 'workspace' && workspaceContent}
-          {activeSection === 'dimensions' && dimensionsContent}
+          {section === 'workspace' && workspaceContent}
+          {section === 'dimensions' && dimensionsContent}
+          {section === 'integrations' && <IntegrationsSettings workspace={workspace} />}
         </div>
       </div>
     </div>

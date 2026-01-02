@@ -17,10 +17,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { FiltersService } from './filters.service';
 import { FilterBackfillService } from './backfill/backfill.service';
-import {
-  FilterDefinition,
-  FilterWithStaleness,
-} from './entities/filter.entity';
+import { FilterDefinition } from './entities/filter.entity';
 import { CreateFilterDto } from './dto/create-filter.dto';
 import { UpdateFilterDto } from './dto/update-filter.dto';
 import { ReorderFiltersDto } from './dto/reorder-filters.dto';
@@ -42,11 +39,11 @@ export class FiltersController {
   @ApiOperation({ summary: 'List filters for workspace' })
   @ApiQuery({ name: 'workspace_id', type: String, required: true })
   @ApiQuery({ name: 'tags', type: [String], required: false, description: 'Filter by tags' })
-  @ApiResponse({ status: 200, description: 'List of filters with staleness info' })
+  @ApiResponse({ status: 200, description: 'List of filters' })
   async list(
     @Query('workspace_id') workspaceId: string,
     @Query('tags') tags?: string | string[],
-  ): Promise<FilterWithStaleness[]> {
+  ): Promise<FilterDefinition[]> {
     const tagArray = tags ? (Array.isArray(tags) ? tags : [tags]) : undefined;
     return this.service.list(workspaceId, tagArray);
   }
@@ -55,11 +52,11 @@ export class FiltersController {
   @ApiOperation({ summary: 'Get filter by ID' })
   @ApiQuery({ name: 'workspace_id', type: String, required: true })
   @ApiQuery({ name: 'id', type: String, required: true })
-  @ApiResponse({ status: 200, description: 'Filter with staleness info' })
+  @ApiResponse({ status: 200, description: 'Filter definition' })
   async get(
     @Query('workspace_id') workspaceId: string,
     @Query('id') id: string,
-  ): Promise<FilterWithStaleness> {
+  ): Promise<FilterDefinition> {
     return this.service.get(workspaceId, id);
   }
 

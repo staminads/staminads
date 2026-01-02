@@ -3,6 +3,7 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { AssistantModule } from './assistant/assistant.module';
 import { AuthModule } from './auth/auth.module';
 import { CommonModule } from './common/common.module';
 import { DatabaseModule } from './database/database.module';
@@ -31,6 +32,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     DemoModule,
     EventsModule,
     AnalyticsModule,
+    AssistantModule,
   ],
 })
 export class AppModule {}

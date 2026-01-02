@@ -1,3 +1,4 @@
+import { Semaphore } from 'async-mutex';
 import { ClickHouseService } from '../../database/clickhouse.service';
 import { BackfillTask } from './backfill-task.entity';
 import { FilterDefinition } from '../entities/filter.entity';
@@ -10,9 +11,14 @@ import {
 import type { FilterBackfillService } from './backfill.service';
 
 const EVENTS_TTL_DAYS = 7;
-const MUTATION_CONCURRENCY_LIMIT = 50; // Buffer below ClickHouse's 100
-const MUTATION_CAPACITY_POLL_MS = 500;
-const MUTATION_CAPACITY_TIMEOUT_MS = 60000;
+
+// Global semaphore for mutation capacity coordination across all backfill processors
+// Soft limit: 80 concurrent mutations (gates burst submission, not total capacity)
+const GLOBAL_MUTATION_SEMAPHORE = new Semaphore(80);
+// Hard limit: ClickHouse's actual capacity (leave headroom for system mutations)
+const CLICKHOUSE_HARD_LIMIT = 95;
+// Timeout for acquiring a semaphore slot
+const SEMAPHORE_TIMEOUT_MS = 60000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -376,8 +382,8 @@ export class FilterBackfillProcessor {
     // Format partition name (YYYYMMDD for events)
     const partition = formatEventPartition(chunkDate);
 
-    // Check mutation capacity before starting
-    await this.ensureMutationCapacity(task.workspace_id);
+    // Acquire mutation slot (semaphore released immediately after check)
+    await this.acquireMutationSlot();
 
     // Execute single mutation for entire partition
     // WHERE 1=1: Process all rows. ELSE ${dimension} in CASE prevents data loss.
@@ -423,8 +429,8 @@ export class FilterBackfillProcessor {
     if (!this.processedSessionPartitions.has(partition)) {
       const { setClause } = compiled;
 
-      // Check mutation capacity before starting
-      await this.ensureMutationCapacity(task.workspace_id);
+      // Acquire mutation slot (semaphore released immediately after check)
+      await this.acquireMutationSlot();
 
       // Execute single mutation for entire partition
       // Note: Cannot update updated_at (ReplacingMergeTree version column)
@@ -458,30 +464,57 @@ export class FilterBackfillProcessor {
   }
 
   /**
-   * Ensure there is capacity for new mutations.
-   * Waits if there are too many concurrent mutations running.
-   * Kills mutations and throws on timeout.
+   * Get the global count of running mutations across ALL databases.
+   * Used to check ClickHouse's overall mutation capacity.
    */
-  private async ensureMutationCapacity(workspaceId: string): Promise<void> {
-    const dbName = this.clickhouse.getWorkspaceDatabaseName(workspaceId);
-    const start = Date.now();
+  private async getGlobalMutationCount(): Promise<number> {
+    const result = await this.clickhouse.queryGlobal<{ count: string }>(
+      `SELECT count() as count FROM system.mutations WHERE is_done = 0`,
+      {},
+    );
+    return parseInt(result[0]?.count ?? '0', 10);
+  }
 
-    while (Date.now() - start < MUTATION_CAPACITY_TIMEOUT_MS) {
-      const result = await this.clickhouse.queryGlobal<{ count: string }>(
-        `SELECT count() as count FROM system.mutations
-         WHERE database = {db:String} AND is_done = 0`,
-        { db: dbName },
+  /**
+   * Acquire a mutation slot using global semaphore coordination.
+   *
+   * Design (per Gemini review):
+   * - Semaphore gates SUBMISSION burst, not total capacity
+   * - Release semaphore IMMEDIATELY after check (don't hold during mutation execution)
+   * - Pre-check and post-check ClickHouse capacity for fail-fast and race protection
+   *
+   * @throws Error if ClickHouse is overloaded or timeout acquiring slot
+   */
+  private async acquireMutationSlot(): Promise<void> {
+    // Pre-check: fail fast if ClickHouse is already overloaded
+    const preCheck = await this.getGlobalMutationCount();
+    if (preCheck >= CLICKHOUSE_HARD_LIMIT) {
+      throw new Error(
+        `ClickHouse mutation queue full (${preCheck}/${CLICKHOUSE_HARD_LIMIT})`,
       );
-
-      if (parseInt(result[0]?.count ?? '0', 10) < MUTATION_CONCURRENCY_LIMIT) {
-        return;
-      }
-      await sleep(MUTATION_CAPACITY_POLL_MS);
     }
 
-    // Timeout: kill mutations before throwing
-    await this.killWorkspaceMutations(workspaceId);
-    throw new Error('Timeout waiting for mutation capacity');
+    // Acquire semaphore with timeout
+    const acquirePromise = GLOBAL_MUTATION_SEMAPHORE.acquire();
+    const timeoutPromise = sleep(SEMAPHORE_TIMEOUT_MS).then(() => {
+      throw new Error('Timeout acquiring mutation slot');
+    });
+
+    const [, release] = await Promise.race([acquirePromise, timeoutPromise]);
+
+    try {
+      // Double-check after acquiring (race protection)
+      const postCheck = await this.getGlobalMutationCount();
+      if (postCheck >= CLICKHOUSE_HARD_LIMIT) {
+        throw new Error(
+          `ClickHouse mutation queue full (${postCheck}/${CLICKHOUSE_HARD_LIMIT})`,
+        );
+      }
+    } finally {
+      // Release semaphore IMMEDIATELY - don't hold during mutation execution
+      // This allows other processors to submit while this mutation runs
+      release();
+    }
   }
 
   /**

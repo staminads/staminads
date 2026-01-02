@@ -28,23 +28,23 @@ export function HeatMapCell({
   const isNegative = hasChange && changePercent! < 0
 
   return (
-    <div
-      className="px-2 py-1 -mx-2 -my-1 rounded"
-      style={style}
-    >
-      <div className="flex items-center justify-between">
-        <span className="font-medium">{formattedValue}</span>
-        {hasChange && (
-          <span
-            className={`text-xs flex items-center justify-end w-12 ${
-              isPositive ? 'text-green-800' : isNegative ? 'text-orange-500' : 'text-gray-500'
-            }`}
-          >
-            {isPositive ? <ChevronUp size={12} className="mr-0.5" /> : isNegative ? <ChevronDown size={12} className="mr-0.5" /> : null}
-            {Math.abs(changePercent!).toFixed(0)}%
-          </span>
-        )}
-      </div>
+    <div className="flex items-center justify-end">
+      <span
+        className="px-2 py-0.5 rounded font-medium leading-tight"
+        style={style}
+      >
+        {formattedValue}
+      </span>
+      {hasChange && (
+        <span
+          className={`text-xs flex items-center justify-end w-12 ml-1 ${
+            isPositive ? 'text-green-800' : isNegative ? 'text-orange-500' : 'text-gray-500'
+          }`}
+        >
+          {isPositive ? <ChevronUp size={12} className="mr-0.5" /> : isNegative ? <ChevronDown size={12} className="mr-0.5" /> : null}
+          {Math.abs(changePercent!).toFixed(0)}%
+        </span>
+      )}
     </div>
   )
 }

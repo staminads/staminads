@@ -4,17 +4,13 @@ import type { DatePreset, Filter } from '../types/analytics'
 import type { ComparisonMode, WorkspaceSearch } from '../types/dashboard'
 
 const DEBOUNCE_MS = 200
-const STORAGE_KEY_DIMENSIONS = 'explore_dimensions'
-const STORAGE_KEY_MIN_SESSIONS = 'explore_min_sessions'
-const STORAGE_KEY_PERIOD = 'explore_period'
-const STORAGE_KEY_COMPARISON = 'explore_comparison'
 
 export function useExploreParams(workspaceTimezone: string) {
   const search = useSearch({ strict: false }) as WorkspaceSearch
   const navigate = useNavigate()
   const [pendingDimensions, setPendingDimensions] = useState<string[] | null>(null)
 
-  // Parse dimensions from URL or localStorage
+  // Parse dimensions from URL
   const parseDimensions = useCallback((dimensionsStr?: string): string[] => {
     if (dimensionsStr) {
       return dimensionsStr.split(',').filter(Boolean)
@@ -33,70 +29,6 @@ export function useExploreParams(workspaceTimezone: string) {
     }
     return []
   }, [])
-
-  // Load from localStorage on mount if URL params are empty
-  useEffect(() => {
-    const updates: Partial<WorkspaceSearch> = {}
-
-    if (!search.dimensions) {
-      const savedDimensions = localStorage.getItem(STORAGE_KEY_DIMENSIONS)
-      if (savedDimensions) {
-        updates.dimensions = savedDimensions
-      }
-    }
-
-    if (!search.minSessions) {
-      const savedMinSessions = localStorage.getItem(STORAGE_KEY_MIN_SESSIONS)
-      if (savedMinSessions) {
-        updates.minSessions = savedMinSessions
-      }
-    }
-
-    if (!search.period) {
-      const savedPeriod = localStorage.getItem(STORAGE_KEY_PERIOD) as DatePreset | null
-      if (savedPeriod) {
-        updates.period = savedPeriod
-      }
-    }
-
-    if (!search.comparison) {
-      const savedComparison = localStorage.getItem(STORAGE_KEY_COMPARISON) as ComparisonMode | null
-      if (savedComparison) {
-        updates.comparison = savedComparison
-      }
-    }
-
-    if (Object.keys(updates).length > 0) {
-      navigate({
-        search: { ...search, ...updates } as never,
-        replace: true,
-      })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Save to localStorage when values change
-  useEffect(() => {
-    if (search.dimensions) {
-      localStorage.setItem(STORAGE_KEY_DIMENSIONS, search.dimensions)
-    }
-  }, [search.dimensions])
-
-  useEffect(() => {
-    if (search.minSessions) {
-      localStorage.setItem(STORAGE_KEY_MIN_SESSIONS, search.minSessions)
-    }
-  }, [search.minSessions])
-
-  useEffect(() => {
-    const period = search.period ?? 'last_7_days'
-    localStorage.setItem(STORAGE_KEY_PERIOD, period)
-  }, [search.period])
-
-  useEffect(() => {
-    const comparison = search.comparison ?? 'previous_period'
-    localStorage.setItem(STORAGE_KEY_COMPARISON, comparison)
-  }, [search.comparison])
 
   // Debounce dimension changes
   useEffect(() => {
@@ -186,6 +118,50 @@ export function useExploreParams(workspaceTimezone: string) {
     [navigate, search],
   )
 
+  // Replace all params at once (full override, clears unspecified params)
+  const setAll = useCallback(
+    (updates: {
+      dimensions?: string[]
+      filters?: Filter[]
+      period?: DatePreset
+      comparison?: ComparisonMode
+      minSessions?: number
+      customStart?: string
+      customEnd?: string
+    }) => {
+      // Start fresh - only keep what's explicitly provided
+      const newSearch: Record<string, string | undefined> = {}
+
+      // Dimensions: use provided or clear
+      newSearch.dimensions = updates.dimensions?.length ? updates.dimensions.join(',') : undefined
+
+      // Filters: use provided or clear
+      newSearch.filters = updates.filters?.length ? JSON.stringify(updates.filters) : undefined
+
+      // Period: use provided or keep default
+      newSearch.period = updates.period || undefined
+
+      // Comparison: use provided or keep default
+      newSearch.comparison = updates.comparison || undefined
+
+      // MinSessions: use provided or clear (default is 10 in the hook)
+      newSearch.minSessions = updates.minSessions && updates.minSessions > 1 ? String(updates.minSessions) : undefined
+
+      // Custom range: both must be provided
+      if (updates.customStart && updates.customEnd) {
+        newSearch.period = 'custom'
+        newSearch.customStart = updates.customStart
+        newSearch.customEnd = updates.customEnd
+      }
+
+      navigate({
+        search: newSearch as never,
+        replace: true,
+      })
+    },
+    [navigate],
+  )
+
   // Memoize parsed values to prevent infinite loops
   // Use pending dimensions for optimistic UI updates during debounce
   const dimensions = useMemo(
@@ -202,7 +178,7 @@ export function useExploreParams(workspaceTimezone: string) {
     // Parsed values
     dimensions,
     filters,
-    minSessions: search.minSessions ? parseInt(search.minSessions, 10) : 1,
+    minSessions: search.minSessions ? parseInt(search.minSessions, 10) : 10,
     period: (search.period ?? 'last_7_days') as DatePreset,
     timezone: search.timezone ?? workspaceTimezone,
     comparison: (search.comparison ?? 'previous_period') as ComparisonMode,
@@ -217,6 +193,7 @@ export function useExploreParams(workspaceTimezone: string) {
     setTimezone,
     setComparison,
     setCustomRange,
+    setAll,
 
     // Pending state
     isPending: pendingDimensions !== null,

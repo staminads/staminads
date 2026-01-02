@@ -27,10 +27,6 @@ export interface FilterDefinition {
   updatedAt: string;
 }
 
-export interface FilterWithStaleness extends FilterDefinition {
-  staleSessionCount: number;
-  totalSessionCount: number;
-}
 
 // Dimensions that filters can write to
 export const WRITABLE_DIMENSIONS = [

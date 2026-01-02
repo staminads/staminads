@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
-import { Table, Empty, Spin, Tooltip } from 'antd'
+import { Table, Empty, Spin, Tooltip, Button } from 'antd'
 import { SquarePlus, SquareMinus, Loader2, ChevronUp, ChevronDown } from 'lucide-react'
+import { EyeOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { HeatMapCell } from './HeatMapCell'
 import { getDimensionLabel, canExpandRow } from '../../lib/explore-utils'
@@ -20,13 +21,21 @@ interface ExploreTableProps {
   loading?: boolean
   customDimensionLabels?: CustomDimensionLabels | null
   totals?: ExploreTotals
+  onBreakdownClick?: (row: ExploreRow) => void
+  onBreakdownHover?: (row: ExploreRow) => void
 }
 
 function formatPercentage(value: number): string {
   return `${value.toFixed(1)}%`
 }
 
-function ChangeIndicator({ value, invertColors = false }: { value?: number; invertColors?: boolean }) {
+function ChangeIndicator({
+  value,
+  invertColors = false
+}: {
+  value?: number
+  invertColors?: boolean
+}) {
   if (value === undefined) return null
 
   const isPositive = value > 0
@@ -42,7 +51,11 @@ function ChangeIndicator({ value, invertColors = false }: { value?: number; inve
         isPositive ? positiveColor : isNegative ? negativeColor : 'text-gray-500'
       }`}
     >
-      {isPositive ? <ChevronUp size={12} className="mr-0.5" /> : isNegative ? <ChevronDown size={12} className="mr-0.5" /> : null}
+      {isPositive ? (
+        <ChevronUp size={12} className="mr-0.5" />
+      ) : isNegative ? (
+        <ChevronDown size={12} className="mr-0.5" />
+      ) : null}
       {Math.abs(value).toFixed(0)}%
     </span>
   )
@@ -60,6 +73,8 @@ export function ExploreTable({
   loading = false,
   customDimensionLabels,
   totals,
+  onBreakdownClick,
+  onBreakdownHover
 }: ExploreTableProps) {
   const columns: ColumnsType<ExploreRow> = useMemo(() => {
     // Get the current dimension being displayed (the last one that has data)
@@ -76,22 +91,22 @@ export function ExploreTable({
           const currentDim = getCurrentDimensionForRow(record)
           const value = record[currentDim]
           const displayValue =
-            value === null || value === '' || value === undefined
-              ? '(empty)'
-              : String(value)
+            value === null || value === '' || value === undefined ? '(empty)' : String(value)
 
           return (
             <span className="whitespace-nowrap">
               <span className="text-xs text-gray-400">
                 {getDimensionLabel(currentDim, customDimensionLabels)}:
               </span>
-              <span className={`ml-1 ${value === null || value === '' || value === undefined ? 'text-gray-400 italic' : 'font-medium'}`}>
+              <span
+                className={`ml-1 ${value === null || value === '' || value === undefined ? 'text-gray-400 italic' : 'font-medium'}`}
+              >
                 {displayValue}
               </span>
             </span>
           )
         },
-        width: 300,
+        width: 300
       },
       {
         title: 'Sessions',
@@ -108,9 +123,7 @@ export function ExploreTable({
             <div className="flex items-center justify-end">
               <span>{formatNumber(value)}</span>
               {showPercentage && (
-                <span className="ml-1 text-gray-400 text-xs">
-                  ({percentage.toFixed(1)}%)
-                </span>
+                <span className="ml-1 text-gray-400 text-xs">({percentage.toFixed(1)}%)</span>
               )}
               {showComparison && <ChangeIndicator value={record.sessions_change} />}
             </div>
@@ -118,7 +131,7 @@ export function ExploreTable({
         },
         sorter: (a, b) => a.sessions - b.sessions,
         defaultSortOrder: 'descend',
-        width: 140,
+        width: 140
       },
       {
         title: (
@@ -139,7 +152,7 @@ export function ExploreTable({
           />
         ),
         sorter: (a, b) => a.median_duration - b.median_duration,
-        width: 150,
+        width: 150
       },
       {
         title: 'Bounce Rate',
@@ -153,7 +166,7 @@ export function ExploreTable({
           </div>
         ),
         sorter: (a, b) => a.bounce_rate - b.bounce_rate,
-        width: 120,
+        width: 120
       },
       {
         title: 'Avg. Scroll',
@@ -167,12 +180,46 @@ export function ExploreTable({
           </div>
         ),
         sorter: (a, b) => a.max_scroll - b.max_scroll,
-        width: 120,
-      },
+        width: 120
+      }
     ]
 
+    // Add actions column if handlers provided
+    if (onBreakdownClick) {
+      cols.push({
+        title: '',
+        key: 'actions',
+        width: 48,
+        align: 'right',
+        // fixed: 'right',
+        onCell: () => ({ style: { verticalAlign: 'middle', padding: '8px' } }),
+        render: (_: unknown, record: ExploreRow) => (
+          <Button
+            type="text"
+            size="small"
+            icon={<EyeOutlined />}
+            className="mr-2"
+            onClick={(e) => {
+              e.stopPropagation()
+              onBreakdownClick(record)
+            }}
+            onMouseEnter={() => onBreakdownHover?.(record)}
+            title="View breakdown"
+          />
+        )
+      })
+    }
+
     return cols
-  }, [dimensions, maxMedianDuration, showComparison, customDimensionLabels, totals])
+  }, [
+    dimensions,
+    maxMedianDuration,
+    showComparison,
+    customDimensionLabels,
+    totals,
+    onBreakdownClick,
+    onBreakdownHover
+  ])
 
   if (dimensions.length === 0) {
     return (
@@ -191,8 +238,8 @@ export function ExploreTable({
       rowKey="key"
       loading={loading}
       pagination={false}
-      size="large"
-      scroll={{ x: 800 }}
+      // size="large"
+      // scroll={{ x: 800 }}
       expandable={{
         expandedRowKeys,
         expandRowByClick: true,
@@ -216,17 +263,14 @@ export function ExploreTable({
             </span>
           )
         },
-        childrenColumnName: 'children',
+        childrenColumnName: 'children'
       }}
       locale={{
         emptyText: loading ? (
           <Spin tip="Loading..." />
         ) : (
-          <Empty
-            description="No data found"
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-          />
-        ),
+          <Empty description="No data found" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        )
       }}
     />
   )

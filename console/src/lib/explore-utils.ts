@@ -62,14 +62,18 @@ export function getDimensionExamples(dimensionName: string): [string, string] | 
 }
 
 /**
- * Generate a unique key for a row based on its dimension path
+ * Generate a unique key for a row based on its dimension path.
+ * Includes an optional index to ensure uniqueness for empty values.
  */
 export function generateRowKey(
   parentKey: string | null,
   dimensionValue: unknown,
+  index?: number,
 ): string {
-  const valueStr = dimensionValue === null || dimensionValue === '' || dimensionValue === undefined
-    ? '[empty]'
+  const isEmpty = dimensionValue === null || dimensionValue === '' || dimensionValue === undefined
+  // For empty values, include an index to ensure uniqueness
+  const valueStr = isEmpty
+    ? `[empty${index !== undefined ? `:${index}` : ''}]`
     : String(dimensionValue)
   return parentKey ? `${parentKey}:${valueStr}` : valueStr
 }
@@ -135,9 +139,9 @@ export function transformApiRowsToExploreRows(
     return []
   }
 
-  return apiRows.map((row) => {
+  return apiRows.map((row, index) => {
     const dimValue = row[currentDimension]
-    const key = generateRowKey(parentKey, dimValue)
+    const key = generateRowKey(parentKey, dimValue, index)
 
     const exploreRow: ExploreRow = {
       key,

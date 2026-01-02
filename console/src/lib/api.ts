@@ -17,6 +17,7 @@ import type {
   BackfillTaskProgress,
   StartBackfillInput,
 } from '../types/filters'
+import type { AssistantChatRequest } from '../types/assistant'
 
 export interface WebsiteMetaResponse {
   title?: string
@@ -124,6 +125,13 @@ export const api = {
     backfillCancel: (taskId: string) =>
       request<{ success: boolean }>(`filters.backfillCancel?task_id=${taskId}`, {
         method: 'POST',
+      }),
+  },
+  assistant: {
+    chat: (data: AssistantChatRequest) =>
+      request<{ job_id: string }>('assistant.chat', {
+        method: 'POST',
+        body: JSON.stringify(data),
       }),
   },
 }

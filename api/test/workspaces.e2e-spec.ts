@@ -91,7 +91,7 @@ describe('Workspaces Integration', () => {
         .send(dto)
         .expect(201);
 
-      // Verify API response
+      // Verify API response - status is 'active' after workspace creation completes
       expect(response.body).toMatchObject({
         id: dto.id,
         name: dto.name,
@@ -99,7 +99,7 @@ describe('Workspaces Integration', () => {
         timezone: dto.timezone,
         currency: dto.currency,
         logo_url: dto.logo_url,
-        status: 'initializing',
+        status: 'active',
         timescore_reference: 60,
       });
       expect(response.body.created_at).toBeDefined();
@@ -124,7 +124,7 @@ describe('Workspaces Integration', () => {
         timezone: dto.timezone,
         currency: dto.currency,
         logo_url: dto.logo_url,
-        status: 'initializing',
+        status: 'active',
         timescore_reference: 60,
       });
     });
@@ -316,6 +316,156 @@ describe('Workspaces Integration', () => {
     });
   });
 
+  describe('POST /api/workspaces.update', () => {
+    it('updates workspace fields', async () => {
+      // Create workspace first
+      const createDto = {
+        id: 'update-test-ws',
+        name: 'Original Name',
+        website: 'https://original.com',
+        timezone: 'UTC',
+        currency: 'USD',
+      };
+      await request(app.getHttpServer())
+        .post('/api/workspaces.create')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(createDto)
+        .expect(201);
+
+      // Update some fields
+      const updateDto = {
+        id: 'update-test-ws',
+        name: 'Updated Name',
+        timezone: 'Europe/Paris',
+      };
+      const response = await request(app.getHttpServer())
+        .post('/api/workspaces.update')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(updateDto)
+        .expect(201);
+
+      expect(response.body.name).toBe('Updated Name');
+      expect(response.body.timezone).toBe('Europe/Paris');
+      // Unchanged fields should be preserved
+      expect(response.body.website).toBe('https://original.com');
+      expect(response.body.currency).toBe('USD');
+    });
+
+    it('adds integration without clearing other fields', async () => {
+      // Create workspace first
+      const createDto = {
+        id: 'integration-test-ws',
+        name: 'Integration Test',
+        website: 'https://integration-test.com',
+        timezone: 'America/New_York',
+        currency: 'EUR',
+        logo_url: 'https://example.com/logo.png',
+      };
+      await request(app.getHttpServer())
+        .post('/api/workspaces.create')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(createDto)
+        .expect(201);
+
+      // Update with integration only
+      const updateDto = {
+        id: 'integration-test-ws',
+        integrations: [
+          {
+            id: 'anthropic-1',
+            type: 'anthropic',
+            enabled: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            settings: {
+              api_key_encrypted: 'sk-ant-test-key',
+              model: 'claude-sonnet-4-5-20250929',
+              max_tokens: 4096,
+              temperature: 0.7,
+            },
+            limits: {
+              max_requests_per_hour: 60,
+              max_tokens_per_day: 100000,
+            },
+            usage: {
+              requests_this_hour: 0,
+              tokens_today: 0,
+              last_reset: new Date().toISOString(),
+            },
+          },
+        ],
+      };
+      const response = await request(app.getHttpServer())
+        .post('/api/workspaces.update')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(updateDto)
+        .expect(201);
+
+      // Integration should be added
+      expect(response.body.integrations).toHaveLength(1);
+      expect(response.body.integrations[0].type).toBe('anthropic');
+      // API key should be encrypted (contains ':' separators)
+      expect(response.body.integrations[0].settings.api_key_encrypted).toContain(':');
+
+      // Original fields must be preserved
+      expect(response.body.name).toBe('Integration Test');
+      expect(response.body.website).toBe('https://integration-test.com');
+      expect(response.body.timezone).toBe('America/New_York');
+      expect(response.body.currency).toBe('EUR');
+      expect(response.body.logo_url).toBe('https://example.com/logo.png');
+    });
+
+    it('preserves fields not included in update payload', async () => {
+      // Create workspace first
+      const createDto = {
+        id: 'partial-update-test-ws',
+        name: 'Keep This Name',
+        website: 'https://keep-this.com',
+        timezone: 'Asia/Tokyo',
+        currency: 'JPY',
+      };
+      await request(app.getHttpServer())
+        .post('/api/workspaces.create')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(createDto)
+        .expect(201);
+
+      // Send update with only some fields (others should be preserved)
+      const updateDto = {
+        id: 'partial-update-test-ws',
+        timescore_reference: 120,
+      };
+      const response = await request(app.getHttpServer())
+        .post('/api/workspaces.update')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(updateDto)
+        .expect(201);
+
+      // Original fields must be preserved
+      expect(response.body.name).toBe('Keep This Name');
+      expect(response.body.website).toBe('https://keep-this.com');
+      expect(response.body.timezone).toBe('Asia/Tokyo');
+      expect(response.body.currency).toBe('JPY');
+      // Updated field should apply
+      expect(response.body.timescore_reference).toBe(120);
+    });
+
+    it('returns 404 for non-existent workspace', async () => {
+      await request(app.getHttpServer())
+        .post('/api/workspaces.update')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ id: 'non-existent-id', name: 'Test' })
+        .expect(404);
+    });
+
+    it('requires authentication', async () => {
+      await request(app.getHttpServer())
+        .post('/api/workspaces.update')
+        .send({ id: 'some-id', name: 'Test' })
+        .expect(401);
+    });
+  });
+
   describe('POST /api/workspaces.delete', () => {
     it('deletes workspace from ClickHouse', async () => {
       const workspace = {
@@ -388,7 +538,7 @@ describe('Workspaces Integration', () => {
       expect(columnMap['website']).toBe('String');
       expect(columnMap['timezone']).toBe('String');
       expect(columnMap['currency']).toBe('String');
-      expect(columnMap['logo_url']).toMatch(/Nullable\(String\)/);
+      expect(columnMap['logo_url']).toBe('String');
       expect(columnMap['timescore_reference']).toMatch(/UInt32/);
       expect(columnMap['status']).toMatch(/Enum8/);
       expect(columnMap['created_at']).toMatch(/DateTime64/);

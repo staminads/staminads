@@ -1,15 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ClickHouseService } from '../database/clickhouse.service';
-import { generateEvents, getCachedFilters, clearFilterCache } from './fixtures/generators';
+import { generateEventsByDay, getCachedFilters, clearFilterCache } from './fixtures/generators';
 import { TrackingEvent } from '../events/entities/event.entity';
 import { DEMO_CUSTOM_DIMENSION_LABELS } from './fixtures/demo-filters';
 
 const DEMO_WORKSPACE_ID = 'demo-apple';
 const DEMO_WORKSPACE_NAME = 'Apple Demo';
 const DEMO_WEBSITE = 'https://www.apple.com';
-const SESSION_COUNT = 10000;
+const SESSION_COUNT = 200_000;
 const DAYS_RANGE = 90;
-const BATCH_SIZE = 1000;
+const BATCH_SIZE = 10_000;
 
 interface Workspace {
   id: string;
@@ -49,20 +49,39 @@ export class DemoService {
     const workspace = await this.createWorkspace(DEMO_WORKSPACE_ID);
 
     this.logger.log(`Created workspace: ${DEMO_WORKSPACE_ID}`);
+    this.logger.log(`Generating ${SESSION_COUNT.toLocaleString()} sessions over ${DAYS_RANGE} days...`);
 
-    // Generate events (not sessions - MV will create sessions)
+    // Generate and insert events day-by-day using streaming generator
     const endDate = new Date();
-    const events = generateEvents({
+    const generator = generateEventsByDay({
       workspaceId: DEMO_WORKSPACE_ID,
       sessionCount: SESSION_COUNT,
       endDate,
       daysRange: DAYS_RANGE,
     });
 
-    this.logger.log(`Generated ${events.length} events for ${SESSION_COUNT} sessions`);
+    let totalEvents = 0;
+    let totalSessions = 0;
+    let dayCount = 0;
 
-    // Insert events in batches
-    await this.insertEventsBatched(DEMO_WORKSPACE_ID, events);
+    for (const dayBatch of generator) {
+      dayCount++;
+      totalSessions += dayBatch.sessionCount;
+
+      // Insert this day's events in sub-batches
+      await this.insertEventsBatched(DEMO_WORKSPACE_ID, dayBatch.events);
+      totalEvents += dayBatch.events.length;
+
+      // Log progress every 10 days
+      if (dayCount % 10 === 0 || dayCount === DAYS_RANGE) {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        const rate = Math.round(totalSessions / parseFloat(elapsed));
+        this.logger.log(
+          `Day ${dayCount}/${DAYS_RANGE}: ${totalSessions.toLocaleString()} sessions, ` +
+          `${totalEvents.toLocaleString()} events (${rate} sessions/s)`,
+        );
+      }
+    }
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
     this.logger.log(`Demo generation completed in ${duration}s`);
@@ -74,8 +93,8 @@ export class DemoService {
     return {
       workspace_id: DEMO_WORKSPACE_ID,
       workspace_name: DEMO_WORKSPACE_NAME,
-      events_count: events.length,
-      sessions_count: SESSION_COUNT,
+      events_count: totalEvents,
+      sessions_count: totalSessions,
       date_range: {
         start: startDate.toISOString().split('T')[0],
         end: endDate.toISOString().split('T')[0],
@@ -155,16 +174,11 @@ export class DemoService {
     workspaceId: string,
     events: TrackingEvent[],
   ): Promise<void> {
-    const totalBatches = Math.ceil(events.length / BATCH_SIZE);
-
     for (let i = 0; i < events.length; i += BATCH_SIZE) {
       const batch = events.slice(i, i + BATCH_SIZE);
-      const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
 
       // Insert to workspace database
       await this.clickhouse.insertWorkspace(workspaceId, 'events', batch);
-
-      this.logger.log(`Inserted batch ${batchNumber}/${totalBatches} (${batch.length} events)`);
     }
   }
 }

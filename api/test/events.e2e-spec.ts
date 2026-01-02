@@ -6,7 +6,10 @@ import { AppModule } from '../src/app.module';
 import { EventBufferService } from '../src/events/event-buffer.service';
 
 const TEST_SYSTEM_DATABASE = 'staminads_test_system';
-const TEST_WORKSPACE_DATABASE = 'staminads_test_ws';
+// Workspace ID used in tests - must match what's passed to createTestWorkspace
+const testWorkspaceId = 'test_ws';
+// DB name = staminads_ws_<workspace_id> (matches what ClickHouseService.getWorkspaceDatabaseName returns)
+const TEST_WORKSPACE_DATABASE = `staminads_ws_${testWorkspaceId}`;
 
 function toClickHouseDateTime(date: Date = new Date()): string {
   return date.toISOString().replace('T', ' ').replace('Z', '');
@@ -76,7 +79,7 @@ describe('Events Integration', () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
   });
 
-  async function createTestWorkspace(id: string = 'test-ws'): Promise<string> {
+  async function createTestWorkspace(id: string = testWorkspaceId): Promise<string> {
     const workspace = {
       id,
       name: 'Test Workspace',

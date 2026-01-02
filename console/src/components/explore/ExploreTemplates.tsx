@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Card, Button } from 'antd'
-import { DimensionSelectorModal } from './DimensionSelectorModal'
+import { BreakdownModal } from './BreakdownModal'
 import type { CustomDimensionLabels } from '../../types/workspace'
 
 interface ExploreTemplate {
@@ -97,11 +97,13 @@ export function ExploreTemplates({ onSelectTemplate, customDimensionLabels }: Ex
         ))}
       </div>
 
-      <DimensionSelectorModal
+      <BreakdownModal
         open={isCustomModalOpen}
         onCancel={() => setIsCustomModalOpen(false)}
         onSubmit={handleCustomReportSubmit}
         customDimensionLabels={customDimensionLabels}
+        title="Create Custom Report"
+        submitText="Generate Report"
       />
     </>
   )

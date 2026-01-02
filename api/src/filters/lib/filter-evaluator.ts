@@ -83,10 +83,6 @@ export interface FilterResult {
   [dimension: string]: string | null;
 }
 
-export interface FilterResultWithVersion extends FilterResult {
-  filter_version: string;
-}
-
 /**
  * Evaluate all filters for an event and compute dimension values.
  *
@@ -152,23 +148,6 @@ export function evaluateFilters(
   }
 
   return result;
-}
-
-/**
- * Compute all dimension values for an event based on workspace filters.
- * Returns the filter result plus the filter_version for staleness tracking.
- */
-export function computeFilteredDimensions(
-  filters: FilterDefinition[],
-  fieldValues: Record<string, string | null | undefined>,
-): FilterResultWithVersion {
-  const result = evaluateFilters(filters, fieldValues);
-  const version = computeFilterVersion(filters);
-
-  return {
-    ...result,
-    filter_version: version,
-  };
 }
 
 /**
@@ -247,7 +226,6 @@ export interface CustomDimensionValues {
   cd_8: string | null;
   cd_9: string | null;
   cd_10: string | null;
-  filter_version: string | null;
 }
 
 /**
@@ -259,8 +237,7 @@ export function applyFilterResults(
   fieldValues: Record<string, string | null | undefined>,
   baseEvent: Record<string, unknown>,
 ): { customDimensions: CustomDimensionValues; modifiedFields: Record<string, string | null> } {
-  const filterResult = computeFilteredDimensions(filters, fieldValues);
-  const version = filterResult.filter_version;
+  const filterResult = evaluateFilters(filters, fieldValues);
 
   // Initialize custom dimension values
   const customDimensions: CustomDimensionValues = {
@@ -276,7 +253,6 @@ export function applyFilterResults(
     cd_8: null,
     cd_9: null,
     cd_10: null,
-    filter_version: version,
   };
 
   // Track modified standard fields (utm_*, referrer_domain, is_direct)
@@ -284,8 +260,6 @@ export function applyFilterResults(
 
   // Apply filter results
   for (const [dimension, value] of Object.entries(filterResult)) {
-    if (dimension === 'filter_version') continue;
-
     // Check if it's a channel dimension
     if (dimension === 'channel' || dimension === 'channel_group') {
       customDimensions[dimension] = value;

@@ -5,7 +5,10 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 
 const TEST_SYSTEM_DATABASE = 'staminads_test_system';
-const TEST_WORKSPACE_DATABASE = 'staminads_test_ws';
+// Workspace ID used in tests - must match what's inserted into workspaces table
+const testWorkspaceId = 'analytics_test_ws';
+// DB name = staminads_ws_<workspace_id> (matches what ClickHouseService.getWorkspaceDatabaseName returns)
+const TEST_WORKSPACE_DATABASE = `staminads_ws_${testWorkspaceId}`;
 
 function toClickHouseDateTime(date: Date = new Date()): string {
   return date.toISOString().replace('T', ' ').replace('Z', '');
@@ -59,7 +62,7 @@ describe('Analytics E2E', () => {
     authToken = loginRes.body.access_token;
 
     // Create test workspace in system database
-    workspaceId = 'analytics-test-ws';
+    workspaceId = testWorkspaceId;
     await systemClient.command({ query: 'TRUNCATE TABLE workspaces' });
     await workspaceClient.command({ query: 'TRUNCATE TABLE sessions' });
     await systemClient.insert({
@@ -452,11 +455,12 @@ describe('Analytics E2E', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
-      expect(Array.isArray(response.body)).toBe(true);
-      expect(response.body.find((d: { name: string }) => d.name === 'channel')).toBeDefined();
-      expect(response.body.find((d: { name: string }) => d.name === 'channel_group')).toBeDefined();
-      expect(response.body.find((d: { name: string }) => d.name === 'device')).toBeDefined();
-      expect(response.body.find((d: { name: string }) => d.name === 'utm_source')).toBeDefined();
+      // Dimensions are returned as a Record<string, DimensionDefinition>
+      expect(typeof response.body).toBe('object');
+      expect(response.body.channel).toBeDefined();
+      expect(response.body.channel_group).toBeDefined();
+      expect(response.body.device).toBeDefined();
+      expect(response.body.utm_source).toBeDefined();
     });
   });
 
@@ -549,7 +553,7 @@ describe('Analytics E2E', () => {
       expect(response.body.meta.groupBy).toEqual(['device', 'channel']);
     });
 
-    it('returns null for empty result', async () => {
+    it('returns 0 for empty result', async () => {
       const response = await request(app.getHttpServer())
         .post('/api/analytics.extremes')
         .set('Authorization', `Bearer ${authToken}`)
@@ -561,8 +565,9 @@ describe('Analytics E2E', () => {
         })
         .expect(200);
 
-      expect(response.body.min).toBeNull();
-      expect(response.body.max).toBeNull();
+      // ClickHouse MIN/MAX returns 0 for empty aggregations
+      expect(response.body.min).toBe(0);
+      expect(response.body.max).toBe(0);
     });
 
     it('rejects unknown metric', async () => {

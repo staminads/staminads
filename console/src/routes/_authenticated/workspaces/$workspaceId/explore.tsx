@@ -4,10 +4,16 @@ import { useSuspenseQuery, useQuery, useQueryClient, keepPreviousData } from '@t
 import { Alert } from 'antd'
 import { workspaceQueryOptions, analyticsQueryOptions } from '../../../../lib/queries'
 import { useExploreParams } from '../../../../hooks/useExploreParams'
+import { useAssistant } from '../../../../hooks/useAssistant'
+import { useBreakdown } from '../../../../hooks/useBreakdown'
 import { ExploreFilters } from '../../../../components/explore/ExploreFilters'
 import { ExploreTable } from '../../../../components/explore/ExploreTable'
 import { ExploreTemplates } from '../../../../components/explore/ExploreTemplates'
 import { ExploreSummary } from '../../../../components/explore/ExploreSummary'
+import { AssistantButton } from '../../../../components/explore/AssistantButton'
+import { AssistantPanel } from '../../../../components/explore/AssistantPanel'
+import { BreakdownDrawer } from '../../../../components/explore/BreakdownDrawer'
+import { BreakdownModal } from '../../../../components/explore/BreakdownModal'
 import { DateRangePicker } from '../../../../components/dashboard/DateRangePicker'
 import { ComparisonPicker } from '../../../../components/dashboard/ComparisonPicker'
 import {
@@ -20,6 +26,7 @@ import {
 import { api } from '../../../../lib/api'
 import type { ExploreRow, ExploreTotals } from '../../../../types/explore'
 import type { DatePreset } from '../../../../types/analytics'
+import type { ExploreConfigOutput } from '../../../../types/assistant'
 
 export const Route = createFileRoute('/_authenticated/workspaces/$workspaceId/explore')({
   component: Explore,
@@ -46,7 +53,81 @@ function Explore() {
     setTimezone: _setTimezone,
     setComparison,
     setCustomRange,
+    setAll,
   } = useExploreParams(workspace.timezone)
+
+  // AI Assistant state
+  const [isAssistantOpen, setIsAssistantOpen] = useState(false)
+  const {
+    messages: assistantMessages,
+    status: assistantStatus,
+    usage: assistantUsage,
+    isStreaming: isAssistantStreaming,
+    sendPrompt,
+    clearMessages,
+  } = useAssistant(workspaceId)
+
+  // Compute date range (needed for breakdown hook)
+  const dateRange = period === 'custom' && customStart && customEnd
+    ? { start: customStart, end: customEnd }
+    : { preset: period as DatePreset }
+
+  // Breakdown drawer state
+  const {
+    state: breakdownState,
+    openForRow: openBreakdown,
+    confirmWithDimensions: confirmBreakdown,
+    close: closeBreakdown,
+    prefetchForRow: prefetchBreakdown,
+  } = useBreakdown({
+    workspaceId,
+    dimensions,
+    baseFilters: filters,
+    dateRange,
+    timezone,
+    minSessions,
+  })
+
+  // Handle config from assistant - use setAll for atomic update
+  const handleAssistantConfig = useCallback((config: ExploreConfigOutput) => {
+    console.log('[AssistantConfig] Received config:', JSON.stringify(config, null, 2))
+
+    // Ensure minSessions is a number (AI may return string)
+    let minSessions: number | undefined
+    if (config.minSessions !== undefined) {
+      const parsed = Number(config.minSessions)
+      if (!isNaN(parsed) && parsed >= 1) {
+        minSessions = parsed
+      }
+    }
+
+    // Use setAll for atomic update (prevents race conditions)
+    setAll({
+      dimensions: config.dimensions,
+      filters: config.filters,
+      period: config.period,
+      comparison: config.comparison,
+      minSessions,
+      customStart: config.customStart,
+      customEnd: config.customEnd,
+    })
+
+    // Close panel after applying
+    setIsAssistantOpen(false)
+  }, [setAll])
+
+  // Handle send with current state
+  const handleAssistantSend = useCallback((prompt: string) => {
+    sendPrompt(prompt, {
+      dimensions,
+      filters,
+      period,
+      comparison,
+      minSessions,
+      customStart,
+      customEnd,
+    })
+  }, [sendPrompt, dimensions, filters, period, comparison, minSessions, customStart, customEnd])
 
   // State for the hierarchical data
   const [reportData, setReportData] = useState<ExploreRow[]>([])
@@ -55,11 +136,6 @@ function Explore() {
   const [maxMedianDuration, setMaxMedianDuration] = useState<number>(0)
 
   const showComparison = comparison !== 'none'
-
-  // Compute date range
-  const dateRange = period === 'custom' && customStart && customEnd
-    ? { start: customStart, end: customEnd }
-    : { preset: period as DatePreset }
 
   // Initial data query - fetch first dimension only
   const initialQuery = dimensions.length > 0 ? {
@@ -186,6 +262,14 @@ function Explore() {
       rows = mergeComparisonData(current, previous, currentDimension)
     } else {
       rows = initialResponse.data as Record<string, unknown>[]
+    }
+
+    // Guard against non-array response (e.g., API error)
+    if (!Array.isArray(rows)) {
+      console.error('Invalid API response: expected array, got', typeof rows)
+      setReportData([])
+      setMaxMedianDuration(0)
+      return
     }
 
     const exploreRows = transformApiRowsToExploreRows(
@@ -348,13 +432,33 @@ function Explore() {
           onSelectTemplate={setDimensions}
           customDimensionLabels={workspace.custom_dimensions}
         />
+
+        {/* AI Assistant */}
+        <AssistantButton
+          isOpen={isAssistantOpen}
+          onClick={() => setIsAssistantOpen(!isAssistantOpen)}
+          hasMessages={assistantMessages.length > 0}
+        />
+
+        {isAssistantOpen && (
+          <AssistantPanel
+            messages={assistantMessages}
+            status={assistantStatus}
+            usage={assistantUsage}
+            isStreaming={isAssistantStreaming}
+            onSend={handleAssistantSend}
+            onClear={clearMessages}
+            onClose={() => setIsAssistantOpen(false)}
+            onApplyConfig={handleAssistantConfig}
+          />
+        )}
       </div>
     )
   }
 
   return (
     <div className="flex-1 p-6">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-light text-gray-800">Explore</h1>
         <div className="flex items-center gap-2">
           <DateRangePicker
@@ -399,8 +503,58 @@ function Explore() {
           loading={isInitialFetching && reportData.length === 0}
           customDimensionLabels={workspace.custom_dimensions}
           totals={totals}
+          onBreakdownClick={openBreakdown}
+          onBreakdownHover={prefetchBreakdown}
         />
       </div>
+
+      {/* AI Assistant */}
+      <AssistantButton
+        isOpen={isAssistantOpen}
+        onClick={() => setIsAssistantOpen(!isAssistantOpen)}
+        hasMessages={assistantMessages.length > 0}
+      />
+
+      {isAssistantOpen && (
+        <AssistantPanel
+          messages={assistantMessages}
+          status={assistantStatus}
+          usage={assistantUsage}
+          isStreaming={isAssistantStreaming}
+          onSend={handleAssistantSend}
+          onClear={clearMessages}
+          onClose={() => setIsAssistantOpen(false)}
+          onApplyConfig={handleAssistantConfig}
+        />
+      )}
+
+      {/* Breakdown Dimension Selector Modal */}
+      <BreakdownModal
+        open={breakdownState?.isModalOpen ?? false}
+        onCancel={closeBreakdown}
+        onSubmit={confirmBreakdown}
+        excludeDimensions={dimensions.slice(0, (breakdownState?.selectedRow?.parentDimensionIndex ?? -1) + 1)}
+        initialDimensions={breakdownState?.breakdownDimensions ?? []}
+        customDimensionLabels={workspace.custom_dimensions}
+      />
+
+      {/* Breakdown Drawer */}
+      {breakdownState?.isDrawerOpen && breakdownState.selectedRow && (
+        <BreakdownDrawer
+          open={breakdownState.isDrawerOpen}
+          onClose={closeBreakdown}
+          workspaceId={workspaceId}
+          selectedRow={breakdownState.selectedRow}
+          breakdownDimensions={breakdownState.breakdownDimensions}
+          parentFilters={breakdownState.parentFilters}
+          dateRange={dateRange}
+          timezone={timezone}
+          minSessions={minSessions}
+          timescoreReference={workspace.timescore_reference ?? 60}
+          customDimensionLabels={workspace.custom_dimensions}
+          dimensions={dimensions}
+        />
+      )}
     </div>
   )
 }

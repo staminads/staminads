@@ -78,8 +78,7 @@ let _cachedFilterVersion: string | null = null;
 
 /**
  * Get cached demo filters. This ensures the same filter IDs are used
- * for both session generation and workspace creation, so the filter_version
- * stored in sessions matches the computed version from workspace filters.
+ * for both session generation and workspace creation.
  */
 export function getCachedFilters(): { filters: FilterDefinition[]; version: string } {
   if (!_cachedFilters) {
@@ -168,6 +167,12 @@ export interface GenerationConfig {
   daysRange: number;
 }
 
+export interface DayBatch {
+  date: string;
+  events: TrackingEvent[];
+  sessionCount: number;
+}
+
 export function generateEvents(config: GenerationConfig): TrackingEvent[] {
   const { workspaceId, sessionCount, endDate, daysRange } = config;
   const allEvents: TrackingEvent[] = [];
@@ -207,6 +212,55 @@ export function generateEvents(config: GenerationConfig): TrackingEvent[] {
   }
 
   return allEvents;
+}
+
+/**
+ * Generator version of generateEvents that yields day-by-day batches.
+ * This allows streaming insertion without loading all events in memory.
+ */
+export function* generateEventsByDay(config: GenerationConfig): Generator<DayBatch> {
+  const { workspaceId, sessionCount, endDate, daysRange } = config;
+
+  // Calculate date range
+  const startDate = new Date(endDate);
+  startDate.setDate(startDate.getDate() - daysRange);
+
+  // iPhone launch date: 2 weeks before end date
+  const launchDate = new Date(endDate);
+  launchDate.setDate(launchDate.getDate() - 14);
+
+  // Pre-calculate daily session distribution
+  const dailySessionCounts = calculateDailySessionCounts(
+    startDate,
+    endDate,
+    launchDate,
+    sessionCount,
+  );
+
+  let sessionIndex = 0;
+
+  for (const [dateKey, count] of Object.entries(dailySessionCounts)) {
+    const dayDate = new Date(dateKey);
+    const launchPeriod = isIPhoneLaunchPeriod(dayDate, launchDate);
+    const dayEvents: TrackingEvent[] = [];
+
+    for (let i = 0; i < count; i++) {
+      const sessionEvents = generateSessionEvents(
+        workspaceId,
+        dayDate,
+        launchPeriod,
+        sessionIndex,
+      );
+      dayEvents.push(...sessionEvents);
+      sessionIndex++;
+    }
+
+    yield {
+      date: dateKey,
+      events: dayEvents,
+      sessionCount: count,
+    };
+  }
 }
 
 function calculateDailySessionCounts(
@@ -331,7 +385,7 @@ function generateSessionEvents(
   };
 
   // Compute custom dimension values using filters (channel, channel_group, cd_3 = Product Category)
-  const { filters, version: filterVersion } = getCachedFilters();
+  const { filters } = getCachedFilters();
   const cdValues = evaluateFilters(filters, fieldValues);
 
   // Base event properties (shared across all events in session)
@@ -366,7 +420,6 @@ function generateSessionEvents(
     cd_8: '',
     cd_9: '',
     cd_10: '',
-    filter_version: filterVersion,
     screen_width: device.screenWidth,
     screen_height: device.screenHeight,
     viewport_width: viewport.width,

@@ -29,6 +29,7 @@ function toClickHouseDateTime(date: Date = new Date()): string {
 @Injectable()
 export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
   private runningProcessors = new Map<string, FilterBackfillProcessor>();
+  private pendingTimeouts = new Set<ReturnType<typeof setTimeout>>();
   private readonly staleThresholdMinutes = parseInt(
     process.env.BACKFILL_STALE_THRESHOLD_MINUTES || '5',
     10,
@@ -50,6 +51,12 @@ export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
    * On module destroy, gracefully cancel running tasks and kill mutations.
    */
   async onModuleDestroy(): Promise<void> {
+    // Clear all pending timeouts first
+    for (const timeout of this.pendingTimeouts) {
+      clearTimeout(timeout);
+    }
+    this.pendingTimeouts.clear();
+
     if (this.runningProcessors.size === 0) return;
 
     console.log(
@@ -183,7 +190,8 @@ export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
     await this.clickhouse.insertSystem('backfill_tasks', [task]);
 
     // Spawn processor asynchronously
-    setTimeout(async () => {
+    const timeoutHandle = setTimeout(async () => {
+      this.pendingTimeouts.delete(timeoutHandle);
       const processor = new FilterBackfillProcessor(this.clickhouse, this);
       this.runningProcessors.set(taskId, processor);
       const startTime = Date.now();
@@ -233,6 +241,7 @@ export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
         this.runningProcessors.delete(taskId);
       }
     }, 0);
+    this.pendingTimeouts.add(timeoutHandle);
 
     return { task_id: taskId };
   }

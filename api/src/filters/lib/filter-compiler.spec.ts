@@ -1,6 +1,8 @@
 import {
   escapeSQL,
   escapeRegex,
+  validateSourceField,
+  validateDimension,
   compileCondition,
   compileConditions,
   buildCaseExpression,
@@ -60,6 +62,58 @@ describe('escapeRegex', () => {
 
   it('escapes single quotes for SQL embedding', () => {
     expect(escapeRegex("test'pattern")).toBe("test\\'pattern");
+  });
+});
+
+describe('validateSourceField', () => {
+  it('accepts valid source fields', () => {
+    expect(() => validateSourceField('utm_source')).not.toThrow();
+    expect(() => validateSourceField('referrer_domain')).not.toThrow();
+    expect(() => validateSourceField('is_direct')).not.toThrow();
+    expect(() => validateSourceField('landing_page')).not.toThrow();
+  });
+
+  it('throws for invalid source fields', () => {
+    expect(() => validateSourceField('invalid_field')).toThrow(
+      /Invalid source field: invalid_field/,
+    );
+    expect(() => validateSourceField('')).toThrow(/Invalid source field:/);
+    expect(() => validateSourceField('channel')).toThrow(
+      /Invalid source field: channel/,
+    );
+  });
+
+  it('throws for SQL injection attempts', () => {
+    expect(() => validateSourceField("'; DROP TABLE --")).toThrow(
+      /Invalid source field/,
+    );
+    expect(() => validateSourceField('utm_source; DELETE')).toThrow(
+      /Invalid source field/,
+    );
+  });
+});
+
+describe('validateDimension', () => {
+  it('accepts valid writable dimensions', () => {
+    expect(() => validateDimension('channel')).not.toThrow();
+    expect(() => validateDimension('channel_group')).not.toThrow();
+    expect(() => validateDimension('cd_1')).not.toThrow();
+    expect(() => validateDimension('utm_source')).not.toThrow();
+    expect(() => validateDimension('is_direct')).not.toThrow();
+  });
+
+  it('throws for invalid dimensions', () => {
+    expect(() => validateDimension('invalid_dimension')).toThrow(
+      /Invalid dimension: invalid_dimension/,
+    );
+    expect(() => validateDimension('')).toThrow(/Invalid dimension:/);
+    expect(() => validateDimension('cd_11')).toThrow(/Invalid dimension: cd_11/);
+  });
+
+  it('throws for SQL injection attempts', () => {
+    expect(() => validateDimension("'; DROP TABLE --")).toThrow(
+      /Invalid dimension/,
+    );
   });
 });
 
@@ -164,6 +218,17 @@ describe('compileCondition', () => {
       expect(compileCondition(condition)).toBe('0 = 1');
     });
   });
+
+  describe('field validation', () => {
+    it('throws for invalid field name', () => {
+      const condition: FilterCondition = {
+        field: 'invalid_field',
+        operator: 'equals',
+        value: 'test',
+      };
+      expect(() => compileCondition(condition)).toThrow(/Invalid source field/);
+    });
+  });
 });
 
 describe('compileConditions', () => {
@@ -239,15 +304,11 @@ describe('buildCaseExpression', () => {
 });
 
 describe('compileFiltersToSQL', () => {
-  it('only updates version columns when no filters (preserves existing values)', () => {
+  it('returns empty setClause when no filters', () => {
     const result = compileFiltersToSQL([]);
-    // When no filters, don't touch dimension values - only update version columns
-    // This prevents data loss during backfill
-    expect(result.setClause).not.toContain("channel = ''");
-    expect(result.setClause).toContain('channel_version = ');
-    expect(result.setClause).toContain('channel_group_version = ');
-    expect(result.setClause).toContain('cd_1_version = ');
-    expect(result.setClause).toContain('cd_10_version = ');
+    // When no filters, setClause should be empty (no dimensions to update)
+    expect(result.setClause).toBe('');
+    expect(result.filterVersion).toBeTruthy();
   });
 
   it('compiles single filter with set_value', () => {
@@ -286,9 +347,8 @@ describe('compileFiltersToSQL', () => {
     ];
     const result = compileFiltersToSQL(filters);
     expect(result.setClause).not.toContain('Should Not Appear');
-    // Disabled filter means no filters - only version columns updated (preserves existing values)
-    expect(result.setClause).not.toContain("channel = ''");
-    expect(result.setClause).toContain('channel_version = ');
+    // Disabled filter means no filters - setClause should be empty
+    expect(result.setClause).toBe('');
   });
 
   it('orders filters by priority (highest first)', () => {

@@ -10,7 +10,6 @@ import { WorkspacesService } from '../workspaces/workspaces.service';
 import { Workspace } from '../workspaces/entities/workspace.entity';
 import {
   FilterDefinition,
-  FilterWithStaleness,
   FilterCondition,
   FilterOperation,
   VALID_SOURCE_FIELDS,
@@ -34,13 +33,13 @@ export class FiltersService {
   ) {}
 
   /**
-   * List all filters for a workspace with staleness info.
+   * List all filters for a workspace.
    * Optionally filter by tags.
    */
   async list(
     workspaceId: string,
     tags?: string[],
-  ): Promise<FilterWithStaleness[]> {
+  ): Promise<FilterDefinition[]> {
     const workspace = await this.workspacesService.get(workspaceId);
     let filters = workspace.filters ?? [];
 
@@ -54,20 +53,13 @@ export class FiltersService {
     // Sort by order
     filters.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
-    // Get staleness info
-    const staleness = await this.getStalenessInfo(workspaceId, workspace.filters ?? []);
-
-    return filters.map((filter) => ({
-      ...filter,
-      staleSessionCount: staleness.staleSessionCount,
-      totalSessionCount: staleness.totalSessionCount,
-    }));
+    return filters;
   }
 
   /**
-   * Get a single filter by ID with staleness info.
+   * Get a single filter by ID.
    */
-  async get(workspaceId: string, filterId: string): Promise<FilterWithStaleness> {
+  async get(workspaceId: string, filterId: string): Promise<FilterDefinition> {
     const workspace = await this.workspacesService.get(workspaceId);
     const filter = (workspace.filters ?? []).find((f) => f.id === filterId);
 
@@ -77,12 +69,7 @@ export class FiltersService {
       );
     }
 
-    const staleness = await this.getStalenessInfo(workspaceId, workspace.filters ?? []);
-    return {
-      ...filter,
-      staleSessionCount: staleness.staleSessionCount,
-      totalSessionCount: staleness.totalSessionCount,
-    };
+    return filter;
   }
 
   /**
@@ -238,42 +225,6 @@ export class FiltersService {
     }
 
     return Array.from(tagSet).sort();
-  }
-
-  /**
-   * Get staleness info for filters.
-   */
-  private async getStalenessInfo(
-    workspaceId: string,
-    filters: FilterDefinition[],
-  ): Promise<{ staleSessionCount: number; totalSessionCount: number }> {
-    const currentVersion = computeFilterVersion(filters);
-
-    try {
-      const result = await this.clickhouse.queryWorkspace<{
-        total: string;
-        stale: string;
-      }>(
-        workspaceId,
-        `SELECT
-           count() as total,
-           countIf(filter_version != {version:String} OR filter_version IS NULL) as stale
-         FROM sessions`,
-        { version: currentVersion },
-      );
-
-      if (result.length === 0) {
-        return { staleSessionCount: 0, totalSessionCount: 0 };
-      }
-
-      return {
-        staleSessionCount: parseInt(result[0].stale, 10),
-        totalSessionCount: parseInt(result[0].total, 10),
-      };
-    } catch {
-      // Workspace database may not exist yet
-      return { staleSessionCount: 0, totalSessionCount: 0 };
-    }
   }
 
   /**

@@ -44,9 +44,6 @@ export interface TrackingEvent {
   cd_9: string;
   cd_10: string;
 
-  // Filter version for staleness tracking
-  filter_version: string;
-
   // Screen/Viewport
   screen_width: number;
   screen_height: number;

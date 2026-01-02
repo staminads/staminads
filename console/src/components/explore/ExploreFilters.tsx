@@ -31,7 +31,7 @@ export function ExploreFilters({
   customDimensionLabels,
 }: ExploreFiltersProps) {
   return (
-    <div className="flex flex-wrap items-center gap-4 mb-4">
+    <div className="flex flex-wrap items-center gap-4 mb-6">
       {/* Dimension Selector */}
       <DimensionSelector value={dimensions} onChange={onDimensionsChange} customDimensionLabels={customDimensionLabels} />
 

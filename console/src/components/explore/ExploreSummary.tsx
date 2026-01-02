@@ -77,7 +77,7 @@ function MetricItem({ label, value, change, invertColors, showComparison }: Metr
 export function ExploreSummary({ totals, showComparison, loading }: ExploreSummaryProps) {
   if (loading || !totals) {
     return (
-      <div className="bg-white rounded-md px-5 py-3 mb-4">
+      <div className="bg-white rounded-md px-5 py-3 mb-6">
         <div className="flex items-center gap-8">
           <Skeleton.Input active size="small" style={{ width: 100 }} />
           <Skeleton.Input active size="small" style={{ width: 100 }} />
@@ -89,7 +89,7 @@ export function ExploreSummary({ totals, showComparison, loading }: ExploreSumma
   }
 
   return (
-    <div className="bg-white rounded-md px-5 py-3 mb-4">
+    <div className="bg-white rounded-md px-5 py-3 mb-6">
       <div className="flex items-center justify-between">
         <MetricItem
           label="Sessions"

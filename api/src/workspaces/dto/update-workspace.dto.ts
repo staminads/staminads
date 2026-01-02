@@ -10,6 +10,7 @@ import {
   Max,
 } from 'class-validator';
 import { FilterDefinition } from '../../filters/entities/filter.entity';
+import { Integration } from '../entities/integration.entity';
 
 export class UpdateWorkspaceDto {
   @IsString()
@@ -42,6 +43,10 @@ export class UpdateWorkspaceDto {
   @IsOptional()
   @IsArray()
   filters?: FilterDefinition[];
+
+  @IsOptional()
+  @IsArray()
+  integrations?: Integration[];
 
   @IsOptional()
   @IsNumber()

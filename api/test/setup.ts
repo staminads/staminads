@@ -5,8 +5,11 @@ const TEST_SYSTEM_DATABASE = 'staminads_test_system';
 const TEST_WORKSPACE_DATABASE = 'staminads_test_ws';
 
 // Additional workspace databases for specific tests
+// Format: staminads_ws_{workspace_id} to match ClickHouseService.getWorkspaceDatabaseName()
 const ADDITIONAL_WORKSPACE_DATABASES = [
   'staminads_ws_backfill_test_ws',
+  'staminads_ws_test_ws',
+  'staminads_ws_analytics_test_ws',
 ];
 
 let client: ClickHouseClient;
