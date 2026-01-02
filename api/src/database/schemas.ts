@@ -113,7 +113,7 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
     ) ENGINE = MergeTree()
     PARTITION BY toYYYYMMDD(created_at)
     ORDER BY (session_id, created_at)
-    TTL created_at + INTERVAL 7 DAY
+    TTL toDateTime(created_at) + INTERVAL 7 DAY
   `,
 
   sessions: `
