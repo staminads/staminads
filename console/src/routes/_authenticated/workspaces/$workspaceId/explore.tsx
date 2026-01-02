@@ -14,6 +14,8 @@ import { AssistantButton } from '../../../../components/explore/AssistantButton'
 import { AssistantPanel } from '../../../../components/explore/AssistantPanel'
 import { BreakdownDrawer } from '../../../../components/explore/BreakdownDrawer'
 import { BreakdownModal } from '../../../../components/explore/BreakdownModal'
+import { CSVExportModal } from '../../../../components/explore/CSVExportModal'
+import { CSVExportButton } from '../../../../components/explore/CSVExportButton'
 import { DateRangePicker } from '../../../../components/dashboard/DateRangePicker'
 import { ComparisonPicker } from '../../../../components/dashboard/ComparisonPicker'
 import {
@@ -143,6 +145,7 @@ function Explore() {
   const [expandedRowKeys, setExpandedRowKeys] = useState<React.Key[]>([])
   const [loadingRows, setLoadingRows] = useState<Set<string>>(new Set())
   const [maxMedianDuration, setMaxMedianDuration] = useState<number>(0)
+  const [isCSVModalOpen, setIsCSVModalOpen] = useState(false)
 
   const showComparison = comparison !== 'none'
 
@@ -474,6 +477,10 @@ function Explore() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-light text-gray-800">Explore</h1>
         <div className="flex items-center gap-2">
+          <CSVExportButton
+            onClick={() => setIsCSVModalOpen(true)}
+            disabled={reportData.length === 0}
+          />
           <DateRangePicker
             period={period}
             timezone={timezone}
@@ -576,6 +583,20 @@ function Explore() {
           dimensions={dimensions}
         />
       )}
+
+      {/* CSV Export Modal */}
+      <CSVExportModal
+        open={isCSVModalOpen}
+        onCancel={() => setIsCSVModalOpen(false)}
+        workspaceId={workspaceId}
+        dimensions={dimensions}
+        filters={filters}
+        dateRange={dateRange}
+        timezone={timezone}
+        minSessions={minSessions}
+        showComparison={showComparison}
+        customDimensionLabels={workspace.custom_dimensions}
+      />
     </div>
   )
 }

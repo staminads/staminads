@@ -393,7 +393,7 @@ describe('EventsService', () => {
   });
 
   describe('custom dimensions', () => {
-    it('initializes all cd fields to empty string', async () => {
+    it('initializes all stm fields to empty string', async () => {
       workspacesService.get.mockResolvedValue(mockWorkspace);
       bufferService.add.mockResolvedValue(undefined);
 
@@ -401,16 +401,16 @@ describe('EventsService', () => {
       await service.track(dto, null);
 
       const addedEvent = bufferService.add.mock.calls[0][0];
-      expect(addedEvent.cd_1).toBe('');
-      expect(addedEvent.cd_2).toBe('');
-      expect(addedEvent.cd_3).toBe('');
-      expect(addedEvent.cd_4).toBe('');
-      expect(addedEvent.cd_5).toBe('');
-      expect(addedEvent.cd_6).toBe('');
-      expect(addedEvent.cd_7).toBe('');
-      expect(addedEvent.cd_8).toBe('');
-      expect(addedEvent.cd_9).toBe('');
-      expect(addedEvent.cd_10).toBe('');
+      expect(addedEvent.stm_1).toBe('');
+      expect(addedEvent.stm_2).toBe('');
+      expect(addedEvent.stm_3).toBe('');
+      expect(addedEvent.stm_4).toBe('');
+      expect(addedEvent.stm_5).toBe('');
+      expect(addedEvent.stm_6).toBe('');
+      expect(addedEvent.stm_7).toBe('');
+      expect(addedEvent.stm_8).toBe('');
+      expect(addedEvent.stm_9).toBe('');
+      expect(addedEvent.stm_10).toBe('');
     });
   });
 

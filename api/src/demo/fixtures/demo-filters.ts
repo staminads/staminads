@@ -92,7 +92,7 @@ function createProductFilter(
     order: filterIndex,
     tags: ['product category'],
     conditions,
-    operations: [{ dimension: 'cd_1', action: 'set_value', value: category }],
+    operations: [{ dimension: 'stm_1', action: 'set_value', value: category }],
     enabled: true,
     version: '',
     createdAt: now,
@@ -271,7 +271,7 @@ export function getDemoFilters(): FilterDefinition[] {
     order: filterIndex,
     tags: ['default'],
     conditions: [], // Always matches
-    operations: [{ dimension: 'cd_1', action: 'set_default_value', value: 'Other' }],
+    operations: [{ dimension: 'stm_1', action: 'set_default_value', value: 'Other' }],
     enabled: true,
     version: '',
     createdAt: now,

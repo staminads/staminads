@@ -384,7 +384,7 @@ function generateSessionEvents(
     landing_path: page.path,
   };
 
-  // Compute custom dimension values using filters (channel, channel_group, cd_3 = Product Category)
+  // Compute custom dimension values using filters (channel, channel_group, stm_1 = Product Category)
   const { filters } = getCachedFilters();
   const cdValues = evaluateFilters(filters, fieldValues);
 
@@ -409,17 +409,17 @@ function generateSessionEvents(
     // Channel classification (computed from demo filters)
     channel: (cdValues.channel as string) ?? '',
     channel_group: (cdValues.channel_group as string) ?? '',
-    // Custom dimensions (cd_1 = Product Category; cd_2-cd_10 available for user use)
-    cd_1: (cdValues.cd_1 as string) ?? '',  // Product Category
-    cd_2: '',
-    cd_3: '',
-    cd_4: '',
-    cd_5: '',
-    cd_6: '',
-    cd_7: '',
-    cd_8: '',
-    cd_9: '',
-    cd_10: '',
+    // Custom dimensions (stm_1 = Product Category; stm_2-stm_10 available for user use)
+    stm_1: (cdValues.stm_1 as string) ?? '',  // Product Category
+    stm_2: '',
+    stm_3: '',
+    stm_4: '',
+    stm_5: '',
+    stm_6: '',
+    stm_7: '',
+    stm_8: '',
+    stm_9: '',
+    stm_10: '',
     screen_width: device.screenWidth,
     screen_height: device.screenHeight,
     viewport_width: viewport.width,

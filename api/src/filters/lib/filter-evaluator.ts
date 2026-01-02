@@ -211,26 +211,26 @@ export function extractFieldValues(
 
 /**
  * Build the complete custom dimension values object for an event.
- * Initializes channel and all cd_* slots to null and applies filter results.
+ * Initializes channel and all stm_* slots to null and applies filter results.
  */
 export interface CustomDimensionValues {
   channel: string | null;
   channel_group: string | null;
-  cd_1: string | null;
-  cd_2: string | null;
-  cd_3: string | null;
-  cd_4: string | null;
-  cd_5: string | null;
-  cd_6: string | null;
-  cd_7: string | null;
-  cd_8: string | null;
-  cd_9: string | null;
-  cd_10: string | null;
+  stm_1: string | null;
+  stm_2: string | null;
+  stm_3: string | null;
+  stm_4: string | null;
+  stm_5: string | null;
+  stm_6: string | null;
+  stm_7: string | null;
+  stm_8: string | null;
+  stm_9: string | null;
+  stm_10: string | null;
 }
 
 /**
  * Apply filter results to create the complete event values.
- * This handles both custom dimensions (cd_1...cd_10) and standard dimensions.
+ * This handles both custom dimensions (stm_1...stm_10) and standard dimensions.
  */
 export function applyFilterResults(
   filters: FilterDefinition[],
@@ -243,16 +243,16 @@ export function applyFilterResults(
   const customDimensions: CustomDimensionValues = {
     channel: null,
     channel_group: null,
-    cd_1: null,
-    cd_2: null,
-    cd_3: null,
-    cd_4: null,
-    cd_5: null,
-    cd_6: null,
-    cd_7: null,
-    cd_8: null,
-    cd_9: null,
-    cd_10: null,
+    stm_1: null,
+    stm_2: null,
+    stm_3: null,
+    stm_4: null,
+    stm_5: null,
+    stm_6: null,
+    stm_7: null,
+    stm_8: null,
+    stm_9: null,
+    stm_10: null,
   };
 
   // Track modified standard fields (utm_*, referrer_domain, is_direct)
@@ -267,11 +267,11 @@ export function applyFilterResults(
     }
 
     // Check if it's a custom dimension slot
-    const cdMatch = dimension.match(/^cd_(\d+)$/);
+    const cdMatch = dimension.match(/^stm_(\d+)$/);
     if (cdMatch) {
       const slot = parseInt(cdMatch[1], 10);
       if (slot >= 1 && slot <= 10) {
-        const valueKey = `cd_${slot}` as keyof CustomDimensionValues;
+        const valueKey = `stm_${slot}` as keyof CustomDimensionValues;
         customDimensions[valueKey] = value;
       }
     } else {

@@ -32,17 +32,17 @@ export interface TrackingEvent {
   channel: string;
   channel_group: string;
 
-  // Custom dimensions (cd_1 through cd_10)
-  cd_1: string;
-  cd_2: string;
-  cd_3: string;
-  cd_4: string;
-  cd_5: string;
-  cd_6: string;
-  cd_7: string;
-  cd_8: string;
-  cd_9: string;
-  cd_10: string;
+  // Custom dimensions (stm_1 through stm_10)
+  stm_1: string;
+  stm_2: string;
+  stm_3: string;
+  stm_4: string;
+  stm_5: string;
+  stm_6: string;
+  stm_7: string;
+  stm_8: string;
+  stm_9: string;
+  stm_10: string;
 
   // Screen/Viewport
   screen_width: number;

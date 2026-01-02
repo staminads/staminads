@@ -1,0 +1,60 @@
+{
+  "name": "@staminads/sdk",
+  "version": "5.0.0",
+  "type": "module",
+  "description": "Ultra-reliable web analytics SDK for tracking TimeScore metrics with millisecond precision",
+  "main": "dist/staminads.cjs.js",
+  "module": "dist/staminads.esm.js",
+  "browser": "dist/staminads.min.js",
+  "types": "dist/staminads.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "rollup -c -w",
+    "build": "rollup -c",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "analytics",
+    "tracking",
+    "timescore",
+    "web-analytics",
+    "engagement",
+    "duration",
+    "focus-time"
+  ],
+  "author": "Staminads",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/staminads/sdk.git"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.7",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^11.1.6",
+    "@types/node": "^20.11.0",
+    "@typescript-eslint/eslint-plugin": "^6.19.0",
+    "@typescript-eslint/parser": "^6.19.0",
+    "eslint": "^8.56.0",
+    "playwright": "^1.41.0",
+    "rollup": "^4.9.6",
+    "rollup-plugin-dts": "^6.1.0",
+    "tslib": "^2.6.2",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.1"
+  },
+  "dependencies": {
+    "ua-parser-js": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

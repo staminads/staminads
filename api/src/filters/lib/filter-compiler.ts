@@ -33,16 +33,16 @@ interface CaseBranch {
 const CUSTOM_DIMENSIONS = [
   'channel',
   'channel_group',
-  'cd_1',
-  'cd_2',
-  'cd_3',
-  'cd_4',
-  'cd_5',
-  'cd_6',
-  'cd_7',
-  'cd_8',
-  'cd_9',
-  'cd_10',
+  'stm_1',
+  'stm_2',
+  'stm_3',
+  'stm_4',
+  'stm_5',
+  'stm_6',
+  'stm_7',
+  'stm_8',
+  'stm_9',
+  'stm_10',
 ];
 
 /**

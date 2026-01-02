@@ -97,7 +97,7 @@ describe('validateDimension', () => {
   it('accepts valid writable dimensions', () => {
     expect(() => validateDimension('channel')).not.toThrow();
     expect(() => validateDimension('channel_group')).not.toThrow();
-    expect(() => validateDimension('cd_1')).not.toThrow();
+    expect(() => validateDimension('stm_1')).not.toThrow();
     expect(() => validateDimension('utm_source')).not.toThrow();
     expect(() => validateDimension('is_direct')).not.toThrow();
   });
@@ -107,7 +107,7 @@ describe('validateDimension', () => {
       /Invalid dimension: invalid_dimension/,
     );
     expect(() => validateDimension('')).toThrow(/Invalid dimension:/);
-    expect(() => validateDimension('cd_11')).toThrow(/Invalid dimension: cd_11/);
+    expect(() => validateDimension('stm_11')).toThrow(/Invalid dimension: stm_11/);
   });
 
   it('throws for SQL injection attempts', () => {

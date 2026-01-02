@@ -370,16 +370,16 @@ describe('filter-evaluator', () => {
       expect(customDimensions).toEqual({
         channel: null,
         channel_group: null,
-        cd_1: null,
-        cd_2: null,
-        cd_3: null,
-        cd_4: null,
-        cd_5: null,
-        cd_6: null,
-        cd_7: null,
-        cd_8: null,
-        cd_9: null,
-        cd_10: null,
+        stm_1: null,
+        stm_2: null,
+        stm_3: null,
+        stm_4: null,
+        stm_5: null,
+        stm_6: null,
+        stm_7: null,
+        stm_8: null,
+        stm_9: null,
+        stm_10: null,
       });
     });
 
@@ -398,13 +398,13 @@ describe('filter-evaluator', () => {
     it('sets custom dimension slots', () => {
       const filters = [
         createFilter('f1', [], [
-          { dimension: 'cd_1', action: 'set_value', value: 'Value 1' },
-          { dimension: 'cd_5', action: 'set_value', value: 'Value 5' },
+          { dimension: 'stm_1', action: 'set_value', value: 'Value 1' },
+          { dimension: 'stm_5', action: 'set_value', value: 'Value 5' },
         ]),
       ];
       const { customDimensions } = applyFilterResults(filters, {}, {});
-      expect(customDimensions.cd_1).toBe('Value 1');
-      expect(customDimensions.cd_5).toBe('Value 5');
+      expect(customDimensions.stm_1).toBe('Value 1');
+      expect(customDimensions.stm_5).toBe('Value 5');
     });
 
     it('tracks modified standard fields', () => {

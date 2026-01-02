@@ -342,9 +342,9 @@ export function groupDimensionsByCategory(
   // Sort dimensions within each category by name (with natural sorting for numbers)
   for (const category of Object.keys(grouped)) {
     grouped[category].sort((a, b) => {
-      // Use natural sorting for custom dimensions (cd_1, cd_2, ..., cd_10)
-      const aMatch = a.name.match(/^cd_(\d+)$/)
-      const bMatch = b.name.match(/^cd_(\d+)$/)
+      // Use natural sorting for custom dimensions (stm_1, stm_2, ..., stm_10)
+      const aMatch = a.name.match(/^stm_(\d+)$/)
+      const bMatch = b.name.match(/^stm_(\d+)$/)
       if (aMatch && bMatch) {
         return parseInt(aMatch[1]) - parseInt(bMatch[1])
       }
@@ -357,15 +357,15 @@ export function groupDimensionsByCategory(
 
 /**
  * Get display label for a dimension
- * @param dimensionName - The dimension name (e.g., 'utm_source', 'cd_1')
+ * @param dimensionName - The dimension name (e.g., 'utm_source', 'stm_1')
  * @param customDimensionLabels - Optional map of custom dimension labels from workspace settings
  */
 export function getDimensionLabel(
   dimensionName: string,
   customDimensionLabels?: Record<string, string> | null,
 ): string {
-  // Custom dimensions: cd_1 -> use custom label if set, otherwise just "1"
-  const cdMatch = dimensionName.match(/^cd_(\d+)$/)
+  // Custom dimensions: stm_1 -> use custom label if set, otherwise just "1"
+  const cdMatch = dimensionName.match(/^stm_(\d+)$/)
   if (cdMatch) {
     const slotNumber = cdMatch[1]
     // Check if there's a custom label for this slot
