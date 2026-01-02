@@ -6,14 +6,72 @@ import { WorkspacesService } from '../workspaces/workspaces.service';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { Workspace } from '../workspaces/entities/workspace.entity';
 import { AnthropicIntegration } from '../workspaces/entities/integration.entity';
+import * as crypto from '../common/crypto';
+import { EventEmitter } from 'events';
+
+// Mock crypto module
+jest.mock('../common/crypto', () => ({
+  decryptApiKey: jest.fn(),
+}));
+
+// Create mock stream that emits events
+const createMockStream = (options: {
+  textChunks?: string[];
+  stopReason?: 'end_turn' | 'tool_use';
+  toolUseBlocks?: Array<{ id: string; name: string; input: unknown }>;
+  usage?: { input_tokens: number; output_tokens: number };
+}) => {
+  const emitter = new EventEmitter();
+  const stream = {
+    on: (event: string, handler: (...args: unknown[]) => void) => {
+      emitter.on(event, handler);
+      return stream;
+    },
+    finalMessage: jest.fn().mockImplementation(async () => {
+      // Emit text events
+      if (options.textChunks) {
+        for (const chunk of options.textChunks) {
+          emitter.emit('text', chunk);
+        }
+      }
+
+      const content: Array<{ type: string; text?: string; id?: string; name?: string; input?: unknown }> = [];
+
+      // Add text blocks if we have text
+      if (options.textChunks?.length) {
+        content.push({ type: 'text', text: options.textChunks.join('') });
+      }
+
+      // Add tool use blocks if using tools
+      if (options.stopReason === 'tool_use' && options.toolUseBlocks) {
+        for (const tool of options.toolUseBlocks) {
+          content.push({
+            type: 'tool_use',
+            id: tool.id,
+            name: tool.name,
+            input: tool.input,
+          });
+        }
+      }
+
+      return {
+        stop_reason: options.stopReason || 'end_turn',
+        content,
+        usage: options.usage || { input_tokens: 100, output_tokens: 50 },
+      };
+    }),
+  };
+  return stream;
+};
 
 // Mock Anthropic SDK
+const mockStream = jest.fn();
 jest.mock('@anthropic-ai/sdk', () => {
   return {
     __esModule: true,
     default: jest.fn().mockImplementation(() => ({
       messages: {
-        stream: jest.fn(),
+        stream: mockStream,
       },
     })),
   };
@@ -315,6 +373,360 @@ describe('AssistantService', () => {
 
       expect(clearIntervalSpy).toHaveBeenCalled();
       clearIntervalSpy.mockRestore();
+    });
+
+    it('cleanup removes expired jobs', async () => {
+      jest.useFakeTimers();
+
+      workspacesService.get.mockResolvedValue(mockWorkspace);
+
+      // Create a job
+      const { job_id } = await service.createJob({
+        workspace_id: 'ws-1',
+        prompt: 'Test',
+      });
+
+      // Verify job exists
+      expect(service.getJob(job_id)).toBeDefined();
+
+      // Manually expire the job
+      const job = service.getJob(job_id);
+      job!.expires_at = new Date(Date.now() - 1000).toISOString();
+
+      // Start cleanup interval
+      service.onModuleInit();
+
+      // Advance time to trigger cleanup
+      jest.advanceTimersByTime(60 * 1000);
+
+      // Job should be cleaned up
+      expect(service.getJob(job_id)).toBeUndefined();
+
+      // Clean up
+      service.onModuleDestroy();
+      jest.useRealTimers();
+    });
+  });
+
+  describe('processJob (streaming)', () => {
+    let mockRes: {
+      write: jest.Mock;
+      end: jest.Mock;
+    };
+
+    beforeEach(() => {
+      mockRes = {
+        write: jest.fn(),
+        end: jest.fn(),
+      };
+      mockStream.mockReset();
+      (crypto.decryptApiKey as jest.Mock).mockReturnValue('decrypted-api-key');
+    });
+
+    it('throws error when ENCRYPTION_KEY not configured', async () => {
+      workspacesService.get.mockResolvedValue(mockWorkspace);
+      configService.get.mockReturnValue(undefined);
+
+      const { job_id } = await service.createJob({
+        workspace_id: 'ws-1',
+        prompt: 'Test',
+      });
+
+      await service.streamJob(job_id, mockRes as any);
+
+      expect(mockRes.write).toHaveBeenCalledWith(
+        expect.stringContaining('ENCRYPTION_KEY not configured'),
+      );
+    });
+
+    it('streams text response to client', async () => {
+      workspacesService.get.mockResolvedValue(mockWorkspace);
+      configService.get.mockReturnValue('test-encryption-key');
+      mockStream.mockReturnValue(
+        createMockStream({
+          textChunks: ['Hello', ' world'],
+          stopReason: 'end_turn',
+        }),
+      );
+
+      const { job_id } = await service.createJob({
+        workspace_id: 'ws-1',
+        prompt: 'Test',
+      });
+
+      await service.streamJob(job_id, mockRes as any);
+
+      // Should have written thinking events
+      expect(mockRes.write).toHaveBeenCalledWith(
+        expect.stringContaining('event: thinking'),
+      );
+      // Should have written usage event
+      expect(mockRes.write).toHaveBeenCalledWith(
+        expect.stringContaining('event: usage'),
+      );
+      // Should end with done
+      expect(mockRes.write).toHaveBeenCalledWith(
+        expect.stringContaining('event: done'),
+      );
+    });
+
+    it('handles tool use and executes tools', async () => {
+      workspacesService.get.mockResolvedValue(mockWorkspace);
+      configService.get.mockReturnValue('test-encryption-key');
+
+      // First call: tool use, second call: end_turn
+      mockStream
+        .mockReturnValueOnce(
+          createMockStream({
+            textChunks: ['Let me query the data...'],
+            stopReason: 'tool_use',
+            toolUseBlocks: [
+              {
+                id: 'tool-1',
+                name: 'configure_explore',
+                input: {
+                  metrics: ['sessions'],
+                  dimensions: ['device'],
+                },
+              },
+            ],
+          }),
+        );
+
+      const { job_id } = await service.createJob({
+        workspace_id: 'ws-1',
+        prompt: 'Show sessions by device',
+      });
+
+      await service.streamJob(job_id, mockRes as any);
+
+      // Should have written tool_call event
+      expect(mockRes.write).toHaveBeenCalledWith(
+        expect.stringContaining('event: tool_call'),
+      );
+      // Should have written tool_result event (configure_explore returns config)
+      expect(mockRes.write).toHaveBeenCalledWith(
+        expect.stringContaining('event: tool_result'),
+      );
+    });
+
+    it('handles configure_explore tool and completes job', async () => {
+      workspacesService.get.mockResolvedValue(mockWorkspace);
+      configService.get.mockReturnValue('test-encryption-key');
+
+      mockStream.mockReturnValue(
+        createMockStream({
+          textChunks: ['Configuring...'],
+          stopReason: 'tool_use',
+          toolUseBlocks: [
+            {
+              id: 'tool-1',
+              name: 'configure_explore',
+              input: {
+                metrics: ['sessions'],
+                dimensions: ['device'],
+              },
+            },
+          ],
+        }),
+      );
+
+      const { job_id } = await service.createJob({
+        workspace_id: 'ws-1',
+        prompt: 'Show sessions by device',
+      });
+
+      await service.streamJob(job_id, mockRes as any);
+
+      // Should have written config event
+      expect(mockRes.write).toHaveBeenCalledWith(
+        expect.stringContaining('event: config'),
+      );
+
+      // Job should be marked as completed
+      const job = service.getJob(job_id);
+      expect(job?.status).toBe('completed');
+    });
+
+    it('handles tool execution errors gracefully', async () => {
+      workspacesService.get.mockResolvedValue(mockWorkspace);
+      configService.get.mockReturnValue('test-encryption-key');
+      analyticsService.query.mockRejectedValue(new Error('Query failed'));
+
+      // First call: tool use with error, second call: end_turn
+      mockStream
+        .mockReturnValueOnce(
+          createMockStream({
+            textChunks: ['Querying...'],
+            stopReason: 'tool_use',
+            toolUseBlocks: [
+              {
+                id: 'tool-1',
+                name: 'query_analytics',
+                input: { metrics: ['sessions'] },
+              },
+            ],
+          }),
+        )
+        .mockReturnValueOnce(
+          createMockStream({
+            textChunks: ['Error occurred...'],
+            stopReason: 'end_turn',
+          }),
+        );
+
+      const { job_id } = await service.createJob({
+        workspace_id: 'ws-1',
+        prompt: 'Test',
+      });
+
+      await service.streamJob(job_id, mockRes as any);
+
+      // Should still complete without throwing
+      expect(mockRes.end).toHaveBeenCalled();
+    });
+
+    it('handles stream creation error', async () => {
+      workspacesService.get.mockResolvedValue(mockWorkspace);
+      configService.get.mockReturnValue('test-encryption-key');
+      mockStream.mockImplementation(() => {
+        throw new Error('API error');
+      });
+
+      const { job_id } = await service.createJob({
+        workspace_id: 'ws-1',
+        prompt: 'Test',
+      });
+
+      await service.streamJob(job_id, mockRes as any);
+
+      expect(mockRes.write).toHaveBeenCalledWith(
+        expect.stringContaining('STREAM_ERROR'),
+      );
+    });
+
+    it('handles finalMessage error', async () => {
+      workspacesService.get.mockResolvedValue(mockWorkspace);
+      configService.get.mockReturnValue('test-encryption-key');
+
+      const errorStream = {
+        on: jest.fn().mockReturnThis(),
+        finalMessage: jest.fn().mockRejectedValue(new Error('Stream error')),
+      };
+      mockStream.mockReturnValue(errorStream);
+
+      const { job_id } = await service.createJob({
+        workspace_id: 'ws-1',
+        prompt: 'Test',
+      });
+
+      await service.streamJob(job_id, mockRes as any);
+
+      expect(mockRes.write).toHaveBeenCalledWith(
+        expect.stringContaining('STREAM_ERROR'),
+      );
+    });
+
+    it('calculates and sends usage statistics', async () => {
+      workspacesService.get.mockResolvedValue(mockWorkspace);
+      configService.get.mockReturnValue('test-encryption-key');
+      mockStream.mockReturnValue(
+        createMockStream({
+          textChunks: ['Response'],
+          stopReason: 'end_turn',
+          usage: { input_tokens: 500, output_tokens: 200 },
+        }),
+      );
+
+      const { job_id } = await service.createJob({
+        workspace_id: 'ws-1',
+        prompt: 'Test',
+      });
+
+      await service.streamJob(job_id, mockRes as any);
+
+      // Should have written usage event with correct tokens
+      const usageCall = mockRes.write.mock.calls.find((call) =>
+        call[0].includes('event: usage'),
+      );
+      expect(usageCall).toBeDefined();
+      expect(usageCall[0]).toContain('500'); // input tokens
+      expect(usageCall[0]).toContain('200'); // output tokens
+    });
+
+    it('marks job as completed after successful stream', async () => {
+      workspacesService.get.mockResolvedValue(mockWorkspace);
+      configService.get.mockReturnValue('test-encryption-key');
+      mockStream.mockReturnValue(
+        createMockStream({
+          textChunks: ['Done'],
+          stopReason: 'end_turn',
+        }),
+      );
+
+      const { job_id } = await service.createJob({
+        workspace_id: 'ws-1',
+        prompt: 'Test',
+      });
+
+      await service.streamJob(job_id, mockRes as any);
+
+      const job = service.getJob(job_id);
+      expect(job?.status).toBe('completed');
+    });
+
+    it('marks job as error on stream failure', async () => {
+      workspacesService.get.mockResolvedValue(mockWorkspace);
+      configService.get.mockReturnValue('test-encryption-key');
+      mockStream.mockImplementation(() => {
+        throw new Error('Fatal error');
+      });
+
+      const { job_id } = await service.createJob({
+        workspace_id: 'ws-1',
+        prompt: 'Test',
+      });
+
+      await service.streamJob(job_id, mockRes as any);
+
+      const job = service.getJob(job_id);
+      expect(job?.status).toBe('error');
+      expect(job?.error).toContain('Fatal error');
+    });
+  });
+
+  describe('getAnthropicIntegration', () => {
+    it('returns null for workspace with no integrations', async () => {
+      workspacesService.get.mockResolvedValue(mockWorkspaceNoIntegration);
+
+      await expect(
+        service.createJob({
+          workspace_id: 'ws-no-int',
+          prompt: 'Test',
+        }),
+      ).rejects.toThrow('Anthropic integration not configured');
+    });
+
+    it('returns null for workspace with disabled integration', async () => {
+      workspacesService.get.mockResolvedValue(mockWorkspaceDisabledIntegration);
+
+      await expect(
+        service.createJob({
+          workspace_id: 'ws-disabled',
+          prompt: 'Test',
+        }),
+      ).rejects.toThrow('Anthropic integration not configured');
+    });
+
+    it('returns integration when enabled', async () => {
+      workspacesService.get.mockResolvedValue(mockWorkspace);
+
+      const result = await service.createJob({
+        workspace_id: 'ws-1',
+        prompt: 'Test',
+      });
+
+      expect(result.job_id).toBeDefined();
     });
   });
 });
