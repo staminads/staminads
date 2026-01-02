@@ -1,4 +1,4 @@
-.PHONY: help install dev build test test-e2e test-cov lint format docker-up docker-down openapi
+.PHONY: help install dev build test test-e2e test-cov lint format docker-up docker-down openapi demo-regen
 
 # Default target
 help:
@@ -24,6 +24,9 @@ help:
 	@echo ""
 	@echo "Documentation:"
 	@echo "  make openapi      - Generate OpenAPI spec"
+	@echo ""
+	@echo "Demo:"
+	@echo "  make demo-regen   - Regenerate demo data (requires API running)"
 
 # Setup
 install:
@@ -62,3 +65,7 @@ format:
 # Documentation
 openapi:
 	cd api && npm run openapi:generate
+
+# Demo
+demo-regen:
+	@. api/.env && curl -s -X POST "http://localhost:3000/api/demo.generate?secret=$${DEMO_SECRET}" | jq .

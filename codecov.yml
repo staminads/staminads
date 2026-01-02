@@ -4,7 +4,7 @@
 coverage:
   precision: 2
   round: down
-  range: "70...100"
+  range: '60...80'
 
   status:
     project:
@@ -23,7 +23,7 @@ coverage:
         informational: false
 
 comment:
-  layout: "header, diff, flags, components, footer"
+  layout: 'header, diff, flags, components, footer'
   behavior: default
   require_changes: true
   require_base: false
@@ -36,11 +36,11 @@ flags:
     carryforward: true
 
 ignore:
-  - "**/*.module.ts"
-  - "**/*.dto.ts"
-  - "**/*.entity.ts"
-  - "**/*.spec.ts"
-  - "**/main.ts"
-  - "**/index.ts"
-  - "**/test/**"
-  - "**/node_modules/**"
+  - '**/*.module.ts'
+  - '**/*.dto.ts'
+  - '**/*.entity.ts'
+  - '**/*.spec.ts'
+  - '**/main.ts'
+  - '**/index.ts'
+  - '**/test/**'
+  - '**/node_modules/**'

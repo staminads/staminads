@@ -203,7 +203,7 @@ export function ExploreSummary({
         <Divider type="vertical" style={{ height: 40 }} />
 
         <Statistic
-          title="Avg. Scroll"
+          title={<span className="pr-[70px]">Avg. Scroll</span>}
           value={totals.max_scroll.toFixed(1)}
           valueStyle={valueStyle}
           suffix={

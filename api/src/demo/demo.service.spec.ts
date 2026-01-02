@@ -177,5 +177,49 @@ describe('DemoService', () => {
         expect.stringContaining("DELETE WHERE id = 'demo-apple'"),
       );
     });
+
+    it('deletes backfill tasks from system database', async () => {
+      clickhouse.querySystem.mockResolvedValue([{ id: 'demo-apple' }]);
+      clickhouse.dropWorkspaceDatabase.mockResolvedValue(undefined);
+      clickhouse.commandSystem.mockResolvedValue(undefined);
+
+      await service.delete();
+
+      expect(clickhouse.commandSystem).toHaveBeenCalledWith(
+        expect.stringContaining("backfill_tasks DELETE WHERE workspace_id = 'demo-apple'"),
+      );
+    });
+  });
+
+  describe('backfill task creation', () => {
+    it('creates completed backfill task after generation', async () => {
+      clickhouse.querySystem.mockResolvedValue([]);
+      clickhouse.createWorkspaceDatabase.mockResolvedValue(undefined);
+      clickhouse.insertSystem.mockResolvedValue(undefined);
+      clickhouse.insertWorkspace.mockResolvedValue(undefined);
+
+      const mockEvents = Array(10).fill({ session_id: 'test', name: 'screen_view' });
+
+      (generators.generateEventsByDay as jest.Mock).mockReturnValue([
+        { date: '2025-01-01', events: mockEvents, sessionCount: 5 },
+      ]);
+
+      await service.generate();
+
+      // Should insert workspace and backfill task
+      expect(clickhouse.insertSystem).toHaveBeenCalledWith(
+        'backfill_tasks',
+        expect.arrayContaining([
+          expect.objectContaining({
+            workspace_id: 'demo-apple',
+            status: 'completed',
+            total_sessions: 5,
+            processed_sessions: 5,
+            total_events: 10,
+            processed_events: 10,
+          }),
+        ]),
+      );
+    });
   });
 });

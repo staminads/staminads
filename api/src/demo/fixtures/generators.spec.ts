@@ -105,8 +105,9 @@ describe('generators', () => {
 
       for (const event of events) {
         const eventDate = new Date(event.created_at.replace(' ', 'T') + 'Z');
-        expect(eventDate.getTime()).toBeGreaterThanOrEqual(startDate.getTime());
-        expect(eventDate.getTime()).toBeLessThanOrEqual(endDate.getTime() + 86400000); // +1 day buffer
+        // Add 1-day buffer on each side for timezone handling
+        expect(eventDate.getTime()).toBeGreaterThanOrEqual(startDate.getTime() - 86400000);
+        expect(eventDate.getTime()).toBeLessThanOrEqual(endDate.getTime() + 86400000);
       }
     });
 

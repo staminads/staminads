@@ -1,8 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { ClickHouseService } from '../database/clickhouse.service';
 import { generateEventsByDay, getCachedFilters, clearFilterCache } from './fixtures/generators';
 import { TrackingEvent } from '../events/entities/event.entity';
 import { DEMO_CUSTOM_DIMENSION_LABELS } from './fixtures/demo-filters';
+import { BackfillTask } from '../filters/backfill/backfill-task.entity';
 
 const DEMO_WORKSPACE_ID = 'demo-apple';
 const DEMO_WORKSPACE_NAME = 'Apple Demo';
@@ -87,6 +89,9 @@ export class DemoService {
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
     this.logger.log(`Demo generation completed in ${duration}s`);
 
+    // Create a completed backfill task to mark filters as synced
+    await this.createCompletedBackfillTask(DEMO_WORKSPACE_ID, totalSessions, totalEvents);
+
     // Calculate date range
     const startDate = new Date(endDate);
     startDate.setDate(startDate.getDate() - DAYS_RANGE);
@@ -139,6 +144,11 @@ export class DemoService {
       `ALTER TABLE workspaces DELETE WHERE id = '${DEMO_WORKSPACE_ID}'`,
     );
 
+    // Delete backfill tasks for this workspace from system database
+    await this.clickhouse.commandSystem(
+      `ALTER TABLE backfill_tasks DELETE WHERE workspace_id = '${DEMO_WORKSPACE_ID}'`,
+    );
+
     this.logger.log(`Deleted existing demo workspace: ${DEMO_WORKSPACE_ID}`);
 
     return true;
@@ -182,5 +192,43 @@ export class DemoService {
       // Insert to workspace database
       await this.clickhouse.insertWorkspace(workspaceId, 'events', batch);
     }
+  }
+
+  /**
+   * Create a synthetic completed backfill task to mark filters as synced.
+   * Since demo data is generated with filters already applied, we create
+   * a completed task record to prevent "Filters out of sync" warning.
+   */
+  private async createCompletedBackfillTask(
+    workspaceId: string,
+    sessionsCount: number,
+    eventsCount: number,
+  ): Promise<void> {
+    const { filters } = getCachedFilters();
+    const now = toClickHouseDateTime();
+
+    const task: BackfillTask = {
+      id: randomUUID(),
+      workspace_id: workspaceId,
+      status: 'completed',
+      lookback_days: DAYS_RANGE,
+      chunk_size_days: 1,
+      batch_size: BATCH_SIZE,
+      total_sessions: sessionsCount,
+      processed_sessions: sessionsCount,
+      total_events: eventsCount,
+      processed_events: eventsCount,
+      current_date_chunk: null,
+      created_at: now,
+      updated_at: now,
+      started_at: now,
+      completed_at: now,
+      error_message: null,
+      retry_count: 0,
+      filters_snapshot: JSON.stringify(filters),
+    };
+
+    await this.clickhouse.insertSystem('backfill_tasks', [task]);
+    this.logger.log('Created completed backfill task for demo workspace');
   }
 }
