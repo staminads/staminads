@@ -1,12 +1,19 @@
-import { Skeleton } from 'antd'
-import { ChevronUp, ChevronDown, Minus } from 'lucide-react'
+import { Statistic, Skeleton, Popover } from 'antd'
+import { ArrowUpOutlined, ArrowDownOutlined, MinusOutlined } from '@ant-design/icons'
 import type { ExploreTotals } from '../../types/explore'
+import type { CustomDimensionLabels } from '../../types/workspace'
 import { formatNumber } from '../../lib/chart-utils'
+import { getHeatMapColor, getDimensionLabel } from '../../lib/explore-utils'
 
 interface ExploreSummaryProps {
   totals?: ExploreTotals
   showComparison: boolean
   loading?: boolean
+  bestTimeScore?: number
+  maxMedianDuration?: number
+  timescoreReference?: number
+  maxDimensionValues?: Record<string, string | number | null>
+  customDimensionLabels?: CustomDimensionLabels | null
 }
 
 function formatDuration(seconds: number): string {
@@ -18,67 +25,51 @@ function formatDuration(seconds: number): string {
   return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`
 }
 
-function formatPercent(value: number): string {
-  return `${value.toFixed(1)}%`
-}
-
 interface ChangeIndicatorProps {
   value?: number
-  invertColors?: boolean
-}
-
-function ChangeIndicator({ value, invertColors = false }: ChangeIndicatorProps) {
-  if (value === undefined || value === null) return null
-
-  const isPositive = value > 0
-  const isNegative = value < 0
-  const isNeutral = value === 0
-
-  // For metrics where lower is better (e.g., bounce rate), invert the colors
-  const positiveColor = invertColors ? 'text-orange-500' : 'text-green-600'
-  const negativeColor = invertColors ? 'text-green-600' : 'text-orange-500'
-
-  return (
-    <span
-      className={`text-xs flex items-center ${
-        isPositive ? positiveColor : isNegative ? negativeColor : 'text-gray-400'
-      }`}
-    >
-      {isPositive ? (
-        <ChevronUp size={12} />
-      ) : isNegative ? (
-        <ChevronDown size={12} />
-      ) : isNeutral ? (
-        <Minus size={10} className="mr-0.5" />
-      ) : null}
-      {Math.abs(value).toFixed(1)}%
-    </span>
-  )
-}
-
-interface MetricItemProps {
-  label: string
-  value: string
-  change?: number
   invertColors?: boolean
   showComparison: boolean
 }
 
-function MetricItem({ label, value, change, invertColors, showComparison }: MetricItemProps) {
+function ChangeIndicator({ value, invertColors = false, showComparison }: ChangeIndicatorProps) {
+  if (!showComparison || value === undefined || value === null) return null
+
+  const isPositive = value > 0
+  const isNegative = value < 0
+
+  // For metrics where lower is better (e.g., bounce rate), invert the colors
+  const positiveColor = invertColors ? '#f97316' : '#16a34a'
+  const negativeColor = invertColors ? '#16a34a' : '#f97316'
+  const color = isPositive ? positiveColor : isNegative ? negativeColor : '#9ca3af'
+
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-gray-500 text-sm">{label}</span>
-      <span className="text-base font-semibold text-gray-800">{value}</span>
-      {showComparison && <ChangeIndicator value={change} invertColors={invertColors} />}
-    </div>
+    <span style={{ color, fontSize: 12, marginLeft: 8, display: 'inline-flex', alignItems: 'center' }}>
+      {isPositive ? (
+        <ArrowUpOutlined style={{ fontSize: 10 }} />
+      ) : isNegative ? (
+        <ArrowDownOutlined style={{ fontSize: 10 }} />
+      ) : (
+        <MinusOutlined style={{ fontSize: 10 }} />
+      )}
+      <span style={{ marginLeft: 2 }}>{Math.abs(value).toFixed(1)}%</span>
+    </span>
   )
 }
 
-export function ExploreSummary({ totals, showComparison, loading }: ExploreSummaryProps) {
+export function ExploreSummary({
+  totals,
+  showComparison,
+  loading,
+  bestTimeScore,
+  maxMedianDuration,
+  timescoreReference,
+  maxDimensionValues,
+  customDimensionLabels,
+}: ExploreSummaryProps) {
   if (loading || !totals) {
     return (
-      <div className="bg-white rounded-md px-5 py-3 mb-6">
-        <div className="flex items-center gap-8">
+      <div className="bg-white rounded-md px-6 py-4 mb-6">
+        <div className="flex justify-between">
           <Skeleton.Input active size="small" style={{ width: 100 }} />
           <Skeleton.Input active size="small" style={{ width: 100 }} />
           <Skeleton.Input active size="small" style={{ width: 100 }} />
@@ -88,36 +79,111 @@ export function ExploreSummary({ totals, showComparison, loading }: ExploreSumma
     )
   }
 
+  const timescoreHeatColor = getHeatMapColor(
+    totals.median_duration,
+    maxMedianDuration ?? totals.median_duration,
+    timescoreReference
+  )
+
   return (
-    <div className="bg-white rounded-md px-5 py-3 mb-6">
-      <div className="flex items-center justify-between">
-        <MetricItem
-          label="Sessions"
+    <div className="bg-white rounded-md px-6 py-4 mb-6">
+      <div className="flex justify-between items-center">
+        <Statistic
+          title="Sessions"
           value={formatNumber(totals.sessions)}
-          change={totals.sessions_change}
-          showComparison={showComparison}
+          suffix={
+            <ChangeIndicator
+              value={totals.sessions_change}
+              showComparison={showComparison}
+            />
+          }
         />
 
-        <MetricItem
-          label="TimeScore"
+        <Statistic
+          title="TimeScore"
           value={formatDuration(totals.median_duration)}
-          change={totals.median_duration_change}
-          showComparison={showComparison}
+          valueStyle={{
+            backgroundColor: timescoreHeatColor,
+            padding: '2px 8px',
+            borderRadius: 4,
+          }}
+          suffix={
+            <ChangeIndicator
+              value={totals.median_duration_change}
+              showComparison={showComparison}
+            />
+          }
         />
 
-        <MetricItem
-          label="Bounce Rate"
-          value={formatPercent(totals.bounce_rate)}
-          change={totals.bounce_rate_change}
-          invertColors={true}
-          showComparison={showComparison}
+        {bestTimeScore !== undefined && bestTimeScore > 0 && (
+          <Popover
+            content={
+              <div className="text-sm">
+                <div className="font-medium mb-2">Best performing combination:</div>
+                {maxDimensionValues && Object.keys(maxDimensionValues).length > 0 ? (
+                  <div className="space-y-1">
+                    {Object.entries(maxDimensionValues).map(([dim, value]) => (
+                      <div key={dim} className="flex gap-2">
+                        <span className="text-gray-500">{getDimensionLabel(dim, customDimensionLabels)}:</span>
+                        <span className="font-medium">
+                          {value === null || value === '' ? '(not set)' : String(value)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-gray-500">No dimension data available</div>
+                )}
+              </div>
+            }
+            title={null}
+            trigger="hover"
+          >
+            <div style={{ cursor: 'pointer' }}>
+              <Statistic
+                title="Best TimeScore"
+                value={formatDuration(bestTimeScore)}
+                valueStyle={{
+                  backgroundColor: getHeatMapColor(
+                    bestTimeScore,
+                    maxMedianDuration ?? bestTimeScore,
+                    timescoreReference
+                  ),
+                  padding: '2px 8px',
+                  borderRadius: 4,
+                }}
+              />
+            </div>
+          </Popover>
+        )}
+
+        <Statistic
+          title="Bounce Rate"
+          value={totals.bounce_rate.toFixed(1)}
+          suffix={
+            <>
+              %
+              <ChangeIndicator
+                value={totals.bounce_rate_change}
+                invertColors
+                showComparison={showComparison}
+              />
+            </>
+          }
         />
 
-        <MetricItem
-          label="Avg. Scroll"
-          value={formatPercent(totals.max_scroll)}
-          change={totals.max_scroll_change}
-          showComparison={showComparison}
+        <Statistic
+          title="Avg. Scroll"
+          value={totals.max_scroll.toFixed(1)}
+          suffix={
+            <>
+              %
+              <ChangeIndicator
+                value={totals.max_scroll_change}
+                showComparison={showComparison}
+              />
+            </>
+          }
         />
       </div>
     </div>

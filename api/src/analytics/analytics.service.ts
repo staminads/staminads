@@ -311,15 +311,29 @@ export class AnalyticsService {
     const queryDto = { ...dto, dateRange: resolvedDateRange };
     const { sql, params } = buildExtremesQuery(queryDto, metricContext);
 
-    // Execute query
-    const result = await this.clickhouse.queryWorkspace<{
-      min: number;
-      max: number;
-    }>(dto.workspace_id, sql, params);
+    // Execute query - result includes dimension columns for max row
+    const result = await this.clickhouse.queryWorkspace<Record<string, unknown>>(
+      dto.workspace_id,
+      sql,
+      params,
+    );
+
+    const row = result[0] || {};
+
+    // Extract dimension values from the result (all columns except min/max)
+    const maxDimensionValues: Record<string, string | number | null> = {};
+    for (const dim of dto.groupBy) {
+      const dimDef = DIMENSIONS[dim];
+      if (dimDef && row[dimDef.column] !== undefined) {
+        maxDimensionValues[dim] = row[dimDef.column] as string | number | null;
+      }
+    }
 
     return {
-      min: result[0]?.min ?? null,
-      max: result[0]?.max ?? null,
+      min: (row.min as number) ?? null,
+      max: (row.max as number) ?? null,
+      maxDimensionValues:
+        Object.keys(maxDimensionValues).length > 0 ? maxDimensionValues : undefined,
       meta: {
         metric: dto.metric,
         groupBy: dto.groupBy,

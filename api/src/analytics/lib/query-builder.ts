@@ -196,20 +196,34 @@ export function buildExtremesQuery(
     ? `HAVING count() >= ${query.havingMinSessions}`
     : '';
 
-  // Inner query: group by dimensions, compute metric
-  const innerSql = `
-SELECT ${metricSql} as value
-FROM sessions FINAL
-WHERE ${whereConditions.join('\n  AND ')}
-GROUP BY ${groupByCols.join(', ')}
-${havingClause}`.trim();
+  // Build dimension select list for returning winning values
+  const dimensionSelectList = groupByCols.join(', ');
 
-  // Outer query: find min/max
+  // Two-stage query: find extremes AND the dimension values that achieved them
+  // Use subqueries instead of CTEs to avoid ClickHouse database prefix issues
   const sql = `
-SELECT min(value) as min, max(value) as max
+SELECT
+  sub.min as min,
+  sub.max as max,
+  max_row.${groupByCols.join(', max_row.')}
 FROM (
-  ${innerSql}
-) sub`.trim();
+  SELECT min(value) as min, max(value) as max
+  FROM (
+    SELECT ${metricSql} as value
+    FROM sessions FINAL
+    WHERE ${whereConditions.join('\n      AND ')}
+    GROUP BY ${dimensionSelectList}
+    ${havingClause}
+  ) grouped
+) sub
+LEFT JOIN (
+  SELECT ${dimensionSelectList}, ${metricSql} as value
+  FROM sessions FINAL
+  WHERE ${whereConditions.join('\n    AND ')}
+  GROUP BY ${dimensionSelectList}
+  ${havingClause}
+) max_row ON max_row.value = sub.max
+LIMIT 1`.trim();
 
   const params: Record<string, unknown> = {
     date_start: query.dateRange.start,

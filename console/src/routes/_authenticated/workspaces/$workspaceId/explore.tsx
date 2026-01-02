@@ -172,12 +172,13 @@ function Explore() {
   })
 
   // Query for extremes (min/max median_duration) for heat map coloring
+  // Groups by ALL dimensions to find true global max across all dimension combinations
   const { data: extremesData } = useQuery({
-    queryKey: ['explore', 'extremes', workspaceId, dimensions[0], dateRange, filters, minSessions, timezone],
+    queryKey: ['explore', 'extremes', workspaceId, dimensions, dateRange, filters, minSessions, timezone],
     queryFn: () => api.analytics.extremes({
       workspace_id: workspaceId,
       metric: 'median_duration',
-      groupBy: [dimensions[0]],
+      groupBy: dimensions,
       dateRange,
       filters,
       timezone,
@@ -500,6 +501,11 @@ function Explore() {
         totals={totals}
         showComparison={showComparison}
         loading={isInitialFetching && !totals}
+        bestTimeScore={extremesData?.max ?? undefined}
+        maxMedianDuration={maxMedianDuration}
+        timescoreReference={workspace.timescore_reference ?? 60}
+        maxDimensionValues={extremesData?.maxDimensionValues}
+        customDimensionLabels={workspace.custom_dimensions}
       />
 
       <div className="rounded-md overflow-hidden">
@@ -510,7 +516,8 @@ function Explore() {
           onExpand={handleExpand}
           onExpandedRowsChange={setExpandedRowKeys}
           loadingRows={loadingRows}
-          maxMedianDuration={Math.max(workspace.timescore_reference ?? 60, maxMedianDuration)}
+          maxMedianDuration={maxMedianDuration}
+          timescoreReference={workspace.timescore_reference ?? 60}
           showComparison={showComparison}
           loading={isInitialFetching && reportData.length === 0}
           customDimensionLabels={workspace.custom_dimensions}
@@ -518,6 +525,7 @@ function Explore() {
           onBreakdownClick={openBreakdown}
           onBreakdownHover={prefetchBreakdown}
           minSessions={minSessions}
+          maxDimensionValues={extremesData?.maxDimensionValues}
         />
       </div>
 

@@ -275,25 +275,37 @@ export function setRowLoading(
 
 /**
  * Calculate heat map color based on median duration value
- * Green for values close to best, fading to white for lower values
+ * Two-tone gradient with reference as pivot:
+ * - Below reference: white → green
+ * - Above reference: green → cyan (to spot exceptional sources)
  */
 export function getHeatMapColor(
   value: number,
   bestValue: number,
+  referenceValue?: number,
 ): string {
   if (!bestValue || value <= 0) return 'transparent'
 
-  // Ratio of current value to best value (0 to 1+)
-  const ratio = Math.min(value / bestValue, 1)
+  const reference = referenceValue ?? bestValue
+  const effectiveMax = Math.max(bestValue, reference) // Ceiling must be >= reference
 
-  // Intensity: 0% = no color (white), 100% = full green
-  const intensity = ratio
-
-  // HSL: 142 is green hue, 70% saturation
-  // Lightness: 100% = white, 60% = visible green
-  const lightness = 100 - (intensity * 40) // Range: 100% to 60%
-
-  return `hsl(142, 70%, ${lightness}%)`
+  if (value <= reference) {
+    // Below/at reference: white → green
+    const ratio = value / reference
+    const lightness = 100 - (ratio * 40) // 100% → 60%
+    return `hsl(142, 70%, ${lightness}%)`
+  } else {
+    // Above reference: green → cyan
+    const headroom = effectiveMax - reference
+    if (headroom <= 0) {
+      // Edge case: max == reference, full cyan immediately
+      return `hsl(180, 70%, 50%)`
+    }
+    const aboveRatio = Math.min((value - reference) / headroom, 1)
+    const hue = 142 + (aboveRatio * 38) // 142 → 180 (cyan)
+    const lightness = 60 - (aboveRatio * 10) // 60% → 50%
+    return `hsl(${hue}, 70%, ${lightness}%)`
+  }
 }
 
 /**
@@ -302,8 +314,9 @@ export function getHeatMapColor(
 export function getHeatMapStyle(
   value: number,
   bestValue: number,
+  referenceValue?: number,
 ): React.CSSProperties {
-  const backgroundColor = getHeatMapColor(value, bestValue)
+  const backgroundColor = getHeatMapColor(value, bestValue, referenceValue)
   return {
     backgroundColor,
     transition: 'background-color 0.2s ease',

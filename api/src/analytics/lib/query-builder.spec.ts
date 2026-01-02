@@ -309,14 +309,22 @@ describe('buildExtremesQuery', () => {
     dateRange: { start: '2025-12-01', end: '2025-12-28' },
   };
 
-  it('builds min/max query with subquery', () => {
+  it('builds min/max query with dimension values that achieved max', () => {
     const { sql, params } = buildExtremesQuery(baseExtremesQuery);
 
-    expect(sql).toContain('min(value) as min');
-    expect(sql).toContain('max(value) as max');
-    expect(sql).toContain('FROM (');
-    expect(sql).toContain(') sub');
+    // Outer query should select min, max, and dimension values from max_row
+    expect(sql).toContain('sub.min as min');
+    expect(sql).toContain('sub.max as max');
+    expect(sql).toContain('max_row.utm_source');
+
+    // Should have LEFT JOIN to find dimension values that achieved max
+    expect(sql).toContain('LEFT JOIN');
+    expect(sql).toContain('ON max_row.value = sub.max');
+
+    // Inner grouped query structure
     expect(sql).toContain('GROUP BY utm_source');
+    expect(sql).toContain('LIMIT 1');
+
     expect(params.date_start).toBe('2025-12-01');
     expect(params.date_end).toBe('2025-12-28');
   });
@@ -337,16 +345,17 @@ describe('buildExtremesQuery', () => {
     expect(sql).toContain('count() as value');
   });
 
-  it('includes HAVING in inner query when havingMinSessions specified', () => {
+  it('includes HAVING in both subqueries when havingMinSessions specified', () => {
     const { sql } = buildExtremesQuery({
       ...baseExtremesQuery,
       havingMinSessions: 10,
     });
 
     expect(sql).toContain('HAVING count() >= 10');
-    // Verify HAVING is in inner query (before ) sub)
-    const innerQuery = sql.split(') sub')[0];
-    expect(innerQuery).toContain('HAVING count() >= 10');
+    // HAVING should appear twice: once in the grouped subquery for min/max,
+    // and once in the max_row join subquery
+    const havingMatches = sql.match(/HAVING count\(\) >= 10/g);
+    expect(havingMatches).toHaveLength(2);
   });
 
   it('omits HAVING when havingMinSessions not specified', () => {
@@ -355,7 +364,7 @@ describe('buildExtremesQuery', () => {
     expect(sql).not.toContain('HAVING');
   });
 
-  it('applies filters to inner query', () => {
+  it('applies filters to both subqueries', () => {
     const { sql, params } = buildExtremesQuery({
       ...baseExtremesQuery,
       filters: [{ dimension: 'device', operator: 'equals', values: ['mobile'] }],
@@ -363,6 +372,9 @@ describe('buildExtremesQuery', () => {
 
     expect(sql).toContain('device = {f0:String}');
     expect(params.f0).toBe('mobile');
+    // Filter should appear twice: once in grouped subquery, once in max_row join
+    const filterMatches = sql.match(/device = \{f0:String\}/g);
+    expect(filterMatches).toHaveLength(2);
   });
 
   it('handles multiple groupBy dimensions', () => {
@@ -372,6 +384,8 @@ describe('buildExtremesQuery', () => {
     });
 
     expect(sql).toContain('GROUP BY utm_source, device');
+    // Should include all dimension values from max_row in SELECT
+    expect(sql).toContain('max_row.utm_source, max_row.device');
   });
 
   it('throws for unknown metric', () => {

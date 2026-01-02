@@ -5,6 +5,7 @@ import { formatDuration } from '../../lib/chart-utils'
 interface HeatMapCellProps {
   value: number
   bestValue: number
+  referenceValue?: number
   previousValue?: number
   changePercent?: number
   showComparison?: boolean
@@ -13,11 +14,12 @@ interface HeatMapCellProps {
 export function HeatMapCell({
   value,
   bestValue,
+  referenceValue,
   previousValue,
   changePercent,
   showComparison = false,
 }: HeatMapCellProps) {
-  const style = getHeatMapStyle(value, bestValue)
+  const style = getHeatMapStyle(value, bestValue, referenceValue)
 
   // Format duration value (seconds to human readable)
   const formattedValue = formatDuration(value)

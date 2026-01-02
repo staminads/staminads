@@ -154,7 +154,7 @@ export class DemoService {
       timezone: 'America/New_York',
       currency: 'USD',
       logo_url: 'https://www.apple.com/ac/structured-data/images/knowledge_graph_logo.png',
-      timescore_reference: 60,
+      timescore_reference: 180, // 3 minutes
       bounce_threshold: 10,
       status: 'active',
       custom_dimensions: JSON.stringify(DEMO_CUSTOM_DIMENSION_LABELS),

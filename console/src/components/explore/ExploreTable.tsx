@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useCallback } from 'react'
 import { Table, Empty, Spin, Tooltip, Button } from 'antd'
 import { SquarePlus, SquareMinus, Loader2, ChevronUp, ChevronDown, TriangleAlert } from 'lucide-react'
 import { EyeOutlined } from '@ant-design/icons'
@@ -17,6 +17,7 @@ interface ExploreTableProps {
   onExpandedRowsChange: (expandedRows: React.Key[]) => void
   loadingRows: Set<string>
   maxMedianDuration: number
+  timescoreReference?: number
   showComparison: boolean
   loading?: boolean
   customDimensionLabels?: CustomDimensionLabels | null
@@ -24,6 +25,7 @@ interface ExploreTableProps {
   onBreakdownClick?: (row: ExploreRow) => void
   onBreakdownHover?: (row: ExploreRow) => void
   minSessions?: number
+  maxDimensionValues?: Record<string, string | number | null>
 }
 
 function formatPercentage(value: number): string {
@@ -70,14 +72,39 @@ export function ExploreTable({
   onExpandedRowsChange,
   loadingRows,
   maxMedianDuration,
+  timescoreReference,
   showComparison,
   loading = false,
   customDimensionLabels,
   totals,
   onBreakdownClick,
   onBreakdownHover,
-  minSessions
+  minSessions,
+  maxDimensionValues
 }: ExploreTableProps) {
+  // Check if a row matches the best TimeScore dimension values
+  // Only checks dimensions that exist in the row (for hierarchical matching)
+  const isWinningRow = useCallback((record: ExploreRow): boolean => {
+    if (!maxDimensionValues || Object.keys(maxDimensionValues).length === 0) {
+      return false
+    }
+
+    // Get dimensions this row has values for (based on its level in hierarchy)
+    const rowDimensions = dimensions.slice(0, (record.parentDimensionIndex ?? 0) + 1)
+    if (rowDimensions.length === 0) return false
+
+    // Check if all dimensions this row has match the winning values
+    return rowDimensions.every((dim) => {
+      if (!(dim in maxDimensionValues)) return true // Dimension not in winning set
+      const rowValue = record[dim]
+      const winningValue = maxDimensionValues[dim]
+      // Handle null/empty comparisons
+      if (winningValue === null || winningValue === '') {
+        return rowValue === null || rowValue === '' || rowValue === undefined
+      }
+      return rowValue === winningValue
+    })
+  }, [maxDimensionValues, dimensions])
   const columns: ColumnsType<ExploreRow> = useMemo(() => {
     // Get the current dimension being displayed (the last one that has data)
     const getCurrentDimensionForRow = (row: ExploreRow): string => {
@@ -137,7 +164,7 @@ export function ExploreTable({
       },
       {
         title: (
-          <Tooltip title="Median session duration in seconds">
+          <Tooltip title="Median session duration. Green = meets reference, Cyan = exceeds reference (exceptional engagement).">
             <span className="cursor-help border-b border-dotted border-gray-400">TimeScore</span>
           </Tooltip>
         ),
@@ -148,6 +175,7 @@ export function ExploreTable({
           <HeatMapCell
             value={value}
             bestValue={maxMedianDuration}
+            referenceValue={timescoreReference}
             previousValue={record.median_duration_prev}
             changePercent={record.median_duration_change}
             showComparison={showComparison}
@@ -240,8 +268,7 @@ export function ExploreTable({
       rowKey="key"
       loading={loading}
       pagination={false}
-      // size="large"
-      // scroll={{ x: 800 }}
+      rowClassName={(record) => isWinningRow(record) ? 'best-timescore-row' : ''}
       expandable={{
         expandedRowKeys,
         expandRowByClick: true,

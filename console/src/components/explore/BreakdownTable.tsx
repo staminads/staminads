@@ -1,4 +1,4 @@
-import { Table } from 'antd'
+import { Table, Tooltip } from 'antd'
 import type { UseQueryResult } from '@tanstack/react-query'
 import { HeatMapCell } from './HeatMapCell'
 import { getDimensionLabel } from '../../lib/explore-utils'
@@ -26,10 +26,10 @@ export function BreakdownTableView({
     ? data.data
     : (data?.data as { current?: unknown[] })?.current || []
 
-  // Find max median_duration for heat map scaling
+  // Find max median_duration for heat map scaling (start from 0, let color function handle reference)
   const maxMedian = (rows as Record<string, unknown>[]).reduce(
     (max, row) => Math.max(max, (row.median_duration as number) || 0),
-    timescoreReference
+    0
   )
 
   const columns = [
@@ -51,11 +51,15 @@ export function BreakdownTableView({
       render: (v: number) => formatNumber(v),
     },
     {
-      title: 'TimeScore',
+      title: (
+        <Tooltip title="Green = meets reference, Cyan = exceeds reference">
+          <span className="cursor-help border-b border-dotted border-gray-400">TimeScore</span>
+        </Tooltip>
+      ),
       dataIndex: 'median_duration',
       width: 100,
       align: 'right' as const,
-      render: (v: number) => <HeatMapCell value={v} bestValue={maxMedian} />,
+      render: (v: number) => <HeatMapCell value={v} bestValue={maxMedian} referenceValue={timescoreReference} />,
     },
     {
       title: 'Bounce',

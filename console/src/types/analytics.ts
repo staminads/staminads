@@ -111,6 +111,7 @@ export interface ExtremesQuery {
 export interface ExtremesResponse {
   min: number | null
   max: number | null
+  maxDimensionValues?: Record<string, string | number | null>
   meta: {
     metric: string
     groupBy: string[]
