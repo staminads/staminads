@@ -39,6 +39,7 @@ ignore:
   - "**/*.module.ts"
   - "**/*.dto.ts"
   - "**/*.entity.ts"
+  - "**/*.spec.ts"
   - "**/main.ts"
   - "**/index.ts"
   - "**/test/**"

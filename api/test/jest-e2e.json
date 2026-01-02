@@ -1,16 +1,27 @@
 {
   "moduleFileExtensions": ["js", "json", "ts"],
-  "rootDir": ".",
+  "rootDir": "..",
   "testEnvironment": "node",
-  "testRegex": ".e2e-spec.ts$",
+  "testRegex": "test/.*\\.e2e-spec\\.ts$",
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   },
-  "globalSetup": "<rootDir>/setup.ts",
-  "globalTeardown": "<rootDir>/teardown.ts",
+  "globalSetup": "<rootDir>/test/setup.ts",
+  "globalTeardown": "<rootDir>/test/teardown.ts",
   "testTimeout": 30000,
   "moduleNameMapper": {
-    "^src/(.*)$": "<rootDir>/../src/$1"
+    "^src/(.*)$": "<rootDir>/src/$1"
   },
-  "forceExit": true
+  "forceExit": true,
+  "collectCoverageFrom": [
+    "<rootDir>/src/**/*.(t|j)s",
+    "!<rootDir>/src/**/*.module.ts",
+    "!<rootDir>/src/**/*.dto.ts",
+    "!<rootDir>/src/**/*.entity.ts",
+    "!<rootDir>/src/**/*.spec.ts",
+    "!<rootDir>/src/**/main.ts",
+    "!<rootDir>/src/**/index.ts"
+  ],
+  "coverageDirectory": "<rootDir>/coverage-e2e",
+  "coverageReporters": ["json", "lcov"]
 }

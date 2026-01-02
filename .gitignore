@@ -16,6 +16,9 @@ npm-debug.log*
 
 # Coverage
 coverage/
+coverage-unit/
+coverage-e2e/
+.nyc_output/
 
 # IDE
 .idea/
