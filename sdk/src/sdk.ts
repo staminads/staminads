@@ -735,7 +735,10 @@ export class StaminadsSDK {
       // SDK
       sdk_version: SDK_VERSION,
       tab_id: this.sessionManager.getTabId(),
-      sent_at: Date.now(),
+
+      // Timestamps (sent_at set by sender on transmission)
+      created_at: session.created_at,  // Session start (stable)
+      updated_at: Date.now(),          // User interaction time (now, before queue)
 
       // Custom dimensions
       ...this.sessionManager.getDimensionsPayload(),

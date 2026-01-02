@@ -1227,29 +1227,31 @@ Integration tests validate multiple modules working together. Located in `tests/
 |----------|-------|--------|
 | Full session lifecycle | 10 | ✅ |
 | Tab switching duration accuracy | 7 | ✅ |
-| Browser close data persistence | 10 | ⚠️ (7/10 pass) |
-| Mobile behavior | 10 | ⚠️ (9/10 pass) |
+| Browser close data persistence | 9 | ✅ |
+| Mobile behavior (desktop + mobile emulation) | 16 | ✅ |
 | Slow network handling | 11 | ✅ |
 
-**Total: 56 tests (49 passing, 87.5%)**
+**Total: 53 tests (53 passing, 100%)**
 
 **Run:** `npm run test:e2e`
 
 **Test Files:**
 ```
 tests/e2e/
-├── fixtures.ts           # Custom Playwright fixtures with stealth mode
+├── fixtures.ts               # Custom Playwright fixtures
 ├── fixtures/
-│   ├── test-page.html    # Basic test page with SDK
-│   └── spa-page.html     # SPA test page for navigation
+│   ├── test-page.html        # Basic test page with SDK
+│   └── spa-page.html         # SPA test page for navigation
 ├── helpers/
-│   └── mock-server.ts    # Express mock API server
-├── session-lifecycle.spec.ts  # Session creation, resume, events
-├── duration-accuracy.spec.ts  # Focus/blur timing
-├── data-persistence.spec.ts   # localStorage/sessionStorage
-├── mobile-behavior.spec.ts    # Desktop behavior
-├── mobile-emulation.spec.ts   # Mobile device emulation
-└── network-handling.spec.ts   # Beacon, fetch, queue, offline
+│   └── mock-server.ts        # Express mock API server
+├── session-lifecycle.spec.ts # Session creation, resume, events (10 tests)
+├── duration-accuracy.spec.ts # Focus/blur timing (7 tests)
+├── data-persistence.spec.ts  # localStorage/sessionStorage (9 tests)
+├── mobile-behavior.spec.ts   # Desktop behavior (2 tests)
+├── mobile-emulation.spec.ts  # Mobile device emulation with Pixel 5 (8 tests)
+├── network-handling.spec.ts  # Beacon, fetch, queue, offline, retry (11 tests)
+├── clock-skew.spec.ts        # Client clock skew detection (5 tests)
+└── debug.spec.ts             # Debug/bot detection (1 test)
 ```
 
 ---

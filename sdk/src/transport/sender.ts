@@ -28,6 +28,9 @@ export class Sender {
    * Send event payload
    */
   async send(payload: TrackEventPayload): Promise<boolean> {
+    // Set sent_at at transmission time (not when event was created)
+    payload.sent_at = Date.now();
+
     const url = `${this.endpoint}/api/track`;
     const data = JSON.stringify(payload);
 
@@ -170,6 +173,9 @@ export class Sender {
       // Try to send
       item.attempts++;
       item.last_attempt = Date.now();
+
+      // Reset sent_at to NOW on retry (not the original queue time)
+      item.payload.sent_at = Date.now();
 
       const url = `${this.endpoint}/api/track`;
       const data = JSON.stringify(item.payload);

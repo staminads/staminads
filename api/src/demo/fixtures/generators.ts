@@ -389,7 +389,7 @@ function generateSessionEvents(
   const cdValues = evaluateFilters(filters, fieldValues);
 
   // Base event properties (shared across all events in session)
-  const baseProps: Omit<TrackingEvent, 'created_at' | 'name' | 'path' | 'duration' | 'max_scroll'> = {
+  const baseProps: Omit<TrackingEvent, 'received_at' | 'created_at' | 'updated_at' | 'name' | 'path' | 'duration' | 'max_scroll'> = {
     session_id: sessionId,
     workspace_id: workspaceId,
     referrer: referrerUrl ?? '',
@@ -442,9 +442,14 @@ function generateSessionEvents(
   };
 
   // Event 1: screen_view (landing page)
+  // Session start timestamp (SDK session creation time)
+  const sessionCreatedAt = toClickHouseDateTime(sessionStart);
+
   events.push({
     ...baseProps,
-    created_at: toClickHouseDateTime(sessionStart),
+    received_at: toClickHouseDateTime(sessionStart),  // Server timestamp
+    created_at: sessionCreatedAt,                      // SDK session start
+    updated_at: toClickHouseDateTime(sessionStart),   // SDK interaction time
     name: 'screen_view',
     path: page.path,
     duration: 0,
@@ -456,7 +461,9 @@ function generateSessionEvents(
     const scrollTime = new Date(sessionStart.getTime() + duration * 300); // 30% into session
     events.push({
       ...baseProps,
-      created_at: toClickHouseDateTime(scrollTime),
+      received_at: toClickHouseDateTime(scrollTime),
+      created_at: sessionCreatedAt,
+      updated_at: toClickHouseDateTime(scrollTime),
       name: 'scroll',
       path: page.path,
       duration: 0,
@@ -470,7 +477,9 @@ function generateSessionEvents(
     const secondPageTime = new Date(sessionStart.getTime() + duration * 500); // 50% into session
     events.push({
       ...baseProps,
-      created_at: toClickHouseDateTime(secondPageTime),
+      received_at: toClickHouseDateTime(secondPageTime),
+      created_at: sessionCreatedAt,
+      updated_at: toClickHouseDateTime(secondPageTime),
       name: 'screen_view',
       path: secondPage.path,
       duration: 0,
@@ -483,7 +492,9 @@ function generateSessionEvents(
     const endTime = new Date(sessionStart.getTime() + duration * 1000);
     events.push({
       ...baseProps,
-      created_at: toClickHouseDateTime(endTime),
+      received_at: toClickHouseDateTime(endTime),
+      created_at: sessionCreatedAt,
+      updated_at: toClickHouseDateTime(endTime),
       name: 'scroll',
       path: events[events.length - 1].path, // Same as last page
       duration: 0,

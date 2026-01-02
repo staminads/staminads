@@ -65,6 +65,8 @@ describe('EventsService', () => {
     name: 'screen_view',
     path: '/test-page',
     landing_page: 'https://example.com/landing',
+    created_at: 1704067200000,  // 2024-01-01T00:00:00.000Z
+    updated_at: 1704067200000,
     ...overrides,
   });
 

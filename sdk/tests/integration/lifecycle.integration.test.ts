@@ -56,6 +56,8 @@ describe('Page Lifecycle Integration', () => {
     path: '/page',
     landing_page: 'https://example.com',
     duration: durationTracker.getFocusDurationSeconds(),
+    created_at: 1705320000000,  // 2024-01-15T12:00:00.000Z
+    updated_at: Date.now(),
   });
 
   beforeEach(() => {

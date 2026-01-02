@@ -158,7 +158,9 @@ export class EventsService {
     const baseEvent: TrackingEvent = {
       session_id: dto.session_id,
       workspace_id: dto.workspace_id,
-      created_at: now,
+      received_at: now,  // Server timestamp
+      created_at: toClickHouseDateTime(new Date(dto.created_at)),  // SDK session start
+      updated_at: toClickHouseDateTime(new Date(dto.updated_at)),  // SDK last interaction
       name: dto.name,
       path: dto.path,
       duration: dto.duration ?? 0,

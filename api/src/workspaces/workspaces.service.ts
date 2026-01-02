@@ -129,12 +129,8 @@ export class WorkspacesService {
       serializeWorkspace(workspace),
     ]);
 
-    // 3. Update status to active
-    await this.clickhouse.commandSystem(
-      `ALTER TABLE workspaces UPDATE status = 'active', updated_at = now64(3) WHERE id = '${dto.id}'`,
-    );
-
-    return { ...workspace, status: 'active' };
+    // Status remains 'initializing' until first event is received
+    return workspace;
   }
 
   async update(dto: UpdateWorkspaceDto): Promise<Workspace> {

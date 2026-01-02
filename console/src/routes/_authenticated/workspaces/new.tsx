@@ -18,10 +18,10 @@ function NewWorkspaceForm() {
 
   const mutation = useMutation({
     mutationFn: api.workspaces.create,
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['workspaces'] })
       message.success('Workspace created')
-      navigate({ to: '/' })
+      navigate({ to: '/workspaces/$workspaceId/install-sdk', params: { workspaceId: data.id } })
     },
     onError: () => message.error('Failed to create workspace'),
   })

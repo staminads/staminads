@@ -40,6 +40,8 @@ describe('Sender', () => {
     name: 'ping',
     path: '/page',
     landing_page: 'https://example.com',
+    created_at: 1705320000000,  // 2024-01-15T12:00:00.000Z
+    updated_at: 1705320000000,
     ...overrides,
   });
 

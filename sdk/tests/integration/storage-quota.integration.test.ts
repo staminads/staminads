@@ -75,6 +75,8 @@ describe('Storage Quota Integration', () => {
     name: 'ping',
     path: '/page',
     landing_page: 'https://example.com',
+    created_at: 1705320000000,  // 2024-01-15T12:00:00.000Z
+    updated_at: 1705320000000,
     ...overrides,
   });
 
@@ -114,6 +116,11 @@ describe('Storage Quota Integration', () => {
       trackSPA: true,
       trackScroll: true,
       trackClicks: false,
+      heartbeatTiers: [
+        { after: 0, desktopInterval: 10000, mobileInterval: 7000 },
+      ],
+      heartbeatMaxDuration: 10 * 60 * 1000,
+      resetHeartbeatOnNavigation: false,
     };
   });
 

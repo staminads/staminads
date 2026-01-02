@@ -65,4 +65,5 @@ export interface UpdateWorkspaceInput {
   timescore_reference?: number
   bounce_threshold?: number
   integrations?: WorkspaceIntegration[]
+  status?: WorkspaceStatus
 }

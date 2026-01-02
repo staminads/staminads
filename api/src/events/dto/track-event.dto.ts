@@ -148,6 +148,13 @@ export class TrackEventDto {
   @IsString()
   sdk_version?: string;
 
+  // Timestamps (from SDK) - required
+  @IsNumber()
+  created_at: number;
+
+  @IsNumber()
+  updated_at: number;
+
   // Flexible properties
   @IsOptional()
   @IsObject()

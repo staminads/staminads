@@ -162,7 +162,11 @@ export interface TrackEventPayload {
   // SDK
   sdk_version?: string;
   tab_id?: string;
-  sent_at?: number;
+
+  // Timestamps
+  created_at: number;    // Session start timestamp (ms) - required
+  updated_at: number;    // User interaction timestamp (ms) - required
+  sent_at?: number;      // Network transmission timestamp (ms) - set by sender
 
   // Custom dimensions
   stm_1?: string;

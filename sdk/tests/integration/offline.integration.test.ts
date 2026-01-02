@@ -48,6 +48,8 @@ describe('Offline/Online Integration', () => {
     path: '/page',
     landing_page: 'https://example.com',
     duration: 10,
+    created_at: 1705320000000,  // 2024-01-15T12:00:00.000Z
+    updated_at: 1705320000000,
     ...overrides,
   });
 
@@ -115,22 +117,20 @@ describe('Offline/Online Integration', () => {
       expect(queuedPayload.stm_1).toBe('custom-value');
     });
 
-    it('preserves sent_at timestamp when queued offline', async () => {
+    it('sets sent_at timestamp at transmission time', async () => {
       mockSendBeacon.mockReturnValue(false);
       mockFetch.mockRejectedValue(new Error('Network error'));
 
-      const sentAt = Date.now();
-      const originalPayload = createPayload({
-        sent_at: sentAt,
-      });
+      const originalPayload = createPayload();
+      // Note: sent_at is not set in payload - sender sets it at transmission time
 
       await sender.send(originalPayload);
 
       const queue = JSON.parse(mockLocalStorage._store['stm_pending']);
       const queuedPayload = queue[0].payload;
 
-      // Verify sent_at is preserved for clock skew detection
-      expect(queuedPayload.sent_at).toBe(sentAt);
+      // sent_at should be set by sender at transmission time (Date.now() = 1705320000000)
+      expect(queuedPayload.sent_at).toBe(1705320000000);
     });
 
     it('multiple failed events queue in order', async () => {
@@ -152,21 +152,21 @@ describe('Offline/Online Integration', () => {
   });
 
   describe('flushing queue on online', () => {
-    it('flushQueue sends queued items with original sent_at preserved', async () => {
-      // Pre-fill queue with items that have sent_at
-      const sentAt1 = Date.now() - 5000; // 5 seconds ago
-      const sentAt2 = Date.now() - 3000; // 3 seconds ago
+    it('flushQueue resets sent_at to current time on retry', async () => {
+      // Pre-fill queue with items that have old sent_at
+      const oldSentAt1 = Date.now() - 5000; // 5 seconds ago
+      const oldSentAt2 = Date.now() - 3000; // 3 seconds ago
       const queuedItems: QueuedPayload[] = [
         {
           id: 'item-1',
-          payload: createPayload({ path: '/page-1', sent_at: sentAt1 }),
+          payload: createPayload({ path: '/page-1', sent_at: oldSentAt1 }),
           created_at: Date.now() - 5000,
           attempts: 0,
           last_attempt: null,
         },
         {
           id: 'item-2',
-          payload: createPayload({ path: '/page-2', sent_at: sentAt2 }),
+          payload: createPayload({ path: '/page-2', sent_at: oldSentAt2 }),
           created_at: Date.now() - 3000,
           attempts: 0,
           last_attempt: null,
@@ -182,14 +182,15 @@ describe('Offline/Online Integration', () => {
 
       await sender.flushQueue();
 
-      // Verify sent_at timestamps are preserved in the sent payloads
+      // Verify sent_at is reset to NOW (current time) on retry, not preserved
       expect(mockFetch).toHaveBeenCalledTimes(2);
 
       const call1Body = JSON.parse(mockFetch.mock.calls[0][1].body);
       const call2Body = JSON.parse(mockFetch.mock.calls[1][1].body);
 
-      expect(call1Body.sent_at).toBe(sentAt1);
-      expect(call2Body.sent_at).toBe(sentAt2);
+      // Both should have sent_at = Date.now() (1705320000000 in fake timers)
+      expect(call1Body.sent_at).toBe(Date.now());
+      expect(call2Body.sent_at).toBe(Date.now());
     });
 
     it('flushQueue sends all queued items when back online', async () => {

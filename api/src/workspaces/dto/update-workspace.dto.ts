@@ -6,15 +6,21 @@ import {
   IsObject,
   IsNumber,
   IsBoolean,
+  IsIn,
   Min,
   Max,
 } from 'class-validator';
 import { FilterDefinition } from '../../filters/entities/filter.entity';
 import { Integration } from '../entities/integration.entity';
+import type { WorkspaceStatus } from '../entities/workspace.entity';
 
 export class UpdateWorkspaceDto {
   @IsString()
   id: string;
+
+  @IsOptional()
+  @IsIn(['initializing', 'active', 'inactive', 'error'])
+  status?: WorkspaceStatus;
 
   @IsOptional()
   @IsString()

@@ -27,8 +27,7 @@ export const DIMENSIONS: Record<string, DimensionDefinition> = {
   landing_page: { name: 'landing_page', column: 'landing_page', type: 'string', category: 'Pages' },
   landing_domain: { name: 'landing_domain', column: 'landing_domain', type: 'string', category: 'Pages' },
   landing_path: { name: 'landing_path', column: 'landing_path', type: 'string', category: 'Pages' },
-  entry_page: { name: 'entry_page', column: 'entry_page', type: 'string', category: 'Pages' },
-  exit_page: { name: 'exit_page', column: 'exit_page', type: 'string', category: 'Pages' },
+  exit_path: { name: 'exit_path', column: 'exit_path', type: 'string', category: 'Pages' },
 
   // Device
   device: { name: 'device', column: 'device', type: 'string', category: 'Device' },
