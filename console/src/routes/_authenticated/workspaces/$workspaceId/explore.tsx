@@ -25,7 +25,7 @@ import {
 } from '../../../../lib/explore-utils'
 import { api } from '../../../../lib/api'
 import type { ExploreRow, ExploreTotals } from '../../../../types/explore'
-import type { DatePreset } from '../../../../types/analytics'
+import type { DatePreset, Filter } from '../../../../types/analytics'
 import type { ExploreConfigOutput } from '../../../../types/assistant'
 
 export const Route = createFileRoute('/_authenticated/workspaces/$workspaceId/explore')({
@@ -128,6 +128,15 @@ function Explore() {
       customEnd,
     })
   }, [sendPrompt, dimensions, filters, period, comparison, minSessions, customStart, customEnd])
+
+  // Handle template selection (dimensions + optional filters)
+  const handleSelectTemplate = useCallback((dims: string[], templateFilters?: Filter[]) => {
+    if (templateFilters && templateFilters.length > 0) {
+      setAll({ dimensions: dims, filters: templateFilters })
+    } else {
+      setDimensions(dims)
+    }
+  }, [setAll, setDimensions])
 
   // State for the hierarchical data
   const [reportData, setReportData] = useState<ExploreRow[]>([])
@@ -432,7 +441,7 @@ function Explore() {
         <p className="text-gray-500 mb-6">Select a report template to get started, or create your own custom report.</p>
 
         <ExploreTemplates
-          onSelectTemplate={setDimensions}
+          onSelectTemplate={handleSelectTemplate}
           customDimensionLabels={workspace.custom_dimensions}
         />
 

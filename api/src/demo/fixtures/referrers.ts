@@ -1,7 +1,7 @@
 export interface Referrer {
   domain: string | null;
   path?: string;
-  category: 'search' | 'social' | 'tech-news' | 'retailer' | 'direct' | 'internal';
+  category: 'search' | 'social' | 'tech-news' | 'retailer' | 'direct' | 'internal' | 'other';
   channelGroup: string;
   durationMultiplier: number;
   weight: number;
@@ -195,6 +195,36 @@ export const REFERRERS: Referrer[] = [
     category: 'retailer',
     channelGroup: 'Referral',
     durationMultiplier: 0.8,
+    weight: 1,
+  },
+
+  // Uncategorized sources (will show as "not-mapped" in channel filters)
+  {
+    domain: 'news.ycombinator.com',
+    category: 'other',
+    channelGroup: 'Referral',
+    durationMultiplier: 1.5,
+    weight: 2,
+  },
+  {
+    domain: 'slickdeals.net',
+    category: 'other',
+    channelGroup: 'Referral',
+    durationMultiplier: 0.6,
+    weight: 1,
+  },
+  {
+    domain: 'quora.com',
+    category: 'other',
+    channelGroup: 'Referral',
+    durationMultiplier: 1.1,
+    weight: 1,
+  },
+  {
+    domain: 'medium.com',
+    category: 'other',
+    channelGroup: 'Referral',
+    durationMultiplier: 1.3,
     weight: 1,
   },
 
