@@ -6,7 +6,6 @@ import type { CustomDimensionLabels } from '../../types/workspace'
 import { evaluateConditions, simulateOperations, testAllFilters } from '../../lib/filter-evaluator'
 
 interface TestFilterModalProps {
-  workspaceId: string
   conditions?: FilterCondition[]
   operations?: FilterOperation[]
   filters?: Filter[]
@@ -40,7 +39,6 @@ interface MultiResult {
 }
 
 export function TestFilterModal({
-  workspaceId,
   conditions,
   operations,
   filters,
@@ -138,7 +136,7 @@ export function TestFilterModal({
         const hiddenCount = record.filter.conditions.length - 2
         return (
           <div className="flex flex-col gap-1">
-            {visibleConditions.map((c, i) => (
+            {visibleConditions.map((c: FilterCondition, i: number) => (
               <div key={i} className="inline-flex items-center gap-1 text-sm">
                 <Tag bordered={false} color="green">{c.field}</Tag>
                 <Tag bordered={false} color="blue">{c.operator}</Tag>
@@ -157,7 +155,7 @@ export function TestFilterModal({
       key: 'operations',
       render: (_: unknown, record: MultiResult) => (
         <div className="flex flex-col gap-1">
-          {record.filter.operations.map((op, i) => (
+          {record.filter.operations.map((op: FilterOperation, i: number) => (
             <div key={i} className="inline-flex items-center gap-1 text-sm">
               <Tooltip title={op.dimension}>
                 <Tag bordered={false} color="purple">

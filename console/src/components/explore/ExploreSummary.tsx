@@ -4,6 +4,7 @@ import type { ExploreTotals } from '../../types/explore'
 import type { CustomDimensionLabels } from '../../types/workspace'
 import { formatNumber } from '../../lib/chart-utils'
 import { getHeatMapColor, getDimensionLabel } from '../../lib/explore-utils'
+import { DaysOfWeek } from '../../lib/dictionaries'
 
 interface ExploreSummaryProps {
   totals?: ExploreTotals
@@ -143,7 +144,11 @@ export function ExploreSummary({
                       <div key={dim} className="flex gap-2">
                         <span className="text-gray-500">{getDimensionLabel(dim, customDimensionLabels)}:</span>
                         <span className="font-medium">
-                          {value === null || value === '' ? '(not set)' : String(value)}
+                          {value === null || value === ''
+                            ? '(not set)'
+                            : dim === 'day_of_week' && typeof value === 'number'
+                              ? DaysOfWeek[value] ?? String(value)
+                              : String(value)}
                         </span>
                       </div>
                     ))}

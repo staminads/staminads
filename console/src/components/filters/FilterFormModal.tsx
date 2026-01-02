@@ -261,7 +261,6 @@ export function FilterFormModal({
       </Drawer>
 
       <TestFilterModal
-        workspaceId={workspaceId}
         conditions={currentConditions}
         operations={currentOperations}
         customDimensionLabels={customDimensionLabels}

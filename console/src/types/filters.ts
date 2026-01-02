@@ -1,4 +1,4 @@
-export type FilterOperator = 'equals' | 'regex' | 'contains'
+export type FilterOperator = 'equals' | 'not_equals' | 'contains' | 'not_contains' | 'starts_with' | 'ends_with' | 'regex'
 export type FilterAction = 'set_value' | 'unset_value' | 'set_default_value'
 
 export interface FilterCondition {
@@ -31,6 +31,9 @@ export interface FilterWithStaleness extends FilterDefinition {
   staleSessionCount: number
   totalSessionCount: number
 }
+
+// Alias for backward compatibility
+export type Filter = FilterDefinition
 
 export interface CreateFilterInput {
   workspace_id: string
@@ -120,7 +123,11 @@ export const WRITABLE_DIMENSIONS = [
 
 export const OPERATORS = [
   { value: 'equals' as const, label: 'equals' },
+  { value: 'not_equals' as const, label: 'not equals' },
   { value: 'contains' as const, label: 'contains' },
+  { value: 'not_contains' as const, label: 'not contains' },
+  { value: 'starts_with' as const, label: 'starts with' },
+  { value: 'ends_with' as const, label: 'ends with' },
   { value: 'regex' as const, label: 'matches regex' },
 ] as const
 

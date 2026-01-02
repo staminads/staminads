@@ -3,7 +3,6 @@ import { Select, Input, Button, Popconfirm } from 'antd'
 import { DeleteOutlined } from '@ant-design/icons'
 import type { FilterCondition, FilterOperator } from '../../types/filters'
 import { SOURCE_FIELDS, OPERATORS } from '../../types/filters'
-import type { BaseSelectRef } from 'rc-select'
 
 interface ConditionRowProps {
   index: number
@@ -32,7 +31,8 @@ const fieldOptions = Object.entries(groupedFields).map(([category, fields]) => (
 }))
 
 export function ConditionRow({ index, value, onChange, onRemove, isOnlyCondition, autoFocus, onFocused }: ConditionRowProps) {
-  const selectRef = useRef<BaseSelectRef>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const selectRef = useRef<any>(null)
   const [isOpen, setIsOpen] = useState(false)
 
   useEffect(() => {

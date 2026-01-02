@@ -4,7 +4,6 @@ import { DeleteOutlined } from '@ant-design/icons'
 import type { FilterOperation, FilterAction } from '../../types/filters'
 import { WRITABLE_DIMENSIONS, FILTER_ACTIONS } from '../../types/filters'
 import type { CustomDimensionLabels } from '../../types/workspace'
-import type { BaseSelectRef } from 'rc-select'
 
 interface OperationRowProps {
   index: number
@@ -53,7 +52,8 @@ function getDimensionOptions(customLabels?: CustomDimensionLabels | null) {
 }
 
 export function OperationRow({ index, value, onChange, onRemove, isOnlyOperation, customDimensionLabels, autoFocus, onFocused }: OperationRowProps) {
-  const selectRef = useRef<BaseSelectRef>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const selectRef = useRef<any>(null)
   const [isOpen, setIsOpen] = useState(false)
   const showValueInput = value.action === 'set_value' || value.action === 'set_default_value'
   const dimensionOptions = getDimensionOptions(customDimensionLabels)

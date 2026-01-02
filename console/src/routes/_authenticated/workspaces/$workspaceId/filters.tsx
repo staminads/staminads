@@ -44,6 +44,7 @@ function FiltersPage() {
 
   const setSelectedTag = (tag: string) => {
     navigate({
+      to: '.',
       search: { tag: tag === 'all' ? undefined : tag },
       replace: true,
     })
@@ -154,7 +155,6 @@ function FiltersPage() {
       />
 
       <TestFilterModal
-        workspaceId={workspaceId}
         filters={filters}
         customDimensionLabels={workspace.custom_dimensions}
         open={testModalOpen}

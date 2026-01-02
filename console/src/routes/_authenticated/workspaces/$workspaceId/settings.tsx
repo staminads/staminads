@@ -67,7 +67,7 @@ function Settings() {
   const { data: workspace } = useSuspenseQuery(workspaceQueryOptions(workspaceId))
 
   const setActiveSection = (newSection: SettingsSection) => {
-    navigate({ search: { section: newSection } })
+    navigate({ to: '.', search: { section: newSection } })
   }
 
   const [form] = Form.useForm()

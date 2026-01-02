@@ -7,6 +7,28 @@ export type WorkspaceStatus = 'initializing' | 'active' | 'inactive' | 'error'
  */
 export type CustomDimensionLabels = Record<string, string>
 
+export interface WorkspaceIntegrationSettings {
+  api_key_encrypted: string
+  model: string
+  max_tokens?: number
+  temperature?: number
+}
+
+export interface WorkspaceIntegrationLimits {
+  max_requests_per_hour?: number
+  max_tokens_per_day?: number
+}
+
+export interface WorkspaceIntegration {
+  id: string
+  type: 'anthropic'
+  enabled: boolean
+  created_at: string
+  updated_at: string
+  settings: WorkspaceIntegrationSettings
+  limits?: WorkspaceIntegrationLimits
+}
+
 export interface Workspace {
   id: string
   name: string
@@ -20,6 +42,7 @@ export interface Workspace {
   bounce_threshold: number
   status: WorkspaceStatus
   custom_dimensions?: CustomDimensionLabels | null
+  integrations?: WorkspaceIntegration[]
 }
 
 export interface CreateWorkspaceInput {
@@ -41,4 +64,5 @@ export interface UpdateWorkspaceInput {
   custom_dimensions?: CustomDimensionLabels
   timescore_reference?: number
   bounce_threshold?: number
+  integrations?: WorkspaceIntegration[]
 }

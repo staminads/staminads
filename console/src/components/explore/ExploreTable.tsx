@@ -5,6 +5,7 @@ import { EyeOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { HeatMapCell } from './HeatMapCell'
 import { getDimensionLabel, canExpandRow } from '../../lib/explore-utils'
+import { DaysOfWeek } from '../../lib/dictionaries'
 import { formatNumber } from '../../lib/chart-utils'
 import type { ExploreRow, ExploreTotals } from '../../types/explore'
 import type { CustomDimensionLabels } from '../../types/workspace'
@@ -119,8 +120,14 @@ export function ExploreTable({
         render: (_, record) => {
           const currentDim = getCurrentDimensionForRow(record)
           const value = record[currentDim]
-          const displayValue =
-            value === null || value === '' || value === undefined ? '(empty)' : String(value)
+          let displayValue: string
+          if (value === null || value === '' || value === undefined) {
+            displayValue = '(empty)'
+          } else if (currentDim === 'day_of_week' && typeof value === 'number') {
+            displayValue = DaysOfWeek[value] ?? String(value)
+          } else {
+            displayValue = String(value)
+          }
 
           return (
             <span className="whitespace-nowrap">

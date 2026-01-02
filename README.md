@@ -30,4 +30,3 @@ A source of traffic can be any dimensions or combination of dimensions such as:
 - export to CSV
 - SDK
 - docs
-- day of week as "Monday..." in Explore results
