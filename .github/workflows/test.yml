@@ -70,6 +70,7 @@ jobs:
       JWT_SECRET: test-secret-key
       ADMIN_EMAIL: admin@test.com
       ADMIN_PASSWORD: testpass
+      ENCRYPTION_KEY: test-encryption-key-32-chars-ok!
 
     steps:
       - name: Checkout

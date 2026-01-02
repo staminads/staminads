@@ -166,7 +166,7 @@ describe('Analytics E2E', () => {
         .expect(200);
 
       expect(response.body.data).toHaveLength(1);
-      expect(response.body.data[0].sessions).toBe(30);
+      expect(Number(response.body.data[0].sessions)).toBe(30);
       expect(response.body.meta.metrics).toEqual(['sessions']);
     });
 
@@ -183,7 +183,7 @@ describe('Analytics E2E', () => {
 
       expect(response.body.data[0]).toHaveProperty('sessions');
       expect(response.body.data[0]).toHaveProperty('avg_duration');
-      expect(response.body.data[0].sessions).toBe(30);
+      expect(Number(response.body.data[0].sessions)).toBe(30);
     });
 
     it('groups by dimension', async () => {
@@ -237,7 +237,7 @@ describe('Analytics E2E', () => {
         })
         .expect(200);
 
-      expect(response.body.data[0].sessions).toBe(15); // Half are mobile
+      expect(Number(response.body.data[0].sessions)).toBe(15); // Half are mobile
     });
 
     it('applies in filter correctly', async () => {
@@ -254,7 +254,7 @@ describe('Analytics E2E', () => {
         })
         .expect(200);
 
-      expect(response.body.data[0].sessions).toBe(15); // Half are google
+      expect(Number(response.body.data[0].sessions)).toBe(15); // Half are google
     });
 
     it('returns time series with granularity', async () => {
@@ -298,7 +298,7 @@ describe('Analytics E2E', () => {
       const dec14 = response.body.data.find(
         (d: { date_day: string }) => d.date_day === '2025-12-14',
       );
-      expect(dec14?.sessions).toBe(0);
+      expect(Number(dec14?.sessions)).toBe(0);
     });
 
     it('resolves date preset', async () => {
@@ -329,8 +329,8 @@ describe('Analytics E2E', () => {
         .expect(200);
 
       // First row should have fewer sessions
-      expect(response.body.data[0].sessions).toBeLessThanOrEqual(
-        response.body.data[1].sessions,
+      expect(Number(response.body.data[0].sessions)).toBeLessThanOrEqual(
+        Number(response.body.data[1].sessions),
       );
     });
 
@@ -499,8 +499,8 @@ describe('Analytics E2E', () => {
         })
         .expect(200);
 
-      expect(response.body.min).toBe(15);
-      expect(response.body.max).toBe(15);
+      expect(Number(response.body.min)).toBe(15);
+      expect(Number(response.body.max)).toBe(15);
     });
 
     it('applies filters correctly', async () => {
