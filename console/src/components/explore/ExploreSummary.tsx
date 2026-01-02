@@ -1,4 +1,4 @@
-import { Statistic, Skeleton, Popover } from 'antd'
+import { Statistic, Skeleton, Popover, Divider } from 'antd'
 import { ArrowUpOutlined, ArrowDownOutlined, MinusOutlined } from '@ant-design/icons'
 import type { ExploreTotals } from '../../types/explore'
 import type { CustomDimensionLabels } from '../../types/workspace'
@@ -85,12 +85,15 @@ export function ExploreSummary({
     timescoreReference
   )
 
+  const valueStyle = { fontSize: 20 }
+
   return (
     <div className="bg-white rounded-md px-6 py-4 mb-6">
       <div className="flex justify-between items-center">
         <Statistic
           title="Sessions"
           value={formatNumber(totals.sessions)}
+          valueStyle={valueStyle}
           suffix={
             <ChangeIndicator
               value={totals.sessions_change}
@@ -99,14 +102,24 @@ export function ExploreSummary({
           }
         />
 
+        <Divider type="vertical" style={{ height: 40 }} />
+
         <Statistic
-          title="TimeScore"
+          title="Median TimeScore"
           value={formatDuration(totals.median_duration)}
-          valueStyle={{
-            backgroundColor: timescoreHeatColor,
-            padding: '2px 8px',
-            borderRadius: 4,
-          }}
+          valueStyle={valueStyle}
+          prefix={
+            <span
+              style={{
+                display: 'inline-block',
+                width: 10,
+                height: 10,
+                borderRadius: '50%',
+                backgroundColor: timescoreHeatColor,
+                marginRight: 6,
+              }}
+            />
+          }
           suffix={
             <ChangeIndicator
               value={totals.median_duration_change}
@@ -114,6 +127,10 @@ export function ExploreSummary({
             />
           }
         />
+
+        {bestTimeScore !== undefined && bestTimeScore > 0 && (
+          <Divider type="vertical" style={{ height: 40 }} />
+        )}
 
         {bestTimeScore !== undefined && bestTimeScore > 0 && (
           <Popover
@@ -143,23 +160,34 @@ export function ExploreSummary({
               <Statistic
                 title="Best TimeScore"
                 value={formatDuration(bestTimeScore)}
-                valueStyle={{
-                  backgroundColor: getHeatMapColor(
-                    bestTimeScore,
-                    maxMedianDuration ?? bestTimeScore,
-                    timescoreReference
-                  ),
-                  padding: '2px 8px',
-                  borderRadius: 4,
-                }}
+                valueStyle={valueStyle}
+                prefix={
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: 10,
+                      height: 10,
+                      borderRadius: '50%',
+                      backgroundColor: getHeatMapColor(
+                        bestTimeScore,
+                        maxMedianDuration ?? bestTimeScore,
+                        timescoreReference
+                      ),
+                      marginRight: 6,
+                    }}
+                  />
+                }
               />
             </div>
           </Popover>
         )}
 
+        <Divider type="vertical" style={{ height: 40 }} />
+
         <Statistic
           title="Bounce Rate"
           value={totals.bounce_rate.toFixed(1)}
+          valueStyle={valueStyle}
           suffix={
             <>
               %
@@ -172,9 +200,12 @@ export function ExploreSummary({
           }
         />
 
+        <Divider type="vertical" style={{ height: 40 }} />
+
         <Statistic
           title="Avg. Scroll"
           value={totals.max_scroll.toFixed(1)}
+          valueStyle={valueStyle}
           suffix={
             <>
               %
