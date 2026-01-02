@@ -147,21 +147,13 @@ export class DeviceDetector {
 
   /**
    * Get connection type via Network Information API
+   * Only Chromium-based browsers support this (Chrome 61+, Edge 79+, Opera 48+)
+   * Firefox/Safari return empty string (graceful degradation)
    */
   private getConnectionType(): string {
-    const connection =
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (navigator as any).connection ||
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (navigator as any).mozConnection ||
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (navigator as any).webkitConnection;
-
-    if (connection?.effectiveType) {
-      return connection.effectiveType; // '4g', '3g', '2g', 'slow-2g'
-    }
-
-    return '';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const connection = (navigator as any).connection;
+    return connection?.effectiveType || '';
   }
 
   /**

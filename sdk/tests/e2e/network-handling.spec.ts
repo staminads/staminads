@@ -37,7 +37,7 @@ test.describe('Network Handling', () => {
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
 
-    await page.evaluate(() => Staminads.track('fetch_fallback_test'));
+    await page.evaluate(() => Staminads.trackEvent('fetch_fallback_test'));
     await page.waitForTimeout(500);
 
     const response = await request.get('/api/test/events/fetch_fallback_test');
@@ -47,6 +47,12 @@ test.describe('Network Handling', () => {
   });
 
   test('queues events when server fails', async ({ page, request }) => {
+    // Disable sendBeacon - it doesn't report server errors (fire-and-forget)
+    await page.addInitScript(() => {
+      // @ts-expect-error - Mocking navigator
+      navigator.sendBeacon = () => false;
+    });
+
     // Configure server to fail
     await request.post('/api/test/fail');
 
@@ -54,8 +60,8 @@ test.describe('Network Handling', () => {
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
 
-    // Track event (should queue)
-    await page.evaluate(() => Staminads.track('will_queue'));
+    // Track event (should queue since server fails)
+    await page.evaluate(() => Staminads.trackEvent('will_queue'));
     await page.waitForTimeout(1000);
 
     // Check queue
@@ -68,6 +74,12 @@ test.describe('Network Handling', () => {
   });
 
   test('retries queued events with exponential backoff', async ({ page, request }) => {
+    // Disable sendBeacon - it doesn't report server errors (fire-and-forget)
+    await page.addInitScript(() => {
+      // @ts-expect-error - Mocking navigator
+      navigator.sendBeacon = () => false;
+    });
+
     // Configure server to fail twice then succeed
     await request.post('/api/test/fail/2');
 
@@ -75,13 +87,49 @@ test.describe('Network Handling', () => {
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
 
-    // Track event
+    // Track event (first attempt fails, gets queued)
     await page.evaluate(() => Staminads.track('retry_test'));
+    await page.waitForTimeout(500);
 
-    // Wait for retries (base 1s * 2^attempts with jitter)
-    await page.waitForTimeout(5000);
+    // Queue flush is triggered by visibility changes, not automatic timers
+    // Flow:
+    // 1. Initial send fails → queued (attempts=0)
+    // 2. First flush: tries (fail #1) → attempts=1, needs 2s backoff
+    // 3. Second flush after 2s: tries (fail #2) → attempts=2, needs 4s backoff
+    // 4. Third flush after 4s: tries → succeeds
 
-    // Event should eventually succeed
+    // Helper to trigger visibility change (flushQueue is called on visible)
+    const triggerFlush = async () => {
+      await page.evaluate(() => {
+        Object.defineProperty(document, 'visibilityState', { value: 'hidden', writable: true });
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await page.waitForTimeout(50);
+      await page.evaluate(() => {
+        Object.defineProperty(document, 'visibilityState', { value: 'visible', writable: true });
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await page.waitForTimeout(200);
+    };
+
+    // First flush - will fail (server fail #1), sets attempts=1
+    await triggerFlush();
+
+    // Wait for 2s backoff + buffer
+    await page.waitForTimeout(2500);
+
+    // Second flush - will fail (server fail #2), sets attempts=2
+    await triggerFlush();
+
+    // Wait for 4s backoff + buffer
+    await page.waitForTimeout(4500);
+
+    // Third flush - will succeed
+    await triggerFlush();
+
+    await page.waitForTimeout(500);
+
+    // Event should have succeeded after retries
     const response = await request.get('/api/test/events/retry_test');
     const events = await response.json();
 
@@ -97,7 +145,7 @@ test.describe('Network Handling', () => {
     await page.evaluate(() => window.SDK_READY);
 
     // Track event
-    await page.evaluate(() => Staminads.track('slow_network_test'));
+    await page.evaluate(() => Staminads.trackEvent('slow_network_test'));
 
     // Wait for slow response
     await page.waitForTimeout(3000);
@@ -109,6 +157,12 @@ test.describe('Network Handling', () => {
   });
 
   test('queues events when offline', async ({ page, context, request }) => {
+    // Disable sendBeacon - it may queue internally even when offline
+    await page.addInitScript(() => {
+      // @ts-expect-error - Mocking navigator
+      navigator.sendBeacon = () => false;
+    });
+
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
@@ -116,8 +170,8 @@ test.describe('Network Handling', () => {
     // Go offline
     await context.setOffline(true);
 
-    // Track event while offline
-    await page.evaluate(() => Staminads.track('offline_event'));
+    // Track event while offline (should queue since network fails)
+    await page.evaluate(() => Staminads.trackEvent('offline_event'));
     await page.waitForTimeout(500);
 
     // Event should be queued
@@ -141,6 +195,12 @@ test.describe('Network Handling', () => {
   });
 
   test('sends pending events on page visibility change', async ({ page, request }) => {
+    // Disable sendBeacon - it doesn't report server errors (fire-and-forget)
+    await page.addInitScript(() => {
+      // @ts-expect-error - Mocking navigator
+      navigator.sendBeacon = () => false;
+    });
+
     // Configure server to fail initially
     await request.post('/api/test/fail');
 
@@ -148,8 +208,8 @@ test.describe('Network Handling', () => {
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
 
-    // Track event (will queue)
-    await page.evaluate(() => Staminads.track('visibility_test'));
+    // Track event (will queue since server fails)
+    await page.evaluate(() => Staminads.trackEvent('visibility_test'));
     await page.waitForTimeout(500);
 
     // Fix server
@@ -212,9 +272,9 @@ test.describe('Network Handling', () => {
 
     // Track multiple events
     await page.evaluate(() => {
-      Staminads.track('event_1');
-      Staminads.track('event_2');
-      Staminads.track('event_3');
+      Staminads.trackEvent('event_1');
+      Staminads.trackEvent('event_2');
+      Staminads.trackEvent('event_3');
     });
 
     await page.waitForTimeout(500);
@@ -252,7 +312,7 @@ test.describe('Network Handling', () => {
     // Track many events
     await page.evaluate(() => {
       for (let i = 0; i < 150; i++) {
-        Staminads.track('bulk_event_' + i);
+        Staminads.trackEvent('bulk_event_' + i);
       }
     });
 
@@ -277,7 +337,7 @@ test.describe('Network Handling', () => {
     await page.evaluate(() => window.SDK_READY);
 
     // Track event
-    await page.evaluate(() => Staminads.track('timeout_test'));
+    await page.evaluate(() => Staminads.trackEvent('timeout_test'));
 
     // Don't wait for full timeout, just verify no crash
     await page.waitForTimeout(2000);

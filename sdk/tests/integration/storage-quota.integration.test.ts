@@ -241,24 +241,8 @@ describe('Storage Quota Integration', () => {
       mockSendBeacon.mockReturnValue(false);
       mockFetch.mockRejectedValue(new Error('Network error'));
 
-      const mockXHR = {
-        open: vi.fn(),
-        setRequestHeader: vi.fn(),
-        send: vi.fn(),
-        onload: null as (() => void) | null,
-        onerror: null as (() => void) | null,
-        ontimeout: null,
-        status: 0,
-      };
-      vi.stubGlobal('XMLHttpRequest', vi.fn(() => mockXHR));
-
       const payload = createPayload();
-      const sendPromise = sender.send(payload);
-
-      await vi.waitFor(() => expect(mockXHR.send).toHaveBeenCalled());
-      mockXHR.onerror?.();
-
-      await sendPromise;
+      await sender.send(payload);
 
       // Queue should be in memory, accessible via getQueueLength
       expect(sender.getQueueLength()).toBe(1);
@@ -275,22 +259,8 @@ describe('Storage Quota Integration', () => {
       mockSendBeacon.mockReturnValue(false);
       mockFetch.mockRejectedValue(new Error('Network error'));
 
-      const mockXHR = {
-        open: vi.fn(),
-        setRequestHeader: vi.fn(),
-        send: vi.fn(),
-        onload: null as (() => void) | null,
-        onerror: null as (() => void) | null,
-        ontimeout: null,
-        status: 0,
-      };
-      vi.stubGlobal('XMLHttpRequest', vi.fn(() => mockXHR));
-
       const payload = createPayload();
-      const sendPromise = sender.send(payload);
-      await vi.waitFor(() => expect(mockXHR.send).toHaveBeenCalled());
-      mockXHR.onerror?.();
-      await sendPromise;
+      await sender.send(payload);
 
       // Simulate visibility change and coming back
       // Queue should still be accessible

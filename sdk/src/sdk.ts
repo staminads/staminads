@@ -234,6 +234,8 @@ export class StaminadsSDK {
         // Resume heartbeat with fresh timing
         this.resumeHeartbeat();
       }
+      // Flush any pending queue when page becomes visible again
+      this.sender?.flushQueue();
     }
   };
 
@@ -733,6 +735,7 @@ export class StaminadsSDK {
       // SDK
       sdk_version: SDK_VERSION,
       tab_id: this.sessionManager.getTabId(),
+      sent_at: Date.now(),
 
       // Custom dimensions
       ...this.sessionManager.getDimensionsPayload(),

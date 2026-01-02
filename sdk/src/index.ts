@@ -49,7 +49,7 @@ const Staminads: StaminadsAPI = {
   track: (name: string, properties?: Record<string, unknown>) =>
     sdk.trackEvent(name, properties as Record<string, string> | undefined),
   trackConversion: (data: ConversionData) => sdk.trackConversion(data),
-  // Alias for trackConversion with positional args: (action, value?, currency?)
+  // Alias for trackConversion with positional args
   conversion: (action: string, value?: number, currency?: string) =>
     sdk.trackConversion({ action, value, currency }),
   setDimension: (index: number, value: string) => sdk.setDimension(index, value),

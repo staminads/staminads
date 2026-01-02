@@ -90,12 +90,12 @@
     });
 
     function trackCustomEvent() {
-      Staminads.track('button_click', { button: 'custom' });
+      Staminads.trackEvent('button_click', { button: 'custom' });
       updateStatus('Tracked: button_click');
     }
 
     function trackConversion() {
-      Staminads.conversion('signup', 99.99, 'USD');
+      Staminads.trackConversion({ action: 'signup', value: 99.99, currency: 'USD' });
       updateStatus('Tracked: conversion (signup, $99.99)');
     }
 

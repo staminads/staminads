@@ -17,19 +17,21 @@ describe('DurationTracker', () => {
     vi.unstubAllGlobals();
   });
 
-  // Helper to initialize tracker in a ready-to-track state
+  // Helper to initialize tracker in a ready-to-track state (matches real SDK behavior)
   const initializeTracker = () => {
     tracker = new DurationTracker();
-    // Note: reset() has a bug - it sets state to FOCUSED before calling startFocus(),
-    // which then returns early. We need to manually transition to set up focusStartTime.
-    // Go to BLURRED first, then resumeFocus() to properly initialize
-    tracker.pauseFocus();
-    tracker.resumeFocus();
+    tracker.startFocus(); // SDK calls this on init()
   };
 
   describe('initial state', () => {
-    it('starts in FOCUSED state', () => {
+    it('starts in BLURRED state (requires explicit startFocus)', () => {
       tracker = new DurationTracker();
+      expect(tracker.getState()).toBe('BLURRED');
+    });
+
+    it('transitions to FOCUSED after startFocus()', () => {
+      tracker = new DurationTracker();
+      tracker.startFocus();
       expect(tracker.getState()).toBe('FOCUSED');
     });
 
@@ -77,20 +79,17 @@ describe('DurationTracker', () => {
       expect(tracker.getFocusDurationSeconds()).toBe(3);
     });
 
-    it('does not count time when delta > GAP_THRESHOLD_MS (5000ms)', () => {
+    it('getFocusDurationMs includes current delta (gap detection happens in tick)', () => {
       initializeTracker();
 
       // Advance less than gap threshold
       mockPerformanceNow.mockReturnValue(3000);
       expect(tracker.getFocusDurationMs()).toBe(3000);
 
-      // Jump beyond gap threshold - delta from focusStartTime (0) is now 10000
-      // which is > GAP_THRESHOLD_MS (5000), so total should not include current delta
+      // Large time jump - getFocusDurationMs() still returns the delta
+      // because gap detection only happens in tick(), not in getFocusDurationMs()
       mockPerformanceNow.mockReturnValue(10000);
-      // The implementation returns accumulatedFocusMs (0) because delta > GAP_THRESHOLD
-      // Note: The actual behavior is that it returns 0, not the previous 3000,
-      // because focusStartTime is still 0 and delta = 10000 > 5000
-      expect(tracker.getFocusDurationMs()).toBe(0);
+      expect(tracker.getFocusDurationMs()).toBe(10000);
     });
 
     it('ignores negative time jumps', () => {
@@ -109,15 +108,13 @@ describe('DurationTracker', () => {
   describe('state machine transitions', () => {
     beforeEach(() => {
       tracker = new DurationTracker();
+      // Match real SDK behavior: startFocus() is called on init
+      tracker.startFocus();
     });
 
     describe('startFocus', () => {
       it('sets state to FOCUSED from BLURRED', () => {
-        tracker.pauseFocus(); // FOCUSED -> BLURRED (but focusStartTime is null)
-        // Need to properly initialize first
-        tracker = new DurationTracker();
-        tracker.reset(); // Initialize
-        tracker.pauseFocus(); // Now pause
+        tracker.pauseFocus();
         expect(tracker.getState()).toBe('BLURRED');
         tracker.startFocus();
         expect(tracker.getState()).toBe('FOCUSED');

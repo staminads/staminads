@@ -16,7 +16,7 @@
 │                    RELIABILITY FIRST                             │
 ├─────────────────────────────────────────────────────────────────┤
 │  1. Fail-safe storage: localStorage → Memory fallback           │
-│  2. Multi-channel transmission: Beacon → Fetch → XHR → Queue    │
+│  2. Multi-channel transmission: Beacon → Fetch → Queue          │
 │  3. Offline-first: Store-and-forward with automatic retry       │
 │  4. Redundant events: Multiple triggers for critical sends      │
 └─────────────────────────────────────────────────────────────────┘
@@ -39,7 +39,6 @@ sdk/
 │   │   ├── sender.ts            # Unified send orchestrator
 │   │   ├── beacon.ts            # navigator.sendBeacon
 │   │   ├── fetch.ts             # fetch with keepalive
-│   │   ├── xhr.ts               # XMLHttpRequest fallback
 │   │   └── queue.ts             # Offline queue with retry
 │   ├── events/
 │   │   ├── visibility.ts        # Page Visibility API
@@ -357,21 +356,7 @@ async function sendData(payload: Payload): Promise<boolean> {
     // Continue to fallback
   }
 
-  // Strategy 3: Sync XHR (last resort, blocks unload)
-  // Only used in beforeunload if async methods failed
-  if (isUnloading) {
-    try {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', url, false); // Synchronous
-      xhr.setRequestHeader('Content-Type', 'application/json');
-      xhr.send(data);
-      if (xhr.status === 200) return true;
-    } catch (e) {
-      // Continue to queue
-    }
-  }
-
-  // Strategy 4: Queue for retry
+  // Strategy 3: Queue for retry
   await queueForRetry(payload);
   return false;
 }
@@ -746,16 +731,11 @@ class DeviceDetector {
     return null;
   }
 
+  // Network Information API (Chromium-based browsers only)
+  // Firefox/Safari return empty string (graceful degradation)
   private getConnectionType(): string {
-    const connection = (navigator as any).connection ||
-                       (navigator as any).mozConnection ||
-                       (navigator as any).webkitConnection;
-
-    if (connection?.effectiveType) {
-      return connection.effectiveType; // '4g', '3g', '2g', 'slow-2g'
-    }
-
-    return '';
+    const connection = (navigator as any).connection;
+    return connection?.effectiveType || ''; // '4g', '3g', '2g', 'slow-2g'
   }
 }
 ```
@@ -1096,6 +1076,7 @@ interface TrackEventPayload {
 
   // SDK info
   sdk_version?: string;            // '5.0.0'
+  sent_at?: number;                // Unix timestamp ms when payload was sent (for clock skew detection)
 
   // Custom Dimensions (stm_1...stm_10)
   stm_1?: string;
@@ -1209,7 +1190,7 @@ All core requirements are covered. Tests located in `src/**/*.test.ts`.
 | Tiered heartbeat intervals | ✅ | `sdk.heartbeat.test.ts` |
 
 **Additional coverage:**
-- Multi-channel transmission (beacon/fetch/XHR) - `transport/sender.test.ts`
+- Multi-channel transmission (beacon/fetch) - `transport/sender.test.ts`
 - Custom dimensions (stm_1-10) - `core/session.test.ts`
 - Tab ID management - `core/session.test.ts`
 
@@ -1245,12 +1226,12 @@ Integration tests validate multiple modules working together. Located in `tests/
 | Scenario | Tests | Status |
 |----------|-------|--------|
 | Full session lifecycle | 10 | ✅ |
-| Tab switching duration accuracy | 7 | ⚠️ (4/7 pass) |
-| Browser close data persistence | 10 | ⚠️ (5/10 pass) |
-| Mobile behavior | 10 | ✅ |
-| Slow network handling | 11 | ⚠️ (7/11 pass) |
+| Tab switching duration accuracy | 7 | ✅ |
+| Browser close data persistence | 10 | ⚠️ (7/10 pass) |
+| Mobile behavior | 10 | ⚠️ (9/10 pass) |
+| Slow network handling | 11 | ✅ |
 
-**Total: 48 tests (35 passing)**
+**Total: 56 tests (49 passing, 87.5%)**
 
 **Run:** `npm run test:e2e`
 
@@ -1401,44 +1382,7 @@ const flushQueue = (events: Event[]): void => {
 };
 ```
 
-### 14.4 XHR Fallback for 98%+ Compatibility
-
-**Problem**: sendBeacon/fetch+keepalive only cover 96.5% of browsers.
-
-```typescript
-async function sendData(payload: string): Promise<boolean> {
-  const url = `${config.endpoint}/track`;
-
-  // 1. Try sendBeacon (96.5%)
-  if (navigator.sendBeacon) {
-    const blob = new Blob([payload], { type: 'application/json' });
-    if (navigator.sendBeacon(url, blob)) return true;
-  }
-
-  // 2. Try fetch with keepalive (96.5%)
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      body: payload,
-      headers: { 'Content-Type': 'application/json' },
-      keepalive: true,
-    });
-    if (res.ok) return true;
-  } catch {}
-
-  // 3. XHR fallback (98%+)
-  return new Promise((resolve) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', url, true);
-    xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.onload = () => resolve(xhr.status === 200);
-    xhr.onerror = () => resolve(false);
-    xhr.send(payload);
-  });
-}
-```
-
-### 14.5 Bfcache (Back-Forward Cache)
+### 14.4 Bfcache (Back-Forward Cache)
 
 **Problem**: Chrome/Safari cache entire pages. Back navigation can cause duplicate sessions.
 

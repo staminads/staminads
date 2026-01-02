@@ -83,25 +83,8 @@ describe('Offline/Online Integration', () => {
       mockSendBeacon.mockReturnValue(false);
       mockFetch.mockRejectedValue(new Error('Network error'));
 
-      const mockXHR = {
-        open: vi.fn(),
-        setRequestHeader: vi.fn(),
-        send: vi.fn(),
-        onload: null as (() => void) | null,
-        onerror: null as (() => void) | null,
-        ontimeout: null,
-        status: 0,
-      };
-      vi.stubGlobal('XMLHttpRequest', vi.fn(() => mockXHR));
-
       const payload = createPayload();
-      const sendPromise = sender.send(payload);
-
-      // Wait for XHR attempt
-      await vi.waitFor(() => expect(mockXHR.send).toHaveBeenCalled());
-      mockXHR.onerror?.();
-
-      await sendPromise;
+      await sender.send(payload);
 
       // Verify event was queued
       const queue = JSON.parse(mockLocalStorage._store['stm_pending'] || '[]');
@@ -113,17 +96,6 @@ describe('Offline/Online Integration', () => {
       mockSendBeacon.mockReturnValue(false);
       mockFetch.mockRejectedValue(new Error('Network error'));
 
-      const mockXHR = {
-        open: vi.fn(),
-        setRequestHeader: vi.fn(),
-        send: vi.fn(),
-        onload: null as (() => void) | null,
-        onerror: null as (() => void) | null,
-        ontimeout: null,
-        status: 0,
-      };
-      vi.stubGlobal('XMLHttpRequest', vi.fn(() => mockXHR));
-
       const originalPayload = createPayload({
         name: 'screen_view',
         duration: 42,
@@ -131,10 +103,7 @@ describe('Offline/Online Integration', () => {
         stm_1: 'custom-value',
       });
 
-      const sendPromise = sender.send(originalPayload);
-      await vi.waitFor(() => expect(mockXHR.send).toHaveBeenCalled());
-      mockXHR.onerror?.();
-      await sendPromise;
+      await sender.send(originalPayload);
 
       const queue = JSON.parse(mockLocalStorage._store['stm_pending']);
       const queuedPayload = queue[0].payload;
@@ -146,29 +115,32 @@ describe('Offline/Online Integration', () => {
       expect(queuedPayload.stm_1).toBe('custom-value');
     });
 
+    it('preserves sent_at timestamp when queued offline', async () => {
+      mockSendBeacon.mockReturnValue(false);
+      mockFetch.mockRejectedValue(new Error('Network error'));
+
+      const sentAt = Date.now();
+      const originalPayload = createPayload({
+        sent_at: sentAt,
+      });
+
+      await sender.send(originalPayload);
+
+      const queue = JSON.parse(mockLocalStorage._store['stm_pending']);
+      const queuedPayload = queue[0].payload;
+
+      // Verify sent_at is preserved for clock skew detection
+      expect(queuedPayload.sent_at).toBe(sentAt);
+    });
+
     it('multiple failed events queue in order', async () => {
       mockSendBeacon.mockReturnValue(false);
       mockFetch.mockRejectedValue(new Error('Network error'));
 
-      const mockXHR = {
-        open: vi.fn(),
-        setRequestHeader: vi.fn(),
-        send: vi.fn(),
-        onload: null as (() => void) | null,
-        onerror: null as (() => void) | null,
-        ontimeout: null,
-        status: 0,
-      };
-      vi.stubGlobal('XMLHttpRequest', vi.fn(() => mockXHR));
-
       // Send 3 events
       for (let i = 1; i <= 3; i++) {
         const payload = createPayload({ path: `/page-${i}` });
-        const sendPromise = sender.send(payload);
-        await vi.waitFor(() => expect(mockXHR.send).toHaveBeenCalled());
-        mockXHR.onerror?.();
-        await sendPromise;
-        mockXHR.send.mockClear();
+        await sender.send(payload);
       }
 
       const queue = JSON.parse(mockLocalStorage._store['stm_pending']);
@@ -180,6 +152,46 @@ describe('Offline/Online Integration', () => {
   });
 
   describe('flushing queue on online', () => {
+    it('flushQueue sends queued items with original sent_at preserved', async () => {
+      // Pre-fill queue with items that have sent_at
+      const sentAt1 = Date.now() - 5000; // 5 seconds ago
+      const sentAt2 = Date.now() - 3000; // 3 seconds ago
+      const queuedItems: QueuedPayload[] = [
+        {
+          id: 'item-1',
+          payload: createPayload({ path: '/page-1', sent_at: sentAt1 }),
+          created_at: Date.now() - 5000,
+          attempts: 0,
+          last_attempt: null,
+        },
+        {
+          id: 'item-2',
+          payload: createPayload({ path: '/page-2', sent_at: sentAt2 }),
+          created_at: Date.now() - 3000,
+          attempts: 0,
+          last_attempt: null,
+        },
+      ];
+      mockLocalStorage._store['stm_pending'] = JSON.stringify(queuedItems);
+
+      storage = new Storage();
+      sender = new Sender('https://api.example.com', storage);
+
+      mockSendBeacon.mockReturnValue(false);
+      mockFetch.mockResolvedValue({ ok: true });
+
+      await sender.flushQueue();
+
+      // Verify sent_at timestamps are preserved in the sent payloads
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+
+      const call1Body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const call2Body = JSON.parse(mockFetch.mock.calls[1][1].body);
+
+      expect(call1Body.sent_at).toBe(sentAt1);
+      expect(call2Body.sent_at).toBe(sentAt2);
+    });
+
     it('flushQueue sends all queued items when back online', async () => {
       // Pre-fill queue with items
       const queuedItems: QueuedPayload[] = [
@@ -392,26 +404,13 @@ describe('Offline/Online Integration', () => {
       // Force all sends to fail to trigger queue
       mockSendBeacon.mockReturnValue(false);
       mockFetch.mockRejectedValue(new Error('fail'));
-      const mockXHR = {
-        open: vi.fn(),
-        setRequestHeader: vi.fn(),
-        send: vi.fn(),
-        onload: null as (() => void) | null,
-        onerror: null as (() => void) | null,
-        ontimeout: null,
-        status: 0,
-      };
-      vi.stubGlobal('XMLHttpRequest', vi.fn(() => mockXHR));
 
       storage = new Storage();
       sender = new Sender('https://api.example.com', storage);
 
       // Try to add 51st item
       const newPayload = createPayload({ path: '/page-new' });
-      const sendPromise = sender.send(newPayload);
-      await vi.waitFor(() => expect(mockXHR.send).toHaveBeenCalled());
-      mockXHR.onerror?.();
-      await sendPromise;
+      await sender.send(newPayload);
 
       const queue = JSON.parse(mockLocalStorage._store['stm_pending']);
       expect(queue.length).toBe(50);

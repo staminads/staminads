@@ -13,7 +13,8 @@ export class DurationTracker {
   private accumulatedFocusMs = 0;
   private lastTickTime = 0;
   private tickInterval: ReturnType<typeof setInterval> | null = null;
-  private state: FocusState = 'FOCUSED';
+  // Start in BLURRED state so first startFocus() call works properly
+  private state: FocusState = 'BLURRED';
   private onTick: (() => void) | null = null;
   private debug: boolean;
 
@@ -107,8 +108,9 @@ export class DurationTracker {
       const now = performance.now();
       const delta = now - this.focusStartTime;
 
-      // Guard against negative time jumps
-      if (delta > 0 && delta < GAP_THRESHOLD_MS) {
+      // Guard against negative time jumps only
+      // (positive deltas are always valid - gap detection happens in tick())
+      if (delta > 0) {
         total += delta;
       }
     }
@@ -131,7 +133,8 @@ export class DurationTracker {
     this.focusStartTime = null;
     this.lastTickTime = 0;
     this.stopTicking();
-    this.state = 'FOCUSED';
+    // Set to BLURRED so startFocus() will properly initialize
+    this.state = 'BLURRED';
     this.startFocus();
   }
 

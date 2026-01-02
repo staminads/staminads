@@ -162,6 +162,7 @@ export interface TrackEventPayload {
   // SDK
   sdk_version?: string;
   tab_id?: string;
+  sent_at?: number;
 
   // Custom dimensions
   stm_1?: string;

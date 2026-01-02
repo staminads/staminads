@@ -10,7 +10,7 @@ Ultra-reliable web analytics SDK for tracking **TimeScore** metrics with millise
 ## Features
 
 - **Focus State Machine**: FOCUSED → BLURRED → HIDDEN states with precise transitions
-- **Multi-Channel Transmission**: Beacon → Fetch → XHR → Offline Queue (never lose data)
+- **Multi-Channel Transmission**: Beacon → Fetch → Offline Queue (never lose data)
 - **localStorage + Memory Fallback**: Simple, reliable storage (Safari Private Mode safe)
 - **SPA Support**: Auto-detects pushState, replaceState, popstate, hashchange
 - **Client Hints**: Accurate OS detection (Win10 vs 11, macOS versions) via ua-parser-js

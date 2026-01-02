@@ -43,6 +43,11 @@ export class SessionManager {
       this.session = stored;
       this.saveSession();
 
+      // Ensure visitor_id is stored separately (for persistence across sessions)
+      if (!this.storage.get<string>(STORAGE_KEYS.VISITOR_ID)) {
+        this.storage.set(STORAGE_KEYS.VISITOR_ID, stored.visitor_id);
+      }
+
       if (this.debug) {
         console.log('[Staminads] Resumed session:', stored.id);
       }

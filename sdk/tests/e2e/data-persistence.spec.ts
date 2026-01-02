@@ -104,6 +104,12 @@ test.describe('Data Persistence', () => {
   });
 
   test('queue persists after failed send', async ({ page, request }) => {
+    // Disable sendBeacon - it doesn't report server errors (fire-and-forget)
+    await page.addInitScript(() => {
+      // @ts-expect-error - Mocking navigator
+      navigator.sendBeacon = () => false;
+    });
+
     // Configure server to fail
     await request.post('/api/test/fail');
 
@@ -112,7 +118,7 @@ test.describe('Data Persistence', () => {
     await page.evaluate(() => window.SDK_READY);
 
     // Track event (will fail and queue)
-    await page.evaluate(() => Staminads.track('failed_event'));
+    await page.evaluate(() => Staminads.trackEvent('failed_event'));
     await page.waitForTimeout(1000);
 
     // Check queue in localStorage
@@ -125,6 +131,12 @@ test.describe('Data Persistence', () => {
   });
 
   test('queue flushes on page revisit', async ({ page, request, context }) => {
+    // Disable sendBeacon on first page - it doesn't report server errors
+    await page.addInitScript(() => {
+      // @ts-expect-error - Mocking navigator
+      navigator.sendBeacon = () => false;
+    });
+
     // Configure server to fail
     await request.post('/api/test/fail');
 
@@ -132,8 +144,8 @@ test.describe('Data Persistence', () => {
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
 
-    // Track event (will fail and queue)
-    await page.evaluate(() => Staminads.track('queued_event'));
+    // Track event (will fail and queue since sendBeacon disabled)
+    await page.evaluate(() => Staminads.trackEvent('queued_event'));
     await page.waitForTimeout(1000);
 
     // Verify queue has items
@@ -146,7 +158,7 @@ test.describe('Data Persistence', () => {
     // Fix server
     await request.post('/api/test/succeed');
 
-    // Close and reopen page
+    // Close and reopen page (new page has normal sendBeacon for flush)
     await page.close();
     const newPage = await context.newPage();
     await newPage.goto('/test-page.html');
@@ -175,7 +187,7 @@ test.describe('Data Persistence', () => {
       const data = localStorage.getItem('stm_session');
       return data ? JSON.parse(data) : null;
     });
-    const lastSeen1 = session1.last_seen_at;
+    const lastActive1 = session1.last_active_at;
 
     // Wait and trigger activity
     await page.waitForTimeout(1000);
@@ -187,9 +199,9 @@ test.describe('Data Persistence', () => {
       const data = localStorage.getItem('stm_session');
       return data ? JSON.parse(data) : null;
     });
-    const lastSeen2 = session2.last_seen_at;
+    const lastActive2 = session2.last_active_at;
 
-    expect(lastSeen2).toBeGreaterThan(lastSeen1);
+    expect(lastActive2).toBeGreaterThan(lastActive1);
   });
 
   test('localStorage keys use correct prefix', async ({ page }) => {

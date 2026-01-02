@@ -25,7 +25,7 @@ test.describe('Duration Accuracy', () => {
     const elapsed = Date.now() - startTime;
 
     // Trigger a ping to capture duration
-    await page.evaluate(() => Staminads.track('duration_check'));
+    await page.evaluate(() => Staminads.trackEvent('duration_check'));
     await page.waitForTimeout(500);
 
     const response = await request.get('/api/test/events/duration_check');
@@ -60,7 +60,7 @@ test.describe('Duration Accuracy', () => {
     await page.waitForTimeout(2000);
 
     // Track event with current duration
-    await page.evaluate(() => Staminads.track('hidden_check'));
+    await page.evaluate(() => Staminads.trackEvent('hidden_check'));
     await page.waitForTimeout(500);
 
     const response = await request.get('/api/test/events/hidden_check');
@@ -104,7 +104,7 @@ test.describe('Duration Accuracy', () => {
     await page.waitForTimeout(1000);
 
     // Check duration
-    await page.evaluate(() => Staminads.track('resume_check'));
+    await page.evaluate(() => Staminads.trackEvent('resume_check'));
     await page.waitForTimeout(500);
 
     const response = await request.get('/api/test/events/resume_check');
@@ -133,7 +133,7 @@ test.describe('Duration Accuracy', () => {
     await page.waitForTimeout(1500);
 
     // Check duration
-    await page.evaluate(() => Staminads.track('blur_check'));
+    await page.evaluate(() => Staminads.trackEvent('blur_check'));
     await page.waitForTimeout(500);
 
     const response = await request.get('/api/test/events/blur_check');
@@ -159,7 +159,7 @@ test.describe('Duration Accuracy', () => {
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await page.waitForTimeout(1000);
 
-    await page.evaluate(() => Staminads.track('focus_check'));
+    await page.evaluate(() => Staminads.trackEvent('focus_check'));
     await page.waitForTimeout(500);
 
     const response = await request.get('/api/test/events/focus_check');
@@ -184,7 +184,7 @@ test.describe('Duration Accuracy', () => {
       await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     }
 
-    await page.evaluate(() => Staminads.track('rapid_check'));
+    await page.evaluate(() => Staminads.trackEvent('rapid_check'));
     await page.waitForTimeout(500);
 
     const response = await request.get('/api/test/events/rapid_check');

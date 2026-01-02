@@ -66,6 +66,33 @@ describe('Sender', () => {
     vi.clearAllMocks();
   });
 
+  describe('payload handling', () => {
+    it('sends payload with sent_at timestamp via fetch fallback', async () => {
+      // Use fetch path to verify payload content (easier to inspect than Blob)
+      mockSendBeacon.mockReturnValue(false);
+
+      const sentAt = Date.now();
+      const payload = createPayload({ sent_at: sentAt });
+      await sender.send(payload);
+
+      expect(mockFetch).toHaveBeenCalled();
+      const fetchBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(fetchBody.sent_at).toBe(sentAt);
+    });
+
+    it('preserves sent_at when queuing failed payload', async () => {
+      mockSendBeacon.mockReturnValue(false);
+      mockFetch.mockRejectedValue(new Error('fail'));
+
+      const sentAt = Date.now();
+      const payload = createPayload({ sent_at: sentAt });
+      await sender.send(payload);
+
+      const storedQueue = JSON.parse(mockLocalStorage._store['stm_pending']);
+      expect(storedQueue[0].payload.sent_at).toBe(sentAt);
+    });
+  });
+
   describe('send methods', () => {
     describe('beacon', () => {
       it('send() tries beacon first', async () => {
@@ -139,102 +166,13 @@ describe('Sender', () => {
       });
     });
 
-    describe('XHR fallback', () => {
-      let mockXHR: {
-        open: ReturnType<typeof vi.fn>;
-        setRequestHeader: ReturnType<typeof vi.fn>;
-        send: ReturnType<typeof vi.fn>;
-        onload: (() => void) | null;
-        onerror: (() => void) | null;
-        ontimeout: (() => void) | null;
-        status: number;
-      };
-
-      beforeEach(() => {
-        mockSendBeacon.mockReturnValue(false);
-        mockFetch.mockRejectedValue(new Error('Fetch failed'));
-
-        mockXHR = {
-          open: vi.fn(),
-          setRequestHeader: vi.fn(),
-          send: vi.fn(),
-          onload: null,
-          onerror: null,
-          ontimeout: null,
-          status: 200,
-        };
-
-        vi.stubGlobal(
-          'XMLHttpRequest',
-          vi.fn(() => mockXHR)
-        );
-      });
-
-      it('falls back to XHR when fetch fails', async () => {
-        const payload = createPayload();
-        const sendPromise = sender.send(payload);
-
-        // Simulate XHR success
-        await vi.waitFor(() => expect(mockXHR.send).toHaveBeenCalled());
-        mockXHR.onload?.();
-
-        await sendPromise;
-
-        expect(mockXHR.open).toHaveBeenCalledWith('POST', 'https://api.example.com/api/track', true);
-        expect(mockXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/json');
-      });
-
-      it('sendXHR returns true for status 200-299', async () => {
-        mockXHR.status = 201;
-
-        const payload = createPayload();
-        const sendPromise = sender.send(payload);
-
-        await vi.waitFor(() => expect(mockXHR.send).toHaveBeenCalled());
-        mockXHR.onload?.();
-
-        const result = await sendPromise;
-        expect(result).toBe(true);
-      });
-
-      it('sendXHR returns false for status >= 300', async () => {
-        mockXHR.status = 500;
-
-        const payload = createPayload();
-        const sendPromise = sender.send(payload);
-
-        await vi.waitFor(() => expect(mockXHR.send).toHaveBeenCalled());
-        mockXHR.onload?.();
-
-        const result = await sendPromise;
-        expect(result).toBe(false);
-      });
-    });
-
     describe('queuing on failure', () => {
       it('queues when all methods fail', async () => {
         mockSendBeacon.mockReturnValue(false);
         mockFetch.mockRejectedValue(new Error('Fetch failed'));
 
-        const mockXHR = {
-          open: vi.fn(),
-          setRequestHeader: vi.fn(),
-          send: vi.fn(),
-          onload: null,
-          onerror: null as (() => void) | null,
-          ontimeout: null,
-          status: 500,
-        };
-
-        vi.stubGlobal('XMLHttpRequest', vi.fn(() => mockXHR));
-
         const payload = createPayload();
-        const sendPromise = sender.send(payload);
-
-        await vi.waitFor(() => expect(mockXHR.send).toHaveBeenCalled());
-        mockXHR.onerror?.();
-
-        await sendPromise;
+        await sender.send(payload);
 
         // Check queue was updated
         expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
@@ -247,31 +185,12 @@ describe('Sender', () => {
 
   describe('queue management', () => {
     it('queuePayload creates item with id (UUIDv4)', async () => {
-      // Force beacon to fail
+      // Force beacon and fetch to fail
       mockSendBeacon.mockReturnValue(false);
-      // Force fetch to fail
       mockFetch.mockRejectedValue(new Error('fail'));
 
-      // Force XHR to fail
-      const mockXHR = {
-        open: vi.fn(),
-        setRequestHeader: vi.fn(),
-        send: vi.fn(),
-        onload: null,
-        onerror: null as (() => void) | null,
-        ontimeout: null,
-        status: 500,
-      };
-      vi.stubGlobal('XMLHttpRequest', vi.fn(() => mockXHR));
-
       const payload = createPayload();
-      const sendPromise = sender.send(payload);
-
-      // Wait for XHR to be called and trigger error
-      await vi.waitFor(() => expect(mockXHR.send).toHaveBeenCalled());
-      mockXHR.onerror?.();
-
-      await sendPromise;
+      await sender.send(payload);
 
       // Verify queue was updated with a UUID
       const storedQueue = JSON.parse(mockLocalStorage._store['stm_pending']);
@@ -281,23 +200,9 @@ describe('Sender', () => {
     it('queuePayload sets created_at = Date.now()', async () => {
       mockSendBeacon.mockReturnValue(false);
       mockFetch.mockRejectedValue(new Error('fail'));
-      const mockXHR = {
-        open: vi.fn(),
-        setRequestHeader: vi.fn(),
-        send: vi.fn(),
-        onload: null,
-        onerror: null as (() => void) | null,
-        ontimeout: null,
-        status: 500,
-      };
-      vi.stubGlobal('XMLHttpRequest', vi.fn(() => mockXHR));
 
       const payload = createPayload();
-      const sendPromise = sender.send(payload);
-
-      await vi.waitFor(() => expect(mockXHR.send).toHaveBeenCalled());
-      mockXHR.onerror?.();
-      await sendPromise;
+      await sender.send(payload);
 
       const storedQueue = JSON.parse(mockLocalStorage._store['stm_pending']);
       expect(storedQueue[0].created_at).toBe(Date.now());
@@ -306,23 +211,9 @@ describe('Sender', () => {
     it('queuePayload sets attempts = 0, last_attempt = null', async () => {
       mockSendBeacon.mockReturnValue(false);
       mockFetch.mockRejectedValue(new Error('fail'));
-      const mockXHR = {
-        open: vi.fn(),
-        setRequestHeader: vi.fn(),
-        send: vi.fn(),
-        onload: null,
-        onerror: null as (() => void) | null,
-        ontimeout: null,
-        status: 500,
-      };
-      vi.stubGlobal('XMLHttpRequest', vi.fn(() => mockXHR));
 
       const payload = createPayload();
-      const sendPromise = sender.send(payload);
-
-      await vi.waitFor(() => expect(mockXHR.send).toHaveBeenCalled());
-      mockXHR.onerror?.();
-      await sendPromise;
+      await sender.send(payload);
 
       const storedQueue = JSON.parse(mockLocalStorage._store['stm_pending']);
       expect(storedQueue[0].attempts).toBe(0);
@@ -346,26 +237,12 @@ describe('Sender', () => {
       // Force failure to queue new item
       mockSendBeacon.mockReturnValue(false);
       mockFetch.mockRejectedValue(new Error('fail'));
-      const mockXHR = {
-        open: vi.fn(),
-        setRequestHeader: vi.fn(),
-        send: vi.fn(),
-        onload: null,
-        onerror: null as (() => void) | null,
-        ontimeout: null,
-        status: 500,
-      };
-      vi.stubGlobal('XMLHttpRequest', vi.fn(() => mockXHR));
 
       storage = new Storage();
       sender = new Sender('https://api.example.com', storage);
 
       const payload = createPayload();
-      const sendPromise = sender.send(payload);
-
-      await vi.waitFor(() => expect(mockXHR.send).toHaveBeenCalled());
-      mockXHR.onerror?.();
-      await sendPromise;
+      await sender.send(payload);
 
       const storedQueue = JSON.parse(mockLocalStorage._store['stm_pending']);
       expect(storedQueue.length).toBe(50);

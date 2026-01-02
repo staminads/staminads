@@ -84,9 +84,8 @@ describe('Page Lifecycle Integration', () => {
     sender = new Sender('https://api.example.com', storage);
     durationTracker = new DurationTracker();
 
-    // Initialize duration tracker
-    durationTracker.pauseFocus();
-    durationTracker.resumeFocus();
+    // Initialize duration tracker (matches real SDK behavior)
+    durationTracker.startFocus();
   });
 
   afterEach(() => {
@@ -382,18 +381,18 @@ describe('Page Lifecycle Integration', () => {
   });
 
   describe('gap detection during lifecycle', () => {
-    it('discards time gaps > 5 seconds (system sleep)', () => {
+    it('getFocusDurationMs includes large deltas (gap detection is in tick only)', () => {
       mockPerformanceNow.mockReturnValue(1000);
       const duration1 = durationTracker.getFocusDurationMs();
+      expect(duration1).toBe(1000);
 
       // Simulate system sleep - huge gap
-      mockPerformanceNow.mockReturnValue(60000); // 59 second gap
-
-      // Duration should not include the gap
+      // getFocusDurationMs() returns raw delta; gap detection only happens in tick()
+      mockPerformanceNow.mockReturnValue(60000);
       const duration2 = durationTracker.getFocusDurationMs();
 
-      // Since delta > GAP_THRESHOLD (5000), it returns only accumulated
-      expect(duration2).toBe(0); // Only accumulated (0), current delta excluded
+      // getFocusDurationMs() returns the full delta (gap detection is not here)
+      expect(duration2).toBe(60000);
     });
 
     it('handles negative time jump gracefully', () => {

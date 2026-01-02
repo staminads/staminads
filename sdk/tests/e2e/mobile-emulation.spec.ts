@@ -46,7 +46,7 @@ test.describe('Mobile Emulation', () => {
 
     await page.waitForTimeout(500);
 
-    await page.evaluate(() => Staminads.track('scroll_check'));
+    await page.evaluate(() => Staminads.trackEvent('scroll_check'));
     await page.waitForTimeout(500);
 
     const response = await request.get('/api/test/events/scroll_check');
@@ -75,18 +75,23 @@ test.describe('Mobile Emulation', () => {
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
 
+    // Wait some time focused
     await page.waitForTimeout(1000);
 
+    // Freeze the app (should pause duration tracking)
     await page.evaluate(() => {
       document.dispatchEvent(new Event('freeze'));
     });
 
-    await page.waitForTimeout(1000);
+    // Time passes while frozen (should NOT count toward duration)
+    await page.waitForTimeout(2000);
 
+    // Resume the app
     await page.evaluate(() => {
       document.dispatchEvent(new Event('resume'));
     });
 
+    // Wait a bit more focused
     await page.waitForTimeout(500);
 
     await page.evaluate(() => Staminads.track('freeze_check'));
@@ -95,8 +100,11 @@ test.describe('Mobile Emulation', () => {
     const response = await request.get('/api/test/events/freeze_check');
     const events = await response.json();
 
+    // Duration should be around 1.5s (1s before freeze + 0.5s after resume)
+    // If freeze didn't work, it would be ~3.5s
     const duration = events[0].payload.duration * 1000;
-    expect(duration).toBeLessThan(2000);
+    expect(duration).toBeLessThan(2500); // With tolerance
+    expect(duration).toBeGreaterThan(500); // Sanity check - some time passed
   });
 
   test('reports correct viewport size', async ({ page, request }) => {
@@ -174,7 +182,7 @@ test.describe('Mobile Emulation', () => {
     });
     await page.waitForTimeout(200);
 
-    await page.evaluate(() => Staminads.track('scroll_final'));
+    await page.evaluate(() => Staminads.trackEvent('scroll_final'));
     await page.waitForTimeout(500);
 
     const response = await request.get('/api/test/events/scroll_final');

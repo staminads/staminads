@@ -1,6 +1,6 @@
 /**
  * Data transmission with multi-channel fallback
- * Beacon → Fetch+keepalive → XHR → Queue
+ * Beacon → Fetch+keepalive → Queue
  */
 
 import type { TrackEventPayload, QueuedPayload } from '../types';
@@ -36,15 +36,11 @@ export class Sender {
     }
 
     // Try each method in order
-    if (await this.sendBeacon(url, data)) {
+    if (this.sendBeacon(url, data)) {
       return true;
     }
 
     if (await this.sendFetch(url, data)) {
-      return true;
-    }
-
-    if (await this.sendXHR(url, data)) {
       return true;
     }
 
@@ -103,37 +99,6 @@ export class Sender {
     } catch {
       return false;
     }
-  }
-
-  /**
-   * Send via XHR (98%+ browser support fallback)
-   */
-  private sendXHR(url: string, data: string): Promise<boolean> {
-    return new Promise((resolve) => {
-      try {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', url, true);
-        xhr.setRequestHeader('Content-Type', 'application/json');
-
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            if (this.debug) {
-              console.log('[Staminads] Sent via XHR');
-            }
-            resolve(true);
-          } else {
-            resolve(false);
-          }
-        };
-
-        xhr.onerror = () => resolve(false);
-        xhr.ontimeout = () => resolve(false);
-
-        xhr.send(data);
-      } catch {
-        resolve(false);
-      }
-    });
   }
 
   /**
@@ -209,8 +174,7 @@ export class Sender {
       const url = `${this.endpoint}/api/track`;
       const data = JSON.stringify(item.payload);
 
-      const success =
-        (await this.sendFetch(url, data)) || (await this.sendXHR(url, data));
+      const success = await this.sendFetch(url, data);
 
       if (!success) {
         remaining.push(item);
