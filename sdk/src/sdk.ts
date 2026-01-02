@@ -11,6 +11,8 @@ import type {
   SessionDebugInfo,
   DeviceInfo,
   EventName,
+  HeartbeatTier,
+  HeartbeatState,
 } from './types';
 import { Storage, TabStorage } from './storage/storage';
 import { SessionManager } from './core/session';
@@ -24,16 +26,33 @@ import { parseReferrer, DEFAULT_AD_CLICK_IDS } from './utils/utm';
 
 const SDK_VERSION = '5.0.0';
 
+// Heartbeat constants
+const MIN_HEARTBEAT_INTERVAL = 5000; // 5 seconds minimum
+const MIN_HEARTBEAT_MAX_DURATION = 60 * 1000; // 1 minute minimum
+
+// Default heartbeat tiers
+const DEFAULT_HEARTBEAT_TIERS: HeartbeatTier[] = [
+  // 0-3 min: High frequency (initial engagement is critical)
+  { after: 0, desktopInterval: 10000, mobileInterval: 7000 },
+  // 3-5 min: Medium frequency (user is engaged, reduce load)
+  { after: 3 * 60 * 1000, desktopInterval: 20000, mobileInterval: 14000 },
+  // 5-10 min: Low frequency (long-form content, minimal pings)
+  { after: 5 * 60 * 1000, desktopInterval: 30000, mobileInterval: 21000 },
+];
+
 // Default configuration
 const DEFAULT_CONFIG: Omit<InternalConfig, 'workspace_id' | 'endpoint'> = {
   debug: false,
   sessionTimeout: 30 * 60 * 1000, // 30 minutes
-  heartbeatInterval: 10000, // 10 seconds
+  heartbeatInterval: 10000, // 10 seconds (legacy, used as fallback)
   adClickIds: DEFAULT_AD_CLICK_IDS,
   anonymizeIP: false,
   trackSPA: true,
   trackScroll: true,
   trackClicks: false,
+  heartbeatTiers: DEFAULT_HEARTBEAT_TIERS,
+  heartbeatMaxDuration: 10 * 60 * 1000, // 10 minutes
+  resetHeartbeatOnNavigation: false,
 };
 
 export class StaminadsSDK {
@@ -47,7 +66,18 @@ export class StaminadsSDK {
   private scrollTracker: ScrollTracker | null = null;
   private navigationTracker: NavigationTracker | null = null;
   private deviceInfo: DeviceInfo | null = null;
-  private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  private heartbeatTimeout: ReturnType<typeof setTimeout> | null = null;
+  private heartbeatState: HeartbeatState = {
+    activeStartTime: 0,
+    accumulatedActiveMs: 0,
+    isActive: false,
+    maxDurationReached: false,
+    lastPingTime: 0,
+    currentTierIndex: 0,
+    pageActiveMs: 0,
+    pageStartTime: 0,
+  };
+  private isMobileDevice = false;
   private isTracking = false;
   private isPaused = false;
   private isInitialized = false;
@@ -77,6 +107,15 @@ export class StaminadsSDK {
       ...userConfig,
     } as InternalConfig;
 
+    // Validate and normalize heartbeat tiers
+    this.config.heartbeatTiers = this.validateTiers(this.config.heartbeatTiers);
+
+    // Validate heartbeat max duration
+    if (this.config.heartbeatMaxDuration !== 0 &&
+        this.config.heartbeatMaxDuration < MIN_HEARTBEAT_MAX_DURATION) {
+      this.config.heartbeatMaxDuration = MIN_HEARTBEAT_MAX_DURATION;
+    }
+
     // Initialize storage
     this.storage = new Storage();
     this.tabStorage = new TabStorage();
@@ -84,6 +123,9 @@ export class StaminadsSDK {
     // Initialize device detector
     this.deviceDetector = new DeviceDetector();
     this.deviceInfo = await this.deviceDetector.detectWithClientHints();
+
+    // Set mobile device flag for heartbeat intervals
+    this.isMobileDevice = this.deviceInfo?.device !== 'desktop';
 
     // Initialize session manager
     this.sessionManager = new SessionManager(
@@ -127,6 +169,11 @@ export class StaminadsSDK {
     this.isTracking = true;
     this.isInitialized = true;
     this.durationTracker.startFocus();
+
+    // Initialize heartbeat state
+    const now = Date.now();
+    this.heartbeatState.pageStartTime = now;
+    this.heartbeatState.activeStartTime = now;
 
     // Start heartbeat
     this.startHeartbeat();
@@ -178,11 +225,14 @@ export class StaminadsSDK {
   private onVisibilityChange = (): void => {
     if (document.visibilityState === 'hidden') {
       this.durationTracker?.hideFocus();
+      this.stopHeartbeat(true); // Accumulate active time
       this.flushOnce();
     } else if (document.visibilityState === 'visible') {
       this.flushed = false;
-      if (!this.isPaused) {
+      if (!this.isPaused && !this.heartbeatState.maxDurationReached) {
         this.durationTracker?.resumeFocus();
+        // Resume heartbeat with fresh timing
+        this.resumeHeartbeat();
       }
     }
   };
@@ -192,8 +242,9 @@ export class StaminadsSDK {
    */
   private onFocus = (): void => {
     this.flushed = false;
-    if (!this.isPaused) {
+    if (!this.isPaused && !this.heartbeatState.maxDurationReached) {
       this.durationTracker?.resumeFocus();
+      this.resumeHeartbeat();
     }
     this.sender?.flushQueue();
   };
@@ -203,6 +254,7 @@ export class StaminadsSDK {
    */
   private onBlur = (): void => {
     this.durationTracker?.pauseFocus();
+    this.stopHeartbeat(true); // Accumulate active time
     this.flushOnce();
   };
 
@@ -211,6 +263,7 @@ export class StaminadsSDK {
    */
   private onFreeze = (): void => {
     this.durationTracker?.hideFocus();
+    this.stopHeartbeat(true); // Accumulate active time
     this.flushOnce();
   };
 
@@ -219,8 +272,9 @@ export class StaminadsSDK {
    */
   private onResume = (): void => {
     this.flushed = false;
-    if (!this.isPaused) {
+    if (!this.isPaused && !this.heartbeatState.maxDurationReached) {
       this.durationTracker?.resumeFocus();
+      this.resumeHeartbeat();
     }
   };
 
@@ -238,8 +292,9 @@ export class StaminadsSDK {
     if (event.persisted) {
       // Page was restored from bfcache
       this.flushed = false;
-      if (!this.isPaused) {
+      if (!this.isPaused && !this.heartbeatState.maxDurationReached) {
         this.durationTracker?.resumeFocus();
+        this.resumeHeartbeat();
       }
       if (this.config?.debug) {
         console.log('[Staminads] Restored from bfcache');
@@ -282,6 +337,15 @@ export class StaminadsSDK {
     // Reset scroll tracking for new page
     this.scrollTracker?.reset();
 
+    // Always reset page active time on navigation
+    this.resetPageActiveTime();
+
+    // Optionally reset session heartbeat timer
+    if (this.config?.resetHeartbeatOnNavigation) {
+      this.resetHeartbeatState();
+      this.startHeartbeat();
+    }
+
     // Send screen_view for new page
     this.sendEvent('screen_view');
   }
@@ -310,20 +374,305 @@ export class StaminadsSDK {
   }
 
   /**
-   * Start heartbeat
+   * Start heartbeat with tiered intervals
    */
   private startHeartbeat(): void {
     if (!this.config) return;
 
-    // Desktop: 10 seconds, Mobile: 7 seconds
-    const isMobile = this.deviceInfo?.device !== 'desktop';
-    const interval = isMobile ? 7000 : this.config.heartbeatInterval;
-
-    this.heartbeatInterval = setInterval(() => {
-      if (!this.isPaused && this.isTracking) {
-        this.sendEvent('ping');
+    // Don't restart if max duration reached
+    if (this.heartbeatState.maxDurationReached) {
+      if (this.config.debug) {
+        console.log('[Staminads] Heartbeat not started: max duration reached');
       }
-    }, interval);
+      return;
+    }
+
+    // Clear existing heartbeat
+    this.stopHeartbeat(false); // Don't accumulate time (we're starting fresh)
+
+    // Record when we became active
+    const now = Date.now();
+    this.heartbeatState.activeStartTime = now;
+    this.heartbeatState.isActive = true;
+    this.heartbeatState.lastPingTime = now;
+
+    // Start the heartbeat loop
+    this.scheduleNextHeartbeat();
+  }
+
+  /**
+   * Resume heartbeat after visibility/focus change
+   */
+  private resumeHeartbeat(): void {
+    if (!this.config) return;
+
+    // Don't restart if max duration reached
+    if (this.heartbeatState.maxDurationReached) {
+      return;
+    }
+
+    // Resume with fresh timing
+    const now = Date.now();
+    this.heartbeatState.activeStartTime = now;
+    this.heartbeatState.pageStartTime = now;
+    this.heartbeatState.isActive = true;
+    this.heartbeatState.lastPingTime = now;
+    this.scheduleNextHeartbeat();
+  }
+
+  /**
+   * Schedule next heartbeat based on current tier
+   */
+  private scheduleNextHeartbeat(): void {
+    if (!this.config || !this.heartbeatState.isActive) return;
+
+    // Check max duration BEFORE scheduling
+    if (this.checkAndUpdateMaxDuration()) {
+      this.stopHeartbeat(true);
+      return;
+    }
+
+    // Get current interval based on active time
+    const interval = this.getCurrentInterval();
+
+    // Null interval means stop (tier config says to stop)
+    if (interval === null) {
+      this.heartbeatState.maxDurationReached = true;
+      this.stopHeartbeat(true);
+      if (this.config.debug) {
+        console.log('[Staminads] Heartbeat stopped by tier configuration');
+      }
+      return;
+    }
+
+    // Calculate target time with drift compensation
+    const targetTime = this.heartbeatState.lastPingTime + interval;
+    const now = Date.now();
+    const delay = Math.max(0, targetTime - now);
+
+    // Schedule next ping
+    this.heartbeatTimeout = setTimeout(() => {
+      // CRITICAL: Check visibility and state before sending
+      if (this.shouldSendPing()) {
+        const actualTime = Date.now();
+        const drift = actualTime - targetTime;
+
+        // Log excessive drift in debug mode
+        if (drift > 1000 && this.config?.debug) {
+          console.warn(`[Staminads] Heartbeat drift: ${drift}ms`);
+        }
+
+        // Update tier index for metadata
+        const tierResult = this.getCurrentTier();
+        if (tierResult) {
+          this.heartbeatState.currentTierIndex = tierResult.index;
+        }
+
+        // Send ping with tier metadata
+        this.sendPingEvent();
+
+        // Update last ping time for next calculation
+        this.heartbeatState.lastPingTime = actualTime;
+
+        // Schedule next ping
+        this.scheduleNextHeartbeat();
+      }
+    }, delay);
+  }
+
+  /**
+   * Check if we should send a ping right now.
+   * Guards against race conditions with visibility changes.
+   */
+  private shouldSendPing(): boolean {
+    return (
+      !this.isPaused &&
+      this.isTracking &&
+      this.heartbeatState.isActive &&
+      !document.hidden &&
+      document.visibilityState === 'visible'
+    );
+  }
+
+  /**
+   * Send ping event with tier metadata.
+   */
+  private sendPingEvent(): void {
+    const tierResult = this.getCurrentTier();
+    const totalActiveMs = this.getTotalActiveMs();
+    const pageActiveMs = this.getPageActiveMs();
+
+    this.sendEvent('ping', {
+      tier: String(tierResult?.index ?? 0),
+      active_time: String(Math.round(totalActiveMs / 1000)),
+      page_active_time: String(Math.round(pageActiveMs / 1000)),
+    });
+  }
+
+  /**
+   * Stop heartbeat with optional time accumulation
+   */
+  private stopHeartbeat(accumulateTime: boolean = true): void {
+    // Accumulate active time before stopping
+    if (accumulateTime && this.heartbeatState.isActive) {
+      const now = Date.now();
+      const activeTime = now - this.heartbeatState.activeStartTime;
+      this.heartbeatState.accumulatedActiveMs += activeTime;
+
+      // Also accumulate page active time
+      const pageTime = now - this.heartbeatState.pageStartTime;
+      this.heartbeatState.pageActiveMs += pageTime;
+    }
+
+    this.heartbeatState.isActive = false;
+
+    if (this.heartbeatTimeout) {
+      clearTimeout(this.heartbeatTimeout);
+      this.heartbeatTimeout = null;
+    }
+  }
+
+  /**
+   * Get total active time in milliseconds
+   */
+  private getTotalActiveMs(): number {
+    let total = this.heartbeatState.accumulatedActiveMs;
+    if (this.heartbeatState.isActive) {
+      total += Date.now() - this.heartbeatState.activeStartTime;
+    }
+    return total;
+  }
+
+  /**
+   * Get page active time in milliseconds
+   */
+  private getPageActiveMs(): number {
+    let total = this.heartbeatState.pageActiveMs;
+    if (this.heartbeatState.isActive) {
+      total += Date.now() - this.heartbeatState.pageStartTime;
+    }
+    return total;
+  }
+
+  /**
+   * Check and update max duration flag
+   */
+  private checkAndUpdateMaxDuration(): boolean {
+    if (!this.config || this.config.heartbeatMaxDuration === 0) {
+      return false; // Unlimited
+    }
+
+    const totalActiveMs = this.getTotalActiveMs();
+
+    if (totalActiveMs >= this.config.heartbeatMaxDuration) {
+      this.heartbeatState.maxDurationReached = true;
+      if (this.config.debug) {
+        const tierResult = this.getCurrentTier();
+        console.log(
+          `[Staminads] Heartbeat max duration reached ` +
+          `(${Math.round(totalActiveMs / 1000)}s active, tier ${tierResult?.index ?? 0})`
+        );
+      }
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Get current tier based on active time
+   */
+  private getCurrentTier(): { tier: HeartbeatTier; index: number } | null {
+    if (!this.config) return null;
+
+    const totalActiveMs = this.getTotalActiveMs();
+    const tiers = this.config.heartbeatTiers;
+
+    // Find the highest tier that applies (tiers sorted by 'after' ascending)
+    let currentTier = tiers[0];
+    let currentIndex = 0;
+
+    for (let i = 0; i < tiers.length; i++) {
+      if (totalActiveMs >= tiers[i].after) {
+        currentTier = tiers[i];
+        currentIndex = i;
+      } else {
+        break;
+      }
+    }
+
+    return { tier: currentTier, index: currentIndex };
+  }
+
+  /**
+   * Get current interval based on tier and device type
+   */
+  private getCurrentInterval(): number | null {
+    const result = this.getCurrentTier();
+    if (!result) return null;
+
+    const { tier } = result;
+    return this.isMobileDevice ? tier.mobileInterval : tier.desktopInterval;
+  }
+
+  /**
+   * Reset heartbeat state completely
+   */
+  private resetHeartbeatState(): void {
+    this.stopHeartbeat(false);
+    this.heartbeatState = {
+      activeStartTime: 0,
+      accumulatedActiveMs: 0,
+      isActive: false,
+      maxDurationReached: false,
+      lastPingTime: 0,
+      currentTierIndex: 0,
+      pageActiveMs: 0,
+      pageStartTime: Date.now(),
+    };
+  }
+
+  /**
+   * Reset page active time only (for SPA navigation)
+   */
+  private resetPageActiveTime(): void {
+    // Keep session time, reset page time
+    this.heartbeatState.pageActiveMs = 0;
+    this.heartbeatState.pageStartTime = Date.now();
+  }
+
+  /**
+   * Validate and normalize heartbeat tiers
+   */
+  private validateTiers(tiers: HeartbeatTier[]): HeartbeatTier[] {
+    if (!tiers || tiers.length === 0) {
+      return DEFAULT_HEARTBEAT_TIERS;
+    }
+
+    // Sort by 'after' ascending
+    const sorted = [...tiers].sort((a, b) => a.after - b.after);
+
+    // Ensure first tier starts at 0
+    if (sorted[0].after !== 0) {
+      sorted.unshift({
+        after: 0,
+        desktopInterval: 10000,
+        mobileInterval: 7000,
+      });
+    }
+
+    // Enforce minimum intervals
+    return sorted.map((tier) => ({
+      ...tier,
+      desktopInterval:
+        tier.desktopInterval === null
+          ? null
+          : Math.max(tier.desktopInterval, MIN_HEARTBEAT_INTERVAL),
+      mobileInterval:
+        tier.mobileInterval === null
+          ? null
+          : Math.max(tier.mobileInterval, MIN_HEARTBEAT_INTERVAL),
+    }));
   }
 
   /**
@@ -388,8 +737,8 @@ export class StaminadsSDK {
       // Custom dimensions
       ...this.sessionManager.getDimensionsPayload(),
 
-      // Properties
-      properties,
+      // Spread properties at top level for easier access
+      ...properties,
     };
 
     // Remove undefined values
@@ -463,12 +812,12 @@ export class StaminadsSDK {
     this.ensureInitialized();
 
     const properties: Record<string, string> = {
-      action: data.action,
+      conversion_name: data.action,
     };
 
     if (data.id) properties.conversion_id = data.id;
-    if (data.value !== undefined) properties.value = String(data.value);
-    if (data.currency) properties.currency = data.currency;
+    if (data.value !== undefined) properties.conversion_value = String(data.value);
+    if (data.currency) properties.conversion_currency = data.currency;
     if (data.properties) Object.assign(properties, data.properties);
 
     this.sendEvent('conversion', properties);
@@ -513,11 +862,7 @@ export class StaminadsSDK {
     this.ensureInitialized();
     this.isPaused = true;
     this.durationTracker?.pauseFocus();
-
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-      this.heartbeatInterval = null;
-    }
+    this.stopHeartbeat(true); // Accumulate time
   }
 
   /**
@@ -527,6 +872,9 @@ export class StaminadsSDK {
     this.ensureInitialized();
     this.isPaused = false;
     this.durationTracker?.resumeFocus();
+
+    // Reset max duration flag on explicit resume (allows user to restart tracking)
+    this.resetHeartbeatState();
     this.startHeartbeat();
   }
 
@@ -540,7 +888,17 @@ export class StaminadsSDK {
     this.sessionManager.reset();
     this.durationTracker?.reset();
     this.scrollTracker?.reset();
+    this.resetHeartbeatState();
+    this.startHeartbeat();
     this.sendEvent('screen_view');
+  }
+
+  /**
+   * Get current configuration (defensive copy)
+   */
+  getConfig(): Readonly<StaminadsConfig> | null {
+    if (!this.config) return null;
+    return { ...this.config };
   }
 
   /**

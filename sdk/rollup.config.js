@@ -14,6 +14,7 @@ export default [
       file: 'dist/staminads.min.js',
       format: 'umd',
       name: 'Staminads',
+      exports: 'default',
       sourcemap: true,
     },
     plugins: [

@@ -474,9 +474,17 @@ const CRITICAL_EVENTS = [
   'freeze',            // Mobile freeze
 ];
 
-// HEARTBEAT SENDS (periodic updates)
-// Desktop: Every 10 seconds
-// Mobile: Every 7 seconds
+// HEARTBEAT SENDS (tiered intervals, active time only)
+// Tier 0 (0-3 min):   10s (desktop) / 7s (mobile)  - High frequency
+// Tier 1 (3-5 min):   20s (desktop) / 14s (mobile) - Medium frequency
+// Tier 2 (5-10 min):  30s (desktop) / 21s (mobile) - Low frequency
+// 10+ min:            STOPPED
+//
+// Features:
+// - Timer tracks ACTIVE time only (pauses when tab hidden)
+// - Drift compensation ensures accurate tier transitions
+// - Ping metadata includes tier index and active times
+// - Critical sends continue after heartbeat stops
 
 // MILESTONE SENDS (engagement thresholds)
 // - First 5 seconds of focus
@@ -875,9 +883,14 @@ interface StaminadsConfig {
   // Optional
   debug?: boolean;                // Default: false
   sessionTimeout?: number;        // Default: 30 * 60 * 1000 (30 min)
-  heartbeatInterval?: number;     // Default: 10000 (10s) desktop, 7000 (7s) mobile
+  heartbeatInterval?: number;     // Default: 10000 (10s) - legacy, use heartbeatTiers instead
   adClickIds?: string[];          // URL params to capture as utm_id
                                   // Default: ['gclid', 'fbclid', 'msclkid', 'dclid', 'twclid', 'ttclid', 'li_fat_id', 'wbraid', 'gbraid']
+
+  // Heartbeat (tiered intervals)
+  heartbeatTiers?: HeartbeatTier[];  // Tiered interval configuration (see below)
+  heartbeatMaxDuration?: number;     // Default: 600000 (10 min). 0 = unlimited.
+  resetHeartbeatOnNavigation?: boolean; // Default: false. Reset timer on SPA navigation.
 
   // Privacy
   anonymizeIP?: boolean;          // Default: false
@@ -887,6 +900,20 @@ interface StaminadsConfig {
   trackScroll?: boolean;          // Default: true
   trackClicks?: boolean;          // Default: false
 }
+
+interface HeartbeatTier {
+  after: number;                    // Duration threshold in ms (inclusive)
+  desktopInterval: number | null;   // Interval for desktop (null = stop)
+  mobileInterval: number | null;    // Interval for mobile (null = stop)
+}
+
+// Default heartbeat tiers:
+// | After    | Desktop | Mobile | Tier |
+// |----------|---------|--------|------|
+// | 0        | 10s     | 7s     | 0 (High)   |
+// | 3 min    | 20s     | 14s    | 1 (Medium) |
+// | 5 min    | 30s     | 21s    | 2 (Low)    |
+// | 10+ min  | STOPPED | STOPPED| Max duration |
 
 // Initialize
 Staminads.init({
@@ -983,6 +1010,7 @@ interface StaminadsAPI {
   // Session info
   getSessionId(): string;
   getVisitorId(): string;
+  getConfig(): Readonly<StaminadsConfig> | null; // Defensive copy
   getFocusDuration(): number;      // Returns milliseconds
   getTotalDuration(): number;      // Returns milliseconds
 
@@ -1166,30 +1194,82 @@ const conversionEvent: TrackEventPayload = {
 
 ### 11.1 Unit Tests
 
-- [ ] Session creation and management
-- [ ] Duration tracking precision
-- [ ] Focus state machine transitions
-- [ ] Storage layer fallbacks
-- [ ] Queue retry logic
-- [ ] Bot detection accuracy
-- [ ] UUID generation
-- [ ] UTM parsing
+All core requirements are covered. Tests located in `src/**/*.test.ts`.
+
+| Requirement | Status | Test File |
+|-------------|--------|-----------|
+| Session creation and management | ✅ | `core/session.test.ts` |
+| Duration tracking precision | ✅ | `core/duration.test.ts` |
+| Focus state machine transitions | ✅ | `core/duration.test.ts` |
+| Storage layer fallbacks | ✅ | `storage/storage.test.ts` |
+| Queue retry logic | ✅ | `transport/sender.test.ts` |
+| Bot detection accuracy | ✅ | `detection/bot.test.ts` |
+| UUID generation | ✅ | `utils/uuid.test.ts` |
+| UTM parsing | ✅ | `utils/utm.test.ts` |
+| Tiered heartbeat intervals | ✅ | `sdk.heartbeat.test.ts` |
+
+**Additional coverage:**
+- Multi-channel transmission (beacon/fetch/XHR) - `transport/sender.test.ts`
+- Custom dimensions (stm_1-10) - `core/session.test.ts`
+- Tab ID management - `core/session.test.ts`
+
+**Run:** `npm test`
+
+**Missing unit tests (future work):**
+- `detection/device.ts` - DeviceDetector with Client Hints
+- `events/scroll.ts` - ScrollTracker milestones
+- `events/navigation.ts` - SPA navigation detection
+- `utils/throttle.ts` - Rate limiting utility
 
 ### 11.2 Integration Tests
 
-- [ ] Multi-tab scenarios
-- [ ] Offline/online transitions
-- [ ] SPA navigation
-- [ ] Page lifecycle events
-- [ ] Storage quota handling
+Integration tests validate multiple modules working together. Located in `tests/integration/`.
+
+| Scenario | Status | Test File |
+|----------|--------|-----------|
+| Multi-tab scenarios | ✅ | `multi-tab.integration.test.ts` |
+| Offline/online transitions | ✅ | `offline.integration.test.ts` |
+| SPA navigation | ✅ | `spa-navigation.integration.test.ts` |
+| Page lifecycle events | ✅ | `lifecycle.integration.test.ts` |
+| Storage quota handling | ✅ | `storage-quota.integration.test.ts` |
+
+**Test approach:**
+- Mock browser APIs (Page Visibility, History, Storage)
+- Use Vitest fake timers for time-sensitive tests
+- Validate data integrity across module boundaries
+
+**Run:** `npm test -- tests/integration/`
 
 ### 11.3 E2E Tests (Playwright)
 
-- [ ] Full session lifecycle
-- [ ] Tab switching duration accuracy
-- [ ] Browser close data persistence
-- [ ] Mobile behavior
-- [ ] Slow network handling
+| Scenario | Tests | Status |
+|----------|-------|--------|
+| Full session lifecycle | 10 | ✅ |
+| Tab switching duration accuracy | 7 | ⚠️ (4/7 pass) |
+| Browser close data persistence | 10 | ⚠️ (5/10 pass) |
+| Mobile behavior | 10 | ✅ |
+| Slow network handling | 11 | ⚠️ (7/11 pass) |
+
+**Total: 48 tests (35 passing)**
+
+**Run:** `npm run test:e2e`
+
+**Test Files:**
+```
+tests/e2e/
+├── fixtures.ts           # Custom Playwright fixtures with stealth mode
+├── fixtures/
+│   ├── test-page.html    # Basic test page with SDK
+│   └── spa-page.html     # SPA test page for navigation
+├── helpers/
+│   └── mock-server.ts    # Express mock API server
+├── session-lifecycle.spec.ts  # Session creation, resume, events
+├── duration-accuracy.spec.ts  # Focus/blur timing
+├── data-persistence.spec.ts   # localStorage/sessionStorage
+├── mobile-behavior.spec.ts    # Desktop behavior
+├── mobile-emulation.spec.ts   # Mobile device emulation
+└── network-handling.spec.ts   # Beacon, fetch, queue, offline
+```
 
 ---
 
@@ -1517,3 +1597,4 @@ The size is acceptable because:
 | Testing | None | Full suite |
 | UA Parsing | Basic regex | ua-parser-js + Client Hints |
 | OS Detection | Frozen UA | Actual versions via Client Hints |
+| Heartbeat | Flat 7s/10s, 7min max | Tiered intervals, 10min max, active time only |

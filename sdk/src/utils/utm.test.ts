@@ -217,7 +217,8 @@ describe('UTM Parsing', () => {
 
     it('handles URLs with ports', () => {
       const result = parseReferrer('https://example.com:8080/page');
-      expect(result.domain).toBe('example.com:8080');
+      // hostname doesn't include port in URL API
+      expect(result.domain).toBe('example.com');
       expect(result.path).toBe('/page');
     });
   });

@@ -2,6 +2,36 @@
  * Staminads SDK Types
  */
 
+// Heartbeat Tier Configuration
+export interface HeartbeatTier {
+  /** Duration threshold in ms. Tier applies when activeTime >= after. */
+  after: number;
+  /** Interval in ms for desktop. null = stop heartbeat. */
+  desktopInterval: number | null;
+  /** Interval in ms for mobile. null = stop heartbeat. */
+  mobileInterval: number | null;
+}
+
+// Heartbeat State
+export interface HeartbeatState {
+  /** When current active period started */
+  activeStartTime: number;
+  /** Total accumulated active time in ms (from previous periods) */
+  accumulatedActiveMs: number;
+  /** Whether heartbeat is currently active */
+  isActive: boolean;
+  /** Whether max duration has been reached */
+  maxDurationReached: boolean;
+  /** Timestamp of last ping sent (for drift compensation) */
+  lastPingTime: number;
+  /** Current tier index (for metadata) */
+  currentTierIndex: number;
+  /** Page-specific active time (resets on SPA navigation) */
+  pageActiveMs: number;
+  /** When current page started */
+  pageStartTime: number;
+}
+
 // Configuration
 export interface StaminadsConfig {
   // Required
@@ -21,11 +51,17 @@ export interface StaminadsConfig {
   trackSPA?: boolean;
   trackScroll?: boolean;
   trackClicks?: boolean;
+
+  // Heartbeat (tiered intervals)
+  heartbeatTiers?: HeartbeatTier[];
+  heartbeatMaxDuration?: number;
+  resetHeartbeatOnNavigation?: boolean;
 }
 
-export interface InternalConfig extends Required<Omit<StaminadsConfig, 'workspace_id' | 'endpoint'>> {
+export interface InternalConfig extends Required<Omit<StaminadsConfig, 'workspace_id' | 'endpoint' | 'heartbeatTiers'>> {
   workspace_id: string;
   endpoint: string;
+  heartbeatTiers: HeartbeatTier[];
 }
 
 // Session
@@ -169,11 +205,16 @@ export interface StaminadsAPI {
   init(config: StaminadsConfig): void;
   getSessionId(): string;
   getVisitorId(): string;
+  getConfig(): Readonly<StaminadsConfig> | null;
   getFocusDuration(): number;
   getTotalDuration(): number;
   trackPageView(url?: string): void;
   trackEvent(name: string, properties?: Record<string, string>): void;
+  /** Alias for trackEvent - convenient shorthand */
+  track(name: string, properties?: Record<string, unknown>): void;
   trackConversion(data: ConversionData): void;
+  /** Alias for trackConversion with positional args */
+  conversion(action: string, value?: number, currency?: string): void;
   setDimension(index: number, value: string): void;
   setDimensions(dimensions: Record<number, string>): void;
   getDimension(index: number): string | null;

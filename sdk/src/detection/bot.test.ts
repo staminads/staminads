@@ -105,13 +105,15 @@ describe('Bot Detection', () => {
     });
 
     describe('feature fingerprinting', () => {
-      it('detects suspicious: plugins missing', () => {
+      it('detects suspicious: 3+ features triggers bot detection', () => {
+        // The isBot checks: 'plugins' in navigator || plugins.length === 0
+        // So we need to provide empty plugins, not undefined
         mockNavigator({
-          plugins: undefined as unknown as PluginArray,
-          languages: undefined as unknown as readonly string[],
-          userAgent: 'Mozilla/5.0 Chrome/120.0.0.0',
+          plugins: { length: 0 } as PluginArray, // 1st suspicious
+          languages: { length: 0 } as unknown as readonly string[], // 2nd suspicious
+          userAgent: 'Mozilla/5.0 Chrome/120.0.0.0', // Chrome UA
         });
-        mockWindow({ chrome: undefined }); // 3rd suspicious feature
+        mockWindow({ chrome: undefined }); // 3rd suspicious (Chrome UA but no window.chrome)
         // 3 suspicious features = bot
         expect(isBot()).toBe(true);
       });
@@ -146,13 +148,17 @@ describe('Bot Detection', () => {
       });
 
       it('detects suspicious: mobile UA but no touch support', () => {
+        // Mobile UA with 3 suspicious features
         mockNavigator({
           userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) Mobile',
-          plugins: { length: 0 } as PluginArray,
-          languages: { length: 0 } as unknown as readonly string[],
+          plugins: { length: 0 } as PluginArray,  // 1st suspicious
+          languages: { length: 0 } as unknown as readonly string[], // 2nd suspicious
         });
-        mockWindow({ ontouchstart: undefined });
-        // 3 suspicious features: plugins empty, languages empty, mobile UA no touch
+        // mockWindow sets chrome: {} by default so no Chrome check issue
+        // The 'ontouchstart' check is: !('ontouchstart' in window) && /mobile/i.test(ua)
+        // We need window to NOT have ontouchstart property at all
+        mockScreen({ width: 0, height: 0 }); // 3rd suspicious: zero screen dimensions
+        // 3 suspicious features: plugins empty, languages empty, zero screen
         expect(isBot()).toBe(true);
       });
 

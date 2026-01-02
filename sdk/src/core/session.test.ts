@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SessionManager } from './session';
-import { Storage, TabStorage, STORAGE_KEYS } from '../storage/storage';
+import { Storage, TabStorage } from '../storage/storage';
 import type { InternalConfig, Session } from '../types';
 
 // Mock UUID generation
@@ -87,6 +87,11 @@ describe('SessionManager', () => {
       trackSPA: true,
       trackScroll: true,
       trackClicks: false,
+      heartbeatTiers: [
+        { after: 0, desktopInterval: 10000, mobileInterval: 7000 },
+      ],
+      heartbeatMaxDuration: 10 * 60 * 1000,
+      resetHeartbeatOnNavigation: false,
     };
 
     sessionManager = new SessionManager(storage, tabStorage, config);
@@ -360,14 +365,10 @@ describe('SessionManager', () => {
   });
 
   describe('tab ID', () => {
-    it('getTabId() generates UUIDv4 on first call', async () => {
-      const { generateUUIDv4 } = await import('../utils/uuid');
-      const initialCallCount = vi.mocked(generateUUIDv4).mock.calls.length;
-
+    it('getTabId() returns a UUIDv4', async () => {
+      // Tab ID is created in the SessionManager constructor
       const tabId = sessionManager.getTabId();
-
       expect(tabId).toMatch(/^mock-uuid-v4-/);
-      expect(vi.mocked(generateUUIDv4).mock.calls.length).toBeGreaterThan(initialCallCount);
     });
 
     it('getTabId() returns same ID within tab session', () => {

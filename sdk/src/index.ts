@@ -39,12 +39,19 @@ const Staminads: StaminadsAPI = {
   init: (config: StaminadsConfig) => sdk.init(config),
   getSessionId: () => sdk.getSessionId(),
   getVisitorId: () => sdk.getVisitorId(),
+  getConfig: () => sdk.getConfig(),
   getFocusDuration: () => sdk.getFocusDuration(),
   getTotalDuration: () => sdk.getTotalDuration(),
   trackPageView: (url?: string) => sdk.trackPageView(url),
   trackEvent: (name: string, properties?: Record<string, string>) =>
     sdk.trackEvent(name, properties),
+  // Alias for trackEvent - convenient shorthand
+  track: (name: string, properties?: Record<string, unknown>) =>
+    sdk.trackEvent(name, properties as Record<string, string> | undefined),
   trackConversion: (data: ConversionData) => sdk.trackConversion(data),
+  // Alias for trackConversion with positional args: (action, value?, currency?)
+  conversion: (action: string, value?: number, currency?: string) =>
+    sdk.trackConversion({ action, value, currency }),
   setDimension: (index: number, value: string) => sdk.setDimension(index, value),
   setDimensions: (dimensions: Record<number, string>) => sdk.setDimensions(dimensions),
   getDimension: (index: number) => sdk.getDimension(index),
@@ -63,8 +70,5 @@ export type {
   SessionDebugInfo,
 };
 
-// Default export for UMD/ESM
+// Default export for UMD/ESM/CJS
 export default Staminads;
-
-// Named export
-export { Staminads };
