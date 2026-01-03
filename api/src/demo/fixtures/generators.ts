@@ -336,9 +336,11 @@ function generateSessionEvents(
 
   // Select components based on launch period
   const page = selectPage(launchPeriod);
-  const referrer = selectReferrer(launchPeriod);
   const device = weightedRandom(DEVICE_PROFILES, DEVICE_PROFILES_TOTAL_WEIGHT);
   const utm = selectUtm(launchPeriod);
+
+  // Determine referrer based on UTM source (paid traffic uses ad network as referrer)
+  const referrer = selectReferrerForUtm(utm, launchPeriod);
 
   // Calculate duration with all multipliers
   const baseDuration = generateBaseDuration();
@@ -445,6 +447,8 @@ function generateSessionEvents(
   // Session start timestamp (SDK session creation time)
   const sessionCreatedAt = toClickHouseDateTime(sessionStart);
 
+  // SDK sends cumulative focus duration with each event
+  // duration variable = total session duration in seconds
   events.push({
     ...baseProps,
     received_at: toClickHouseDateTime(sessionStart),  // Server timestamp
@@ -452,13 +456,14 @@ function generateSessionEvents(
     updated_at: toClickHouseDateTime(sessionStart),   // SDK interaction time
     name: 'screen_view',
     path: page.path,
-    duration: 0,
+    duration: 0,  // First event has 0 duration
     max_scroll: 0,
   });
 
   // Event 2: scroll (50% chance, happens after some time)
   if (Math.random() < 0.5 && duration > 10) {
     const scrollTime = new Date(sessionStart.getTime() + duration * 300); // 30% into session
+    const elapsedSeconds = Math.round(duration * 0.3);
     events.push({
       ...baseProps,
       received_at: toClickHouseDateTime(scrollTime),
@@ -466,7 +471,7 @@ function generateSessionEvents(
       updated_at: toClickHouseDateTime(scrollTime),
       name: 'scroll',
       path: page.path,
-      duration: 0,
+      duration: elapsedSeconds,  // Cumulative duration at this point
       max_scroll: generateMaxScroll(duration),
     });
   }
@@ -475,6 +480,7 @@ function generateSessionEvents(
   if (Math.random() < 0.3 && duration > 30) {
     const secondPage = selectPage(launchPeriod);
     const secondPageTime = new Date(sessionStart.getTime() + duration * 500); // 50% into session
+    const elapsedSeconds = Math.round(duration * 0.5);
     events.push({
       ...baseProps,
       received_at: toClickHouseDateTime(secondPageTime),
@@ -482,13 +488,13 @@ function generateSessionEvents(
       updated_at: toClickHouseDateTime(secondPageTime),
       name: 'screen_view',
       path: secondPage.path,
-      duration: 0,
+      duration: elapsedSeconds,  // Cumulative duration at this point
       max_scroll: generateMaxScroll(duration / 2),
     });
   }
 
   // Final event: ensures session has proper duration by adding an event at the end
-  if (duration > 5) {
+  if (duration >= 5) {
     const endTime = new Date(sessionStart.getTime() + duration * 1000);
     events.push({
       ...baseProps,
@@ -497,7 +503,7 @@ function generateSessionEvents(
       updated_at: toClickHouseDateTime(endTime),
       name: 'scroll',
       path: events[events.length - 1].path, // Same as last page
-      duration: 0,
+      duration: duration,  // Final cumulative duration (full session)
       max_scroll: generateMaxScroll(duration),
     });
   }
@@ -555,6 +561,77 @@ function selectReferrer(launchPeriod: 'launch' | 'post' | 'normal'): Referrer {
   }
 
   return weightedRandom(REFERRERS, REFERRERS_TOTAL_WEIGHT);
+}
+
+/**
+ * Map UTM sources to their corresponding referrer domains.
+ * Paid traffic should have the ad network as referrer.
+ * Email traffic has no referrer (email clients don't pass referrer).
+ */
+const UTM_SOURCE_TO_REFERRER: Record<string, Referrer> = {
+  google: {
+    domain: 'google.com',
+    path: '/search',
+    category: 'search',
+    channelGroup: 'Paid Search',
+    durationMultiplier: 1.2,
+    weight: 1,
+  },
+  facebook: {
+    domain: 'facebook.com',
+    category: 'social',
+    channelGroup: 'Paid Social',
+    durationMultiplier: 0.8,
+    weight: 1,
+  },
+  instagram: {
+    domain: 'instagram.com',
+    category: 'social',
+    channelGroup: 'Paid Social',
+    durationMultiplier: 0.7,
+    weight: 1,
+  },
+  twitter: {
+    domain: 'twitter.com',
+    category: 'social',
+    channelGroup: 'Social',
+    durationMultiplier: 0.75,
+    weight: 1,
+  },
+  display: {
+    domain: null, // Display ads often don't have referrer
+    category: 'direct',
+    channelGroup: 'Display',
+    durationMultiplier: 1.0,
+    weight: 1,
+  },
+  affiliate: {
+    domain: null, // Affiliates use direct links with UTM
+    category: 'direct',
+    channelGroup: 'Affiliate',
+    durationMultiplier: 1.0,
+    weight: 1,
+  },
+  email: {
+    domain: null, // Email clients don't pass referrer
+    category: 'direct',
+    channelGroup: 'Email',
+    durationMultiplier: 1.5,
+    weight: 1,
+  },
+};
+
+function selectReferrerForUtm(
+  utm: UtmCampaign | null,
+  launchPeriod: 'launch' | 'post' | 'normal',
+): Referrer {
+  // If UTM source has a mapped referrer, use it
+  if (utm?.source && UTM_SOURCE_TO_REFERRER[utm.source]) {
+    return UTM_SOURCE_TO_REFERRER[utm.source];
+  }
+
+  // No UTM or unmapped source: use random referrer selection
+  return selectReferrer(launchPeriod);
 }
 
 function selectUtm(launchPeriod: 'launch' | 'post' | 'normal'): UtmCampaign | null {

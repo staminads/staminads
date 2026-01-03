@@ -83,6 +83,7 @@ export function FilterFormModal({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['filters', workspaceId] })
       queryClient.invalidateQueries({ queryKey: ['filters', workspaceId, 'tags'] })
+      queryClient.invalidateQueries({ queryKey: ['backfill', 'summary', workspaceId] })
       message.success('Filter created')
       onClose()
     },
@@ -96,6 +97,7 @@ export function FilterFormModal({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['filters', workspaceId] })
       queryClient.invalidateQueries({ queryKey: ['filters', workspaceId, 'tags'] })
+      queryClient.invalidateQueries({ queryKey: ['backfill', 'summary', workspaceId] })
       message.success('Filter updated')
       onClose()
     },

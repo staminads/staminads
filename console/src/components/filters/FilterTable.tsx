@@ -34,6 +34,7 @@ export function FilterTable({ workspaceId, filters, onEdit, searchText = '', cus
     mutationFn: (filterId: string) => api.filters.delete(workspaceId, filterId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['filters', workspaceId] })
+      queryClient.invalidateQueries({ queryKey: ['backfill', 'summary', workspaceId] })
     },
   })
 
@@ -42,6 +43,7 @@ export function FilterTable({ workspaceId, filters, onEdit, searchText = '', cus
       api.filters.update({ workspace_id: workspaceId, ...data }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['filters', workspaceId] })
+      queryClient.invalidateQueries({ queryKey: ['backfill', 'summary', workspaceId] })
     },
   })
 
