@@ -77,7 +77,7 @@ describe('Workspaces Integration', () => {
   describe('POST /api/workspaces.create', () => {
     it('creates workspace and persists all fields to ClickHouse', async () => {
       const dto = {
-        id: 'test-ws-1',
+        id: 'test_ws_1',
         name: 'Test Workspace',
         website: 'https://example.com',
         timezone: 'Europe/Paris',
@@ -133,7 +133,7 @@ describe('Workspaces Integration', () => {
 
     it('creates workspace with custom bounce_threshold', async () => {
       const dto = {
-        id: 'test-ws-bounce',
+        id: 'test_ws_bounce',
         name: 'Bounce Test',
         website: 'https://bounce-test.com',
         timezone: 'UTC',
@@ -152,7 +152,7 @@ describe('Workspaces Integration', () => {
 
     it('creates workspace without optional logo_url', async () => {
       const dto = {
-        id: 'test-ws-no-logo',
+        id: 'test_ws_no_logo',
         name: 'No Logo Workspace',
         website: 'https://nologo.com',
         timezone: 'UTC',
@@ -171,7 +171,7 @@ describe('Workspaces Integration', () => {
 
     it('rejects invalid website URL', async () => {
       const dto = {
-        id: 'test-ws-invalid',
+        id: 'test_ws_invalid',
         name: 'Test',
         website: 'not-a-url',
         timezone: 'UTC',
@@ -187,7 +187,7 @@ describe('Workspaces Integration', () => {
 
     it('rejects missing required fields', async () => {
       const dto = {
-        id: 'test-ws-missing',
+        id: 'test_ws_missing',
         name: 'Test',
         // missing website, timezone, currency
       };
@@ -222,7 +222,7 @@ describe('Workspaces Integration', () => {
     it('returns workspace by id', async () => {
       // Insert directly to ClickHouse system database
       const workspace = {
-        id: 'get-test-ws',
+        id: 'get_test_ws',
         name: 'Get Test',
         website: 'https://get-test.com',
         timezone: 'UTC',
@@ -253,7 +253,7 @@ describe('Workspaces Integration', () => {
     it('returns 404 for non-existent workspace', async () => {
       await request(app.getHttpServer())
         .get('/api/workspaces.get')
-        .query({ id: 'non-existent-id' })
+        .query({ id: 'nonexistent_id' })
         .set('Authorization', `Bearer ${authToken}`)
         .expect(404);
     });
@@ -261,7 +261,7 @@ describe('Workspaces Integration', () => {
     it('requires authentication', async () => {
       await request(app.getHttpServer())
         .get('/api/workspaces.get')
-        .query({ id: 'some-id' })
+        .query({ id: 'some_id' })
         .expect(401);
     });
   });
@@ -271,7 +271,7 @@ describe('Workspaces Integration', () => {
       const now = Date.now();
       const workspaces = [
         {
-          id: 'ws-1',
+          id: 'ws_1',
           name: 'First',
           website: 'https://first.com',
           timezone: 'UTC',
@@ -282,7 +282,7 @@ describe('Workspaces Integration', () => {
           updated_at: toClickHouseDateTime(),
         },
         {
-          id: 'ws-2',
+          id: 'ws_2',
           name: 'Second',
           website: 'https://second.com',
           timezone: 'UTC',
@@ -293,7 +293,7 @@ describe('Workspaces Integration', () => {
           updated_at: toClickHouseDateTime(),
         },
         {
-          id: 'ws-3',
+          id: 'ws_3',
           name: 'Third',
           website: 'https://third.com',
           timezone: 'UTC',
@@ -318,9 +318,9 @@ describe('Workspaces Integration', () => {
 
       expect(response.body).toHaveLength(3);
       // Most recent first
-      expect(response.body[0].id).toBe('ws-3');
-      expect(response.body[1].id).toBe('ws-2');
-      expect(response.body[2].id).toBe('ws-1');
+      expect(response.body[0].id).toBe('ws_3');
+      expect(response.body[1].id).toBe('ws_2');
+      expect(response.body[2].id).toBe('ws_1');
     });
 
     it('returns empty array when no workspaces exist', async () => {
@@ -341,7 +341,7 @@ describe('Workspaces Integration', () => {
     it('updates workspace fields', async () => {
       // Create workspace first
       const createDto = {
-        id: 'update-test-ws',
+        id: 'update_test_ws',
         name: 'Original Name',
         website: 'https://original.com',
         timezone: 'UTC',
@@ -355,7 +355,7 @@ describe('Workspaces Integration', () => {
 
       // Update some fields
       const updateDto = {
-        id: 'update-test-ws',
+        id: 'update_test_ws',
         name: 'Updated Name',
         timezone: 'Europe/Paris',
       };
@@ -375,7 +375,7 @@ describe('Workspaces Integration', () => {
     it('adds integration without clearing other fields', async () => {
       // Create workspace first
       const createDto = {
-        id: 'integration-test-ws',
+        id: 'integration_test_ws',
         name: 'Integration Test',
         website: 'https://integration-test.com',
         timezone: 'America/New_York',
@@ -390,10 +390,10 @@ describe('Workspaces Integration', () => {
 
       // Update with integration only
       const updateDto = {
-        id: 'integration-test-ws',
+        id: 'integration_test_ws',
         integrations: [
           {
-            id: 'anthropic-1',
+            id: 'anthropic_1',
             type: 'anthropic',
             enabled: true,
             created_at: new Date().toISOString(),
@@ -439,7 +439,7 @@ describe('Workspaces Integration', () => {
     it('preserves fields not included in update payload', async () => {
       // Create workspace first
       const createDto = {
-        id: 'partial-update-test-ws',
+        id: 'partial_update_test_ws',
         name: 'Keep This Name',
         website: 'https://keep-this.com',
         timezone: 'Asia/Tokyo',
@@ -453,7 +453,7 @@ describe('Workspaces Integration', () => {
 
       // Send update with only some fields (others should be preserved)
       const updateDto = {
-        id: 'partial-update-test-ws',
+        id: 'partial_update_test_ws',
         timescore_reference: 120,
       };
       const response = await request(app.getHttpServer())
@@ -474,7 +474,7 @@ describe('Workspaces Integration', () => {
     it('updates bounce_threshold', async () => {
       // Create workspace first
       const createDto = {
-        id: 'bounce-update-test',
+        id: 'bounce_update_test',
         name: 'Bounce Update Test',
         website: 'https://bounce-update.com',
         timezone: 'UTC',
@@ -490,7 +490,7 @@ describe('Workspaces Integration', () => {
       const response = await request(app.getHttpServer())
         .post('/api/workspaces.update')
         .set('Authorization', `Bearer ${authToken}`)
-        .send({ id: 'bounce-update-test', bounce_threshold: 20 })
+        .send({ id: 'bounce_update_test', bounce_threshold: 20 })
         .expect(201);
 
       expect(response.body.bounce_threshold).toBe(20);
@@ -500,14 +500,14 @@ describe('Workspaces Integration', () => {
       await request(app.getHttpServer())
         .post('/api/workspaces.update')
         .set('Authorization', `Bearer ${authToken}`)
-        .send({ id: 'non-existent-id', name: 'Test' })
+        .send({ id: 'nonexistent_id', name: 'Test' })
         .expect(404);
     });
 
     it('requires authentication', async () => {
       await request(app.getHttpServer())
         .post('/api/workspaces.update')
-        .send({ id: 'some-id', name: 'Test' })
+        .send({ id: 'some_id', name: 'Test' })
         .expect(401);
     });
   });
@@ -515,7 +515,7 @@ describe('Workspaces Integration', () => {
   describe('POST /api/workspaces.delete', () => {
     it('deletes workspace from ClickHouse', async () => {
       const workspace = {
-        id: 'delete-test-ws',
+        id: 'delete_test_ws',
         name: 'Delete Test',
         website: 'https://delete.com',
         timezone: 'UTC',
@@ -555,14 +555,14 @@ describe('Workspaces Integration', () => {
       await request(app.getHttpServer())
         .post('/api/workspaces.delete')
         .set('Authorization', `Bearer ${authToken}`)
-        .send({ id: 'non-existent-id' })
+        .send({ id: 'nonexistent_id' })
         .expect(404);
     });
 
     it('requires authentication', async () => {
       await request(app.getHttpServer())
         .post('/api/workspaces.delete')
-        .send({ id: 'some-id' })
+        .send({ id: 'some_id' })
         .expect(401);
     });
   });
