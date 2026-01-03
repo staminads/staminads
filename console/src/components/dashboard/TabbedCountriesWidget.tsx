@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Tooltip, Empty, Spin } from 'antd'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import { formatValue } from '../../lib/chart-utils'
+import { getHeatMapStyle } from '../../lib/explore-utils'
 
 export interface CountryData {
   dimension_value: string
@@ -28,6 +29,7 @@ interface TabbedCountriesWidgetProps {
   data: CountryData[]
   loading: boolean
   showComparison?: boolean
+  timescoreReference?: number
   emptyText?: string
 }
 
@@ -36,9 +38,15 @@ export function TabbedCountriesWidget({
   data,
   loading,
   showComparison = true,
+  timescoreReference = 60,
   emptyText = 'No data available',
 }: TabbedCountriesWidgetProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('sessions')
+
+  // Max median_duration for heat map scaling
+  const maxMedianDuration = useMemo(() => {
+    return data.reduce((max, row) => Math.max(max, row.median_duration || 0), 0)
+  }, [data])
 
   // Sort data client-side based on active tab
   const sortedData = [...data].sort((a, b) => b[activeTab] - a[activeTab])
@@ -76,8 +84,8 @@ export function TabbedCountriesWidget({
       {/* Table header */}
       <div className="flex items-center px-4 py-3 border-b border-gray-200">
         <span className="flex-1 text-xs font-medium text-gray-600">Country</span>
-        <span className={`text-xs font-medium text-gray-500 text-right ${showComparison ? 'w-26' : 'w-16'}`}>Sessions</span>
-        <span className={`text-xs font-medium text-gray-500 text-right ${showComparison ? 'w-26' : 'w-16'}`}>TimeScore</span>
+        <span className={`text-xs font-medium text-gray-500 text-right ${showComparison ? 'w-28' : 'w-16'}`}>Sessions</span>
+        <span className={`text-xs font-medium text-gray-500 pl-6 ${showComparison ? 'w-34' : 'w-24'}`}>TimeScore</span>
       </div>
 
       {loading && data.length === 0 ? (
@@ -104,7 +112,7 @@ export function TabbedCountriesWidget({
                 className="group/row relative flex items-center h-9 px-4 border-b border-transparent hover:border-[var(--primary)]"
               >
                 {/* Dimension value */}
-                <div className="relative flex-1 min-w-0 pr-4 h-full flex items-center pl-0.5 gap-2">
+                <div className="relative flex-1 min-w-0 pr-4 h-full flex items-center pl-1.5 gap-2">
                   {/* Background bar */}
                   <div
                     className="absolute left-0 top-1 bottom-1 bg-[var(--primary)] opacity-[0.06] pointer-events-none rounded"
@@ -127,10 +135,10 @@ export function TabbedCountriesWidget({
                   </span>
                 </div>
                 {showComparison && (
-                  <span className={`text-xs w-10 text-right ${sessionsChange !== null ? (sessionsChange >= 0 ? 'text-green-600' : 'text-orange-500') : 'text-transparent'}`}>
+                  <span className={`text-[10px] w-12 text-right ${sessionsChange !== null ? (sessionsChange >= 0 ? 'text-green-600' : 'text-orange-500') : 'text-transparent'}`}>
                     {sessionsChange !== null ? (
                       <>
-                        {sessionsChange >= 0 ? <ChevronUp size={12} className="inline" /> : <ChevronDown size={12} className="inline" />}
+                        {sessionsChange >= 0 ? <ChevronUp size={10} className="inline" /> : <ChevronDown size={10} className="inline" />}
                         {Math.abs(sessionsChange).toFixed(0)}%
                       </>
                     ) : '—'}
@@ -138,16 +146,17 @@ export function TabbedCountriesWidget({
                 )}
 
                 {/* TimeScore value */}
-                <div className="w-16 text-right">
+                <div className="w-24 flex items-center gap-2 pl-6">
+                  <span style={getHeatMapStyle(row.median_duration, maxMedianDuration, timescoreReference)} />
                   <span className="text-xs text-gray-800">
                     {formatValue(row.median_duration, 'duration')}
                   </span>
                 </div>
                 {showComparison && (
-                  <span className={`text-xs w-10 text-right ${durationChange !== null ? (durationChange >= 0 ? 'text-green-600' : 'text-orange-500') : 'text-transparent'}`}>
+                  <span className={`text-[10px] w-10 text-right ${durationChange !== null ? (durationChange >= 0 ? 'text-green-600' : 'text-orange-500') : 'text-transparent'}`}>
                     {durationChange !== null ? (
                       <>
-                        {durationChange >= 0 ? <ChevronUp size={12} className="inline" /> : <ChevronDown size={12} className="inline" />}
+                        {durationChange >= 0 ? <ChevronUp size={10} className="inline" /> : <ChevronDown size={10} className="inline" />}
                         {Math.abs(durationChange).toFixed(0)}%
                       </>
                     ) : '—'}

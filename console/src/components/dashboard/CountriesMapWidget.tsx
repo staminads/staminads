@@ -2,20 +2,19 @@ import { useState, useMemo } from 'react'
 import ReactECharts from 'echarts-for-react'
 import * as echarts from 'echarts'
 import { Spin, Empty } from 'antd'
-import worldMap from '../../lib/world-map'
+import worldGeoJson from '../../lib/world-geo.json'
+import { ISO2_TO_ISO3, getCountryName } from '../../lib/iso-countries'
 import { formatValue } from '../../lib/chart-utils'
 import type { CountryData } from './TabbedCountriesWidget'
 
 // Register map once on module load
-echarts.registerMap('world', worldMap as unknown as Parameters<typeof echarts.registerMap>[1])
+echarts.registerMap('world', worldGeoJson as Parameters<typeof echarts.registerMap>[1])
 
-// Build code->name mapping from GeoJSON (for tooltip display)
-// GeoJSON uses "name" as ISO code (e.g., "US") and "fullname" as display name (e.g., "United States")
-const countryCodeToName: Record<string, string> = {}
-worldMap.features.forEach((f) => {
-  const props = f.properties as Record<string, unknown> | undefined
-  if (props?.name && props?.fullname) {
-    countryCodeToName[(props.name as string).toUpperCase()] = props.fullname as string
+// Build ISO3 code to GeoJSON name mapping for ECharts nameMap
+const iso3ToGeoName: Record<string, string> = {}
+;(worldGeoJson as { features: Array<{ id: string; properties: { name: string } }> }).features.forEach((f) => {
+  if (f.id && f.properties?.name) {
+    iso3ToGeoName[f.id] = f.properties.name
   }
 })
 
@@ -48,18 +47,18 @@ function getTimescoreColor(value: number, maxValue: number, reference: number): 
   if (value <= reference) {
     // Below/at reference: light → green
     const ratio = value / reference
-    const lightness = 95 - (ratio * 35) // 95% → 60%
-    return `hsl(142, 70%, ${lightness}%)`
+    const lightness = 95 - (ratio * 30) // 95% → 65%
+    return `hsl(142, 50%, ${lightness}%)`
   } else {
     // Above reference: green → cyan
     const headroom = effectiveMax - reference
     if (headroom <= 0) {
-      return `hsl(180, 70%, 50%)`
+      return `hsl(180, 50%, 55%)`
     }
     const aboveRatio = Math.min((value - reference) / headroom, 1)
     const hue = 142 + (aboveRatio * 38) // 142 → 180 (cyan)
-    const lightness = 60 - (aboveRatio * 10) // 60% → 50%
-    return `hsl(${hue}, 70%, ${lightness}%)`
+    const lightness = 65 - (aboveRatio * 10) // 65% → 55%
+    return `hsl(${hue}, 50%, ${lightness}%)`
   }
 }
 
@@ -78,23 +77,30 @@ export function CountriesMapWidget({
     return Math.max(...data.map((d) => d[activeTab]))
   }, [data, activeTab])
 
-  // Transform data for ECharts - use uppercase ISO codes as names (matches GeoJSON "name" property)
+  // Transform data for ECharts - convert ISO2 to GeoJSON country name for matching
   // For TimeScore, compute color based on reference value
   const mapData = useMemo(() => {
-    return data.map((d) => {
-      const value = d[activeTab]
-      const item: { name: string; value: number; itemStyle?: { areaColor: string } } = {
-        name: d.dimension_value.toUpperCase(),
-        value,
-      }
-      // For TimeScore, use reference-based coloring
-      if (activeTab === 'median_duration') {
-        item.itemStyle = {
-          areaColor: getTimescoreColor(value, maxValue, timescoreReference),
+    return data
+      .map((d) => {
+        const value = d[activeTab]
+        const iso2 = d.dimension_value.toUpperCase()
+        const iso3 = ISO2_TO_ISO3[iso2] || iso2
+        const geoName = iso3ToGeoName[iso3]
+        if (!geoName) return null // Skip if country not in GeoJSON
+
+        const item: { name: string; value: number; itemStyle?: { areaColor: string } } = {
+          name: geoName,
+          value,
         }
-      }
-      return item
-    })
+        // For TimeScore, use reference-based coloring
+        if (activeTab === 'median_duration') {
+          item.itemStyle = {
+            areaColor: getTimescoreColor(value, maxValue, timescoreReference),
+          }
+        }
+        return item
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null)
   }, [data, activeTab, maxValue, timescoreReference])
 
   const option = useMemo(
@@ -102,7 +108,8 @@ export function CountriesMapWidget({
       tooltip: {
         trigger: 'item',
         formatter: (params: { name?: string; value?: number; data?: { value?: number } }) => {
-          const displayName = params.name ? (countryCodeToName[params.name] || params.name) : ''
+          // params.name is the ISO3 code from GeoJSON
+          const displayName = params.name ? getCountryName(params.name) : ''
           const value = params.data?.value
           if (value === undefined || value === null || Number.isNaN(value)) {
             return displayName

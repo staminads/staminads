@@ -181,9 +181,9 @@ export function generateEvents(config: GenerationConfig): TrackingEvent[] {
   const startDate = new Date(endDate);
   startDate.setDate(startDate.getDate() - daysRange);
 
-  // iPhone launch date: 2 weeks before end date
+  // iPhone launch date: 5 days before end date (positions spike in "current" period)
   const launchDate = new Date(endDate);
-  launchDate.setDate(launchDate.getDate() - 14);
+  launchDate.setDate(launchDate.getDate() - 5);
 
   // Pre-calculate daily session distribution
   const dailySessionCounts = calculateDailySessionCounts(
@@ -225,9 +225,9 @@ export function* generateEventsByDay(config: GenerationConfig): Generator<DayBat
   const startDate = new Date(endDate);
   startDate.setDate(startDate.getDate() - daysRange);
 
-  // iPhone launch date: 2 weeks before end date
+  // iPhone launch date: 5 days before end date (positions spike in "current" period)
   const launchDate = new Date(endDate);
-  launchDate.setDate(launchDate.getDate() - 14);
+  launchDate.setDate(launchDate.getDate() - 5);
 
   // Pre-calculate daily session distribution
   const dailySessionCounts = calculateDailySessionCounts(
@@ -273,6 +273,9 @@ function calculateDailySessionCounts(
   const weights: Record<string, number> = {};
   let totalWeight = 0;
 
+  // Calculate total days for growth trend
+  const daysTotal = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+
   // Calculate weight for each day
   const current = new Date(startDate);
   while (current <= endDate) {
@@ -280,12 +283,17 @@ function calculateDailySessionCounts(
     const dayOfWeek = current.getDay();
     let weight = DAY_OF_WEEK_WEIGHTS[dayOfWeek] || 1;
 
+    // Growth trend: starts at 0.85x, ends at 1.15x over the period
+    const dayIndex = Math.floor((current.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    const growthMultiplier = 0.85 + (dayIndex / daysTotal) * 0.30;
+    weight *= growthMultiplier;
+
     // Apply launch multipliers
     const launchPeriod = isIPhoneLaunchPeriod(current, launchDate);
     if (launchPeriod === 'launch') {
       weight *= 3;
     } else if (launchPeriod === 'post') {
-      weight *= 2;
+      weight *= 1.5;
     }
 
     weights[dateKey] = weight;

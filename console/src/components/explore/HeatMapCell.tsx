@@ -30,11 +30,9 @@ export function HeatMapCell({
   const isNegative = hasChange && changePercent! < 0
 
   return (
-    <div className="flex items-center justify-end">
-      <span
-        className="px-2 py-0.5 rounded font-medium leading-tight"
-        style={style}
-      >
+    <div className="flex items-center justify-end gap-1.5">
+      <span style={style} />
+      <span className="font-medium leading-tight">
         {formattedValue}
       </span>
       {hasChange && (

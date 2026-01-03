@@ -144,7 +144,9 @@ function WorkspaceLayout() {
               ]}
             />
             {isWorkspaceActive && (
-              <nav className="flex gap-1">
+              <div className="flex items-center">
+                <div className="h-5 w-px bg-gray-200" />
+                <nav className="flex gap-1 pl-2">
                 {[
                   { to: '/workspaces/$workspaceId', label: 'Dashboard', exact: true },
                   { to: '/workspaces/$workspaceId/explore', label: 'Explore' },
@@ -170,7 +172,8 @@ function WorkspaceLayout() {
                     </Link>
                   )
                 })}
-              </nav>
+                </nav>
+              </div>
             )}
           </Space>
 

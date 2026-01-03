@@ -438,7 +438,7 @@ export function DashboardGrid({
             dateRange={dashboardData?.dateRange ?? { start: '', end: '' }}
             compareDateRange={dashboardData?.compareDateRange ?? { start: '', end: '' }}
             loading={!response && isFetching}
-            height={240}
+            height={200}
           />
         </div>
       </div>
@@ -449,6 +449,7 @@ export function DashboardGrid({
           data={pagesData}
           loading={pagesFetching && !pagesResponse}
           showComparison={showComparison}
+          timescoreReference={timescoreReference}
           workspaceId={workspaceId}
         />
         <TabbedSourcesWidget
@@ -456,6 +457,7 @@ export function DashboardGrid({
           data={sourcesData}
           loading={sourcesFetching && !sourcesResponse}
           showComparison={showComparison}
+          timescoreReference={timescoreReference}
           showFavicon
           emptyText="No unmapped sources"
         />
@@ -467,6 +469,7 @@ export function DashboardGrid({
           data={channelsData}
           loading={channelsFetching && !channelsResponse}
           showComparison={showComparison}
+          timescoreReference={timescoreReference}
           emptyText="No channel data"
         />
         <TabbedCampaignsWidget
@@ -474,6 +477,7 @@ export function DashboardGrid({
           data={campaignsData}
           loading={campaignsFetching && !campaignsResponse}
           showComparison={showComparison}
+          timescoreReference={timescoreReference}
           emptyText="No campaign data"
         />
       </div>
@@ -484,6 +488,7 @@ export function DashboardGrid({
           data={countriesData}
           loading={countriesFetching && !countriesResponse}
           showComparison={showComparison}
+          timescoreReference={timescoreReference}
           emptyText="No country data"
         />
         <CountriesMapWidget

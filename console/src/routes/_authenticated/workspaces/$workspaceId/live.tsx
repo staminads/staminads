@@ -7,6 +7,9 @@ import { LiveMap } from '../../../../components/live/LiveMap'
 import { LivePagesWidget } from '../../../../components/live/LivePagesWidget'
 import { LiveCitiesWidget } from '../../../../components/live/LiveCitiesWidget'
 import { LiveReferrersWidget } from '../../../../components/live/LiveReferrersWidget'
+import { LiveDevicesWidget } from '../../../../components/live/LiveDevicesWidget'
+import { LiveCampaignsWidget } from '../../../../components/live/LiveCampaignsWidget'
+import { LiveChannelsWidget } from '../../../../components/live/LiveChannelsWidget'
 
 export const Route = createFileRoute('/_authenticated/workspaces/$workspaceId/live')({
   component: LiveView,
@@ -37,7 +40,7 @@ function LiveView() {
       dimensions: ['landing_path'],
       dateRange: { preset: 'last_30_minutes' },
       order: { sessions: 'desc' },
-      limit: 5,
+      limit: 10,
       timezone,
     })
   )
@@ -50,7 +53,7 @@ function LiveView() {
       dimensions: ['city', 'country'],
       dateRange: { preset: 'last_30_minutes' },
       order: { sessions: 'desc' },
-      limit: 5,
+      limit: 10,
       timezone,
     })
   )
@@ -63,7 +66,46 @@ function LiveView() {
       dimensions: ['referrer_domain'],
       dateRange: { preset: 'last_30_minutes' },
       order: { sessions: 'desc' },
-      limit: 5,
+      limit: 10,
+      timezone,
+    })
+  )
+
+  // Query for devices
+  const devicesQuery = useQuery(
+    liveAnalyticsQueryOptions({
+      workspace_id: workspaceId,
+      metrics: ['sessions'],
+      dimensions: ['device'],
+      dateRange: { preset: 'last_30_minutes' },
+      order: { sessions: 'desc' },
+      limit: 10,
+      timezone,
+    })
+  )
+
+  // Query for campaigns
+  const campaignsQuery = useQuery(
+    liveAnalyticsQueryOptions({
+      workspace_id: workspaceId,
+      metrics: ['sessions'],
+      dimensions: ['utm_campaign'],
+      dateRange: { preset: 'last_30_minutes' },
+      order: { sessions: 'desc' },
+      limit: 10,
+      timezone,
+    })
+  )
+
+  // Query for channels
+  const channelsQuery = useQuery(
+    liveAnalyticsQueryOptions({
+      workspace_id: workspaceId,
+      metrics: ['sessions'],
+      dimensions: ['channel_group'],
+      dateRange: { preset: 'last_30_minutes' },
+      order: { sessions: 'desc' },
+      limit: 10,
       timezone,
     })
   )
@@ -97,6 +139,27 @@ function LiveView() {
   const referrersData = Array.isArray(referrersQuery.data?.data)
     ? referrersQuery.data.data.map((row) => ({
         referrer_domain: row.referrer_domain as string,
+        sessions: row.sessions as number,
+      }))
+    : []
+
+  const devicesData = Array.isArray(devicesQuery.data?.data)
+    ? devicesQuery.data.data.map((row) => ({
+        device: row.device as string,
+        sessions: row.sessions as number,
+      }))
+    : []
+
+  const campaignsData = Array.isArray(campaignsQuery.data?.data)
+    ? campaignsQuery.data.data.map((row) => ({
+        utm_campaign: row.utm_campaign as string,
+        sessions: row.sessions as number,
+      }))
+    : []
+
+  const channelsData = Array.isArray(channelsQuery.data?.data)
+    ? channelsQuery.data.data.map((row) => ({
+        channel_group: row.channel_group as string,
         sessions: row.sessions as number,
       }))
     : []
@@ -141,6 +204,13 @@ function LiveView() {
         />
         <LiveCitiesWidget data={citiesData} loading={citiesQuery.isLoading} />
         <LiveReferrersWidget data={referrersData} loading={referrersQuery.isLoading} />
+      </div>
+
+      {/* Second Row */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+        <LiveDevicesWidget data={devicesData} loading={devicesQuery.isLoading} />
+        <LiveCampaignsWidget data={campaignsData} loading={campaignsQuery.isLoading} />
+        <LiveChannelsWidget data={channelsData} loading={channelsQuery.isLoading} />
       </div>
     </div>
   )

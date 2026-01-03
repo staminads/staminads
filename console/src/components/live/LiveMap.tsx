@@ -2,10 +2,10 @@ import { useMemo } from 'react'
 import ReactECharts from 'echarts-for-react'
 import * as echarts from 'echarts'
 import { Spin, Empty } from 'antd'
-import worldMap from '../../lib/world-map'
+import worldGeoJson from '../../lib/world-geo.json'
 
-// Register map once on module load
-echarts.registerMap('world', worldMap as unknown as Parameters<typeof echarts.registerMap>[1])
+// Register map once on module load (same as CountriesMapWidget)
+echarts.registerMap('world', worldGeoJson as Parameters<typeof echarts.registerMap>[1])
 
 interface SessionLocation {
   latitude: number | null
@@ -35,15 +35,20 @@ export function LiveMap({ data, loading }: LiveMapProps) {
     () => ({
       geo: {
         map: 'world',
-        roam: true,
-        silent: true,
+        roam: false,
+        left: 10,
+        right: 10,
+        top: 10,
+        bottom: 10,
         itemStyle: {
-          areaColor: '#f9fafb',
-          borderColor: '#e5e7eb',
+          areaColor: '#eeebfc',
+          borderColor: '#d4cdf7',
           borderWidth: 0.5,
         },
         emphasis: {
-          disabled: true,
+          itemStyle: {
+            areaColor: '#d4cdf7',
+          },
         },
       },
       tooltip: {
@@ -83,7 +88,7 @@ export function LiveMap({ data, loading }: LiveMapProps) {
 
   if (loading && data.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[400px] bg-white rounded-md">
+      <div className="flex items-center justify-center h-[400px]">
         <Spin />
       </div>
     )
@@ -91,7 +96,7 @@ export function LiveMap({ data, loading }: LiveMapProps) {
 
   if (data.length === 0 || scatterData.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[400px] bg-white rounded-md">
+      <div className="flex items-center justify-center h-[400px]">
         <Empty
           description="No live sessions in the last 30 minutes"
           image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -101,7 +106,7 @@ export function LiveMap({ data, loading }: LiveMapProps) {
   }
 
   return (
-    <div className="bg-white rounded-md overflow-hidden">
+    <div className="overflow-hidden">
       <ReactECharts
         option={option}
         style={{ height: 400, width: '100%' }}

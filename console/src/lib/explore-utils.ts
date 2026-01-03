@@ -312,17 +312,21 @@ export function getHeatMapColor(
 }
 
 /**
- * Get background style for heat map cell
+ * Get bullet style for heat map indicator
  */
 export function getHeatMapStyle(
   value: number,
   bestValue: number,
   referenceValue?: number,
 ): React.CSSProperties {
-  const backgroundColor = getHeatMapColor(value, bestValue, referenceValue)
+  const color = getHeatMapColor(value, bestValue, referenceValue)
   return {
-    backgroundColor,
-    transition: 'background-color 0.2s ease',
+    backgroundColor: color,
+    width: '7px',
+    height: '7px',
+    borderRadius: '50%',
+    display: 'inline-block',
+    flexShrink: 0,
   }
 }
 
