@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Tooltip, Empty, Spin } from 'antd'
-import { ChevronUp, ChevronDown } from 'lucide-react'
+import { ChevronUp, ChevronDown, Info } from 'lucide-react'
 import { formatValue } from '../../lib/chart-utils'
 import { getHeatMapStyle } from '../../lib/explore-utils'
 
@@ -32,6 +32,7 @@ interface TabbedSourcesWidgetProps {
   showFavicon?: boolean
   timescoreReference?: number
   emptyText?: string
+  infoTooltip?: string
 }
 
 export function TabbedSourcesWidget({
@@ -42,6 +43,7 @@ export function TabbedSourcesWidget({
   showFavicon = false,
   timescoreReference = 60,
   emptyText = 'No data available',
+  infoTooltip,
 }: TabbedSourcesWidgetProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('sessions')
 
@@ -63,7 +65,14 @@ export function TabbedSourcesWidget({
     <div className="rounded-md overflow-hidden bg-white">
       {/* Title */}
       <div className="px-4 pt-4 pb-4">
-        <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+        <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+          {title}
+          {infoTooltip && (
+            <Tooltip title={infoTooltip}>
+              <Info size={14} className="text-gray-400 cursor-help" />
+            </Tooltip>
+          )}
+        </h3>
       </div>
 
       {/* Tabs */}

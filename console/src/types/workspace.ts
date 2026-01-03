@@ -29,6 +29,36 @@ export interface WorkspaceIntegration {
   limits?: WorkspaceIntegrationLimits
 }
 
+/**
+ * Annotation for marking significant dates on charts.
+ */
+export interface Annotation {
+  id: string
+  date: string // ISO date string (YYYY-MM-DD)
+  timezone: string // IANA timezone (e.g., 'America/New_York')
+  title: string
+  description?: string
+  color?: string // Hex color, defaults to '#7763f1'
+}
+
+/**
+ * Workspace settings stored as JSON.
+ */
+export interface WorkspaceSettings {
+  timescore_reference: number
+  bounce_threshold: number
+  custom_dimensions?: CustomDimensionLabels | null
+  integrations?: WorkspaceIntegration[]
+  geo_enabled: boolean
+  geo_store_city: boolean
+  geo_store_region: boolean
+  geo_coordinates_precision: number
+  annotations?: Annotation[]
+}
+
+/**
+ * Workspace entity with settings nested.
+ */
 export interface Workspace {
   id: string
   name: string
@@ -38,11 +68,8 @@ export interface Workspace {
   logo_url?: string
   created_at: string
   updated_at: string
-  timescore_reference: number
-  bounce_threshold: number
   status: WorkspaceStatus
-  custom_dimensions?: CustomDimensionLabels | null
-  integrations?: WorkspaceIntegration[]
+  settings: WorkspaceSettings
 }
 
 export interface CreateWorkspaceInput {
@@ -52,6 +79,7 @@ export interface CreateWorkspaceInput {
   timezone: string
   currency: string
   logo_url?: string
+  settings?: Partial<WorkspaceSettings>
 }
 
 export interface UpdateWorkspaceInput {
@@ -61,9 +89,6 @@ export interface UpdateWorkspaceInput {
   timezone?: string
   currency?: string
   logo_url?: string
-  custom_dimensions?: CustomDimensionLabels
-  timescore_reference?: number
-  bounce_threshold?: number
-  integrations?: WorkspaceIntegration[]
   status?: WorkspaceStatus
+  settings?: Partial<WorkspaceSettings>
 }

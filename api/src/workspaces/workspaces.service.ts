@@ -3,8 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import { ClickHouseService } from '../database/clickhouse.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
-import { Workspace, CustomDimensionLabels } from './entities/workspace.entity';
-import { FilterDefinition } from '../filters/entities/filter.entity';
+import {
+  Workspace,
+  WorkspaceSettings,
+  DEFAULT_WORKSPACE_SETTINGS,
+} from './entities/workspace.entity';
 import { Integration, AnthropicIntegration } from './entities/integration.entity';
 import { encryptApiKey } from '../common/crypto';
 
@@ -12,56 +15,46 @@ function toClickHouseDateTime(date: Date = new Date()): string {
   return date.toISOString().replace('T', ' ').replace('Z', '');
 }
 
-/**
- * Default custom dimension labels for new workspaces.
- */
-const DEFAULT_CUSTOM_DIMENSION_LABELS: CustomDimensionLabels = {
-  '1': 'Channel Group',
-  '2': 'Channel',
-};
-
-/**
- * Default geo settings for new workspaces.
- */
-const DEFAULT_GEO_SETTINGS = {
-  geo_enabled: true,
-  geo_store_city: true,
-  geo_store_region: true,
-  geo_coordinates_precision: 2,
-};
-
-interface WorkspaceRow
-  extends Omit<Workspace, 'custom_dimensions' | 'filters' | 'integrations'> {
-  custom_dimensions: string; // JSON string from ClickHouse
-  filters: string; // JSON string from ClickHouse
-  integrations: string; // JSON string from ClickHouse
+interface WorkspaceRow extends Omit<Workspace, 'settings'> {
+  settings: string; // JSON string from ClickHouse
 }
 
 function parseWorkspace(row: WorkspaceRow): Workspace {
+  const settings = row.settings
+    ? (JSON.parse(row.settings) as Partial<WorkspaceSettings>)
+    : {};
+
   return {
-    ...row,
-    custom_dimensions: row.custom_dimensions
-      ? (JSON.parse(row.custom_dimensions) as CustomDimensionLabels)
-      : null,
-    filters: row.filters ? (JSON.parse(row.filters) as FilterDefinition[]) : [],
-    integrations: row.integrations
-      ? (JSON.parse(row.integrations) as Integration[])
-      : [],
+    id: row.id,
+    name: row.name,
+    website: row.website,
+    timezone: row.timezone,
+    currency: row.currency,
+    logo_url: row.logo_url,
+    status: row.status,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    settings: {
+      ...DEFAULT_WORKSPACE_SETTINGS,
+      ...settings,
+    },
   };
 }
 
 function serializeWorkspace(
   workspace: Workspace,
-): Omit<Workspace, 'custom_dimensions' | 'filters' | 'integrations'> & {
-  custom_dimensions: string;
-  filters: string;
-  integrations: string;
-} {
+): Omit<Workspace, 'settings'> & { settings: string } {
   return {
-    ...workspace,
-    custom_dimensions: JSON.stringify(workspace.custom_dimensions ?? {}),
-    filters: JSON.stringify(workspace.filters ?? []),
-    integrations: JSON.stringify(workspace.integrations ?? []),
+    id: workspace.id,
+    name: workspace.name,
+    website: workspace.website,
+    timezone: workspace.timezone,
+    currency: workspace.currency,
+    logo_url: workspace.logo_url,
+    status: workspace.status,
+    created_at: workspace.created_at,
+    updated_at: workspace.updated_at,
+    settings: JSON.stringify(workspace.settings),
   };
 }
 
@@ -100,24 +93,24 @@ export class WorkspacesService {
 
   async create(dto: CreateWorkspaceDto): Promise<Workspace> {
     const now = toClickHouseDateTime();
+
+    // Build settings from dto.settings with defaults
+    const settings: WorkspaceSettings = {
+      ...DEFAULT_WORKSPACE_SETTINGS,
+      ...(dto.settings || {}),
+    };
+
     const workspace: Workspace = {
-      ...dto,
+      id: dto.id,
+      name: dto.name,
+      website: dto.website,
+      timezone: dto.timezone,
+      currency: dto.currency,
+      logo_url: dto.logo_url,
+      status: 'initializing',
       created_at: now,
       updated_at: now,
-      timescore_reference: 60,
-      bounce_threshold: dto.bounce_threshold ?? 10,
-      status: 'initializing',
-      custom_dimensions: DEFAULT_CUSTOM_DIMENSION_LABELS,
-      filters: [],
-      integrations: [],
-      // Geo settings with defaults
-      geo_enabled: dto.geo_enabled ?? DEFAULT_GEO_SETTINGS.geo_enabled,
-      geo_store_city: dto.geo_store_city ?? DEFAULT_GEO_SETTINGS.geo_store_city,
-      geo_store_region:
-        dto.geo_store_region ?? DEFAULT_GEO_SETTINGS.geo_store_region,
-      geo_coordinates_precision:
-        dto.geo_coordinates_precision ??
-        DEFAULT_GEO_SETTINGS.geo_coordinates_precision,
+      settings,
     };
 
     // 1. Create workspace database first
@@ -136,23 +129,34 @@ export class WorkspacesService {
   async update(dto: UpdateWorkspaceDto): Promise<Workspace> {
     const workspace = await this.get(dto.id);
 
-    // Encrypt API keys in integrations if provided
-    if (dto.integrations) {
-      dto.integrations = this.encryptIntegrationKeys(dto.integrations, dto.id);
+    // Merge settings if provided
+    let updatedSettings = workspace.settings;
+    if (dto.settings) {
+      // Encrypt API keys in integrations if provided
+      if (dto.settings.integrations) {
+        dto.settings.integrations = this.encryptIntegrationKeys(
+          dto.settings.integrations,
+          dto.id,
+        );
+      }
+
+      updatedSettings = {
+        ...workspace.settings,
+        ...dto.settings,
+      };
     }
 
-    // Filter out undefined and empty string values from dto
-    // This prevents accidental overwrites when frontend sends empty strings
-    const cleanDto = Object.fromEntries(
-      Object.entries(dto).filter(
-        ([_, v]) => v !== undefined && v !== '',
-      ),
-    ) as Partial<UpdateWorkspaceDto>;
-
     const updated: Workspace = {
-      ...workspace,
-      ...cleanDto,
+      id: workspace.id,
+      name: dto.name ?? workspace.name,
+      website: dto.website ?? workspace.website,
+      timezone: dto.timezone ?? workspace.timezone,
+      currency: dto.currency ?? workspace.currency,
+      logo_url: dto.logo_url ?? workspace.logo_url,
+      status: dto.status ?? workspace.status,
+      created_at: workspace.created_at,
       updated_at: toClickHouseDateTime(),
+      settings: updatedSettings,
     };
 
     // ClickHouse uses ALTER TABLE for updates, but for simplicity we delete and re-insert

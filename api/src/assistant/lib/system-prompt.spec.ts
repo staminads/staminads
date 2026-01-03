@@ -13,13 +13,16 @@ describe('buildSystemPrompt', () => {
     currency: 'USD',
     created_at: '2025-01-01T00:00:00Z',
     updated_at: '2025-01-01T00:00:00Z',
-    timescore_reference: 120,
-    bounce_threshold: 5,
     status: 'active',
-    geo_enabled: true,
-    geo_store_city: true,
-    geo_store_region: true,
-    geo_coordinates_precision: 2,
+    settings: {
+      timescore_reference: 120,
+      bounce_threshold: 5,
+      geo_enabled: true,
+      geo_store_city: true,
+      geo_store_region: true,
+      geo_coordinates_precision: 2,
+      ...overrides.settings,
+    },
     ...overrides,
   });
 
@@ -38,7 +41,7 @@ describe('buildSystemPrompt', () => {
   });
 
   it('shows "None configured" when no custom dimensions', () => {
-    const workspace = createWorkspace({ custom_dimensions: null });
+    const workspace = createWorkspace({ settings: { custom_dimensions: null } as any });
 
     const prompt = buildSystemPrompt(workspace);
 
@@ -47,10 +50,12 @@ describe('buildSystemPrompt', () => {
 
   it('lists custom dimension labels when configured', () => {
     const workspace = createWorkspace({
-      custom_dimensions: {
-        '1': 'Campaign Type',
-        '2': 'Content Theme',
-      },
+      settings: {
+        custom_dimensions: {
+          '1': 'Campaign Type',
+          '2': 'Content Theme',
+        },
+      } as any,
     });
 
     const prompt = buildSystemPrompt(workspace);
@@ -67,7 +72,7 @@ describe('buildSystemPrompt', () => {
       comparison: 'previous_period',
       minSessions: 10,
       filters: [
-        { dimension: 'country', operator: 'eq', values: ['US'] },
+        { dimension: 'country', operator: 'equals', values: ['US'] },
       ],
     };
 

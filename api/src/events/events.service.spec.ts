@@ -20,43 +20,47 @@ describe('EventsService', () => {
     website: 'https://example.com',
     timezone: 'UTC',
     currency: 'USD',
-    logo_url: null,
-    timescore_reference: 180,
-    bounce_threshold: 10,
     status: 'active',
-    custom_dimensions: {},
-    filters: [],
-    integrations: [],
     created_at: '2025-01-01 00:00:00',
     updated_at: '2025-01-01 00:00:00',
-    geo_enabled: true,
-    geo_store_city: true,
-    geo_store_region: true,
-    geo_coordinates_precision: 2,
+    settings: {
+      timescore_reference: 180,
+      bounce_threshold: 10,
+      custom_dimensions: {},
+      filters: [],
+      integrations: [],
+      geo_enabled: true,
+      geo_store_city: true,
+      geo_store_region: true,
+      geo_coordinates_precision: 2,
+    },
   };
 
   const mockWorkspaceWithFilters: Workspace = {
     ...mockWorkspace,
     id: 'ws-filters',
-    filters: [
-      {
-        id: 'filter-1',
-        name: 'Google Traffic',
-        priority: 500,
-        order: 0,
-        tags: ['organic'],
-        conditions: [
-          { field: 'referrer_domain', operator: 'contains', value: 'google', logic: 'and' },
-        ],
-        operations: [
-          { dimension: 'channel', action: 'set_value', value: 'Organic Search' },
-        ],
-        enabled: true,
-        version: 'v1',
-        createdAt: '2025-01-01 00:00:00',
-        updatedAt: '2025-01-01 00:00:00',
-      },
-    ],
+    settings: {
+      ...mockWorkspace.settings,
+      filters: [
+        {
+          id: 'filter-1',
+          name: 'Google Traffic',
+          priority: 500,
+          order: 0,
+          tags: ['organic'],
+          conditions: [
+            { field: 'referrer_domain', operator: 'contains', value: 'google' },
+          ],
+          operations: [
+            { dimension: 'channel', action: 'set_value', value: 'Organic Search' },
+          ],
+          enabled: true,
+          version: 'v1',
+          createdAt: '2025-01-01 00:00:00',
+          updatedAt: '2025-01-01 00:00:00',
+        },
+      ],
+    },
   };
 
   const createTrackEventDto = (overrides: Partial<TrackEventDto> = {}): TrackEventDto => ({

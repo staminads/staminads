@@ -49,10 +49,11 @@ function Dashboard() {
         workspaceId={workspaceId}
         workspaceTimezone={workspace.timezone}
         workspaceCreatedAt={workspace.created_at}
-        timescoreReference={workspace.timescore_reference ?? 60}
+        timescoreReference={workspace.settings.timescore_reference ?? 60}
         comparison={comparison}
         customStart={customStart}
         customEnd={customEnd}
+        annotations={workspace.settings.annotations}
       />
     </div>
   )

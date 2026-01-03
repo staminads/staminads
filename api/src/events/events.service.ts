@@ -60,10 +60,10 @@ export class EventsService {
 
     // Perform geo lookup with workspace settings (IP is never stored)
     const geo = this.geoService.lookupWithSettings(clientIp, {
-      geo_enabled: workspace.geo_enabled,
-      geo_store_city: workspace.geo_store_city,
-      geo_store_region: workspace.geo_store_region,
-      geo_coordinates_precision: workspace.geo_coordinates_precision,
+      geo_enabled: workspace.settings.geo_enabled,
+      geo_store_city: workspace.settings.geo_store_city,
+      geo_store_region: workspace.settings.geo_store_region,
+      geo_coordinates_precision: workspace.settings.geo_coordinates_precision,
     });
 
     const event = this.buildEvent(dto, workspace, geo);
@@ -92,10 +92,10 @@ export class EventsService {
 
     // Perform geo lookup once for the batch (same IP for all events)
     const geo = this.geoService.lookupWithSettings(clientIp, {
-      geo_enabled: workspace.geo_enabled,
-      geo_store_city: workspace.geo_store_city,
-      geo_store_region: workspace.geo_store_region,
-      geo_coordinates_precision: workspace.geo_coordinates_precision,
+      geo_enabled: workspace.settings.geo_enabled,
+      geo_store_city: workspace.settings.geo_store_city,
+      geo_store_region: workspace.settings.geo_store_region,
+      geo_coordinates_precision: workspace.settings.geo_coordinates_precision,
     });
 
     const events = dtos.map((dto) => this.buildEvent(dto, workspace, geo));
@@ -235,7 +235,7 @@ export class EventsService {
     };
 
     // Apply filters if workspace has them configured
-    const filters = workspace.filters ?? [];
+    const filters = workspace.settings.filters ?? [];
 
     if (filters.length > 0) {
       // Use filters system (priority-based)

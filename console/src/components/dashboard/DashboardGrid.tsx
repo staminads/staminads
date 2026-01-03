@@ -15,6 +15,7 @@ import { TabbedCountriesWidget, type CountryData } from './TabbedCountriesWidget
 import { CountriesMapWidget } from './CountriesMapWidget'
 import { METRICS, extractDashboardData, type MetricKey, type ComparisonMode } from '../../types/dashboard'
 import type { DatePreset, Granularity } from '../../types/analytics'
+import type { Annotation } from '../../types/workspace'
 
 interface DashboardGridProps {
   workspaceId: string
@@ -24,6 +25,7 @@ interface DashboardGridProps {
   comparison: ComparisonMode
   customStart?: string
   customEnd?: string
+  annotations?: Annotation[]
 }
 
 export function DashboardGrid({
@@ -34,6 +36,7 @@ export function DashboardGrid({
   comparison,
   customStart,
   customEnd,
+  annotations,
 }: DashboardGridProps) {
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>('sessions')
   const { period, timezone } = useDashboardParams(workspaceTimezone)
@@ -439,6 +442,8 @@ export function DashboardGrid({
             compareDateRange={dashboardData?.compareDateRange ?? { start: '', end: '' }}
             loading={!response && isFetching}
             height={200}
+            annotations={annotations}
+            timezone={workspaceTimezone}
           />
         </div>
       </div>
@@ -454,6 +459,7 @@ export function DashboardGrid({
         />
         <TabbedSourcesWidget
           title="Sources not mapped"
+          infoTooltip="Referrers not assigned to a channel dimension in the Filters"
           data={sourcesData}
           loading={sourcesFetching && !sourcesResponse}
           showComparison={showComparison}

@@ -122,7 +122,7 @@ function FiltersPage() {
           filters={filteredFilters}
           onEdit={handleEdit}
           searchText={searchText}
-          customDimensionLabels={workspace.custom_dimensions}
+          customDimensionLabels={workspace.settings.custom_dimensions}
         />
       ) : filters.length > 0 ? (
         <Empty
@@ -149,14 +149,14 @@ function FiltersPage() {
         workspaceId={workspaceId}
         filter={editingFilter}
         existingTags={tags}
-        customDimensionLabels={workspace.custom_dimensions}
+        customDimensionLabels={workspace.settings.custom_dimensions}
         open={modalOpen}
         onClose={handleCloseModal}
       />
 
       <TestFilterModal
         filters={filters}
-        customDimensionLabels={workspace.custom_dimensions}
+        customDimensionLabels={workspace.settings.custom_dimensions}
         open={testModalOpen}
         onClose={() => setTestModalOpen(false)}
       />

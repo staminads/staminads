@@ -19,7 +19,7 @@ describe('FiltersService', () => {
     order: 0,
     tags: ['organic', 'search'],
     conditions: [
-      { field: 'referrer_domain', operator: 'contains', value: 'google', logic: 'and' },
+      { field: 'referrer_domain', operator: 'contains', value: 'google' },
     ],
     operations: [
       { dimension: 'channel', action: 'set_value', value: 'Organic Search' },
@@ -37,7 +37,7 @@ describe('FiltersService', () => {
     order: 1,
     tags: ['paid', 'social'],
     conditions: [
-      { field: 'utm_source', operator: 'equals', value: 'facebook', logic: 'and' },
+      { field: 'utm_source', operator: 'equals', value: 'facebook' },
     ],
     operations: [
       { dimension: 'channel', action: 'set_value', value: 'Paid Social' },
@@ -54,21 +54,26 @@ describe('FiltersService', () => {
     website: 'https://example.com',
     timezone: 'UTC',
     currency: 'USD',
-    logo_url: null,
-    timescore_reference: 180,
-    bounce_threshold: 10,
     status: 'active',
-    custom_dimensions: {},
-    filters: [mockFilter1, mockFilter2],
-    integrations: [],
     created_at: '2025-01-01 00:00:00',
     updated_at: '2025-01-01 00:00:00',
+    settings: {
+      timescore_reference: 180,
+      bounce_threshold: 10,
+      custom_dimensions: {},
+      filters: [mockFilter1, mockFilter2],
+      integrations: [],
+      geo_enabled: true,
+      geo_store_city: true,
+      geo_store_region: true,
+      geo_coordinates_precision: 2,
+    },
   };
 
   const mockEmptyWorkspace: Workspace = {
     ...mockWorkspace,
     id: 'ws-empty',
-    filters: [],
+    settings: { ...mockWorkspace.settings, filters: [] },
   };
 
   beforeEach(async () => {
@@ -171,13 +176,13 @@ describe('FiltersService', () => {
   describe('create', () => {
     it('creates a new filter with generated ID', async () => {
       workspacesService.get.mockResolvedValue(mockEmptyWorkspace);
-      workspacesService.update.mockResolvedValue(undefined);
+      workspacesService.update.mockResolvedValue(mockEmptyWorkspace);
 
       const result = await service.create({
         workspace_id: 'ws-empty',
         name: 'New Filter',
         conditions: [
-          { field: 'utm_source', operator: 'equals', value: 'test', logic: 'and' },
+          { field: 'utm_source', operator: 'equals', value: 'test' },
         ],
         operations: [
           { dimension: 'channel', action: 'set_value', value: 'Test' },
@@ -192,13 +197,13 @@ describe('FiltersService', () => {
 
     it('assigns correct order based on existing filters', async () => {
       workspacesService.get.mockResolvedValue(mockWorkspace);
-      workspacesService.update.mockResolvedValue(undefined);
+      workspacesService.update.mockResolvedValue(mockWorkspace);
 
       const result = await service.create({
         workspace_id: 'ws-1',
         name: 'Third Filter',
         conditions: [
-          { field: 'utm_source', operator: 'equals', value: 'test', logic: 'and' },
+          { field: 'utm_source', operator: 'equals', value: 'test' },
         ],
         operations: [
           { dimension: 'channel', action: 'set_value', value: 'Test' },
@@ -210,13 +215,13 @@ describe('FiltersService', () => {
 
     it('emits filters.changed event', async () => {
       workspacesService.get.mockResolvedValue(mockEmptyWorkspace);
-      workspacesService.update.mockResolvedValue(undefined);
+      workspacesService.update.mockResolvedValue(mockEmptyWorkspace);
 
       await service.create({
         workspace_id: 'ws-empty',
         name: 'New Filter',
         conditions: [
-          { field: 'utm_source', operator: 'equals', value: 'test', logic: 'and' },
+          { field: 'utm_source', operator: 'equals', value: 'test' },
         ],
         operations: [
           { dimension: 'channel', action: 'set_value', value: 'Test' },
@@ -236,7 +241,7 @@ describe('FiltersService', () => {
           workspace_id: 'ws-empty',
           name: 'Invalid Filter',
           conditions: [
-            { field: 'invalid_field' as any, operator: 'equals', value: 'test', logic: 'and' },
+            { field: 'invalid_field' as any, operator: 'equals', value: 'test' },
           ],
           operations: [
             { dimension: 'channel', action: 'set_value', value: 'Test' },
@@ -253,7 +258,7 @@ describe('FiltersService', () => {
           workspace_id: 'ws-empty',
           name: 'Invalid Regex',
           conditions: [
-            { field: 'utm_source', operator: 'regex', value: '[invalid(', logic: 'and' },
+            { field: 'utm_source', operator: 'regex', value: '[invalid(' },
           ],
           operations: [
             { dimension: 'channel', action: 'set_value', value: 'Test' },
@@ -270,7 +275,7 @@ describe('FiltersService', () => {
           workspace_id: 'ws-empty',
           name: 'Invalid Dimension',
           conditions: [
-            { field: 'utm_source', operator: 'equals', value: 'test', logic: 'and' },
+            { field: 'utm_source', operator: 'equals', value: 'test' },
           ],
           operations: [
             { dimension: 'invalid_dim' as any, action: 'set_value', value: 'Test' },
@@ -287,7 +292,7 @@ describe('FiltersService', () => {
           workspace_id: 'ws-empty',
           name: 'Missing Value',
           conditions: [
-            { field: 'utm_source', operator: 'equals', value: 'test', logic: 'and' },
+            { field: 'utm_source', operator: 'equals', value: 'test' },
           ],
           operations: [
             { dimension: 'channel', action: 'set_value' },
@@ -300,7 +305,7 @@ describe('FiltersService', () => {
   describe('update', () => {
     it('updates filter properties', async () => {
       workspacesService.get.mockResolvedValue(mockWorkspace);
-      workspacesService.update.mockResolvedValue(undefined);
+      workspacesService.update.mockResolvedValue(mockWorkspace);
 
       const result = await service.update({
         workspace_id: 'ws-1',
@@ -327,7 +332,7 @@ describe('FiltersService', () => {
 
     it('emits filters.changed event', async () => {
       workspacesService.get.mockResolvedValue(mockWorkspace);
-      workspacesService.update.mockResolvedValue(undefined);
+      workspacesService.update.mockResolvedValue(mockWorkspace);
 
       await service.update({
         workspace_id: 'ws-1',
@@ -348,7 +353,7 @@ describe('FiltersService', () => {
           workspace_id: 'ws-1',
           id: 'filter-1',
           conditions: [
-            { field: 'invalid_field' as any, operator: 'equals', value: 'test', logic: 'and' },
+            { field: 'invalid_field' as any, operator: 'equals', value: 'test' },
           ],
         }),
       ).rejects.toThrow(BadRequestException);
@@ -358,16 +363,18 @@ describe('FiltersService', () => {
   describe('delete', () => {
     it('removes filter from workspace', async () => {
       workspacesService.get.mockResolvedValue(mockWorkspace);
-      workspacesService.update.mockResolvedValue(undefined);
+      workspacesService.update.mockResolvedValue(mockWorkspace);
 
       await service.delete('ws-1', 'filter-1');
 
       expect(workspacesService.update).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 'ws-1',
-          filters: expect.arrayContaining([
-            expect.objectContaining({ id: 'filter-2' }),
-          ]),
+          settings: expect.objectContaining({
+            filters: expect.arrayContaining([
+              expect.objectContaining({ id: 'filter-2' }),
+            ]),
+          }),
         }),
       );
     });
@@ -382,7 +389,7 @@ describe('FiltersService', () => {
 
     it('emits filters.changed event', async () => {
       workspacesService.get.mockResolvedValue(mockWorkspace);
-      workspacesService.update.mockResolvedValue(undefined);
+      workspacesService.update.mockResolvedValue(mockWorkspace);
 
       await service.delete('ws-1', 'filter-1');
 
@@ -395,7 +402,7 @@ describe('FiltersService', () => {
   describe('reorder', () => {
     it('updates filter order based on provided IDs', async () => {
       workspacesService.get.mockResolvedValue(mockWorkspace);
-      workspacesService.update.mockResolvedValue(undefined);
+      workspacesService.update.mockResolvedValue(mockWorkspace);
 
       await service.reorder({
         workspace_id: 'ws-1',
@@ -404,17 +411,19 @@ describe('FiltersService', () => {
 
       expect(workspacesService.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          filters: expect.arrayContaining([
-            expect.objectContaining({ id: 'filter-1', order: 1 }),
-            expect.objectContaining({ id: 'filter-2', order: 0 }),
-          ]),
+          settings: expect.objectContaining({
+            filters: expect.arrayContaining([
+              expect.objectContaining({ id: 'filter-1', order: 1 }),
+              expect.objectContaining({ id: 'filter-2', order: 0 }),
+            ]),
+          }),
         }),
       );
     });
 
     it('emits filters.changed event', async () => {
       workspacesService.get.mockResolvedValue(mockWorkspace);
-      workspacesService.update.mockResolvedValue(undefined);
+      workspacesService.update.mockResolvedValue(mockWorkspace);
 
       await service.reorder({
         workspace_id: 'ws-1',

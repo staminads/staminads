@@ -4,12 +4,53 @@ import {
   IsUrl,
   IsBoolean,
   IsNumber,
+  IsObject,
+  IsArray,
   Min,
   Max,
   MinLength,
   MaxLength,
   Matches,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+import { AnnotationDto } from './update-workspace.dto';
+
+export class CreateWorkspaceSettingsDto {
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  timescore_reference?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  bounce_threshold?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  geo_enabled?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  geo_store_city?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  geo_store_region?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(2)
+  geo_coordinates_precision?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AnnotationDto)
+  annotations?: AnnotationDto[];
+}
 
 export class CreateWorkspaceDto {
   @IsString()
@@ -37,27 +78,9 @@ export class CreateWorkspaceDto {
   @IsUrl()
   logo_url?: string;
 
-  // Geo settings (optional, defaults applied in service)
   @IsOptional()
-  @IsBoolean()
-  geo_enabled?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  geo_store_city?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  geo_store_region?: boolean;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  @Max(2)
-  geo_coordinates_precision?: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(1)
-  bounce_threshold?: number;
+  @IsObject()
+  @ValidateNested()
+  @Type(() => CreateWorkspaceSettingsDto)
+  settings?: CreateWorkspaceSettingsDto;
 }

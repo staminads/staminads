@@ -1,7 +1,15 @@
 import dayjs from 'dayjs'
+import isBetween from 'dayjs/plugin/isBetween'
+import utc from 'dayjs/plugin/utc'
+import timezone from 'dayjs/plugin/timezone'
 import type { EChartsOption } from 'echarts'
 import type { DatePreset, Granularity } from '../types/analytics'
 import type { ChartDataPoint, MetricConfig } from '../types/dashboard'
+import type { Annotation } from '../types/workspace'
+
+dayjs.extend(isBetween)
+dayjs.extend(utc)
+dayjs.extend(timezone)
 
 /**
  * Determine appropriate granularity based on date preset
@@ -27,7 +35,7 @@ export function determineGranularity(preset: DatePreset): Granularity {
     last_year: 'month',
     last_12_months: 'month',
     all_time: 'month',
-    custom: 'day', // Will be overridden by determineGranularityForRange for custom ranges
+    custom: 'day' // Will be overridden by determineGranularityForRange for custom ranges
   }
   return granularityMap[preset]
 }
@@ -117,6 +125,32 @@ export function formatXAxisLabel(timestamp: string, granularity: Granularity): s
 }
 
 /**
+ * Find the data point label for an annotation date.
+ * Finds the first data point on or after the annotation date to ensure
+ * the annotation appears at the start of the event, not at the peak.
+ * This is required for ECharts category axis positioning.
+ */
+function findDataPointLabelForAnnotation(
+  annotationDate: string,
+  currentData: ChartDataPoint[],
+  granularity: Granularity,
+  timezone: string
+): string {
+  const annDate = dayjs.tz(annotationDate, timezone)
+
+  // Find the first data point on or after the annotation date
+  for (const point of currentData) {
+    const pointDate = dayjs.tz(point.timestamp, timezone)
+    if (pointDate.isSame(annDate, 'day') || pointDate.isAfter(annDate, 'day')) {
+      return formatXAxisLabel(point.timestamp, granularity)
+    }
+  }
+
+  // Fallback: if annotation is after all data points, use the last one
+  return formatXAxisLabel(currentData[currentData.length - 1].timestamp, granularity)
+}
+
+/**
  * Format date range for legend labels
  * Uses dayjs for reliable parsing
  */
@@ -145,6 +179,8 @@ export function createMetricChartOption(
   granularity: Granularity,
   currentLabel: string,
   previousLabel: string,
+  annotations?: Annotation[],
+  workspaceTimezone?: string
 ): EChartsOption {
   const xAxisData = currentData.map((d) => formatXAxisLabel(d.timestamp, granularity))
   const currentValues = currentData.map((d) => d.value)
@@ -165,7 +201,7 @@ export function createMetricChartOption(
       borderWidth: 1,
       textStyle: {
         color: '#374151',
-        fontSize: 12,
+        fontSize: 12
       },
       formatter: (params: unknown) => {
         const p = params as { axisValue: string; value: number; seriesName: string }[]
@@ -184,9 +220,7 @@ export function createMetricChartOption(
         }
 
         const previousVal = p[1]?.value ?? 0
-        const delta = previousVal !== 0
-          ? ((currentVal - previousVal) / previousVal * 100)
-          : 0
+        const delta = previousVal !== 0 ? ((currentVal - previousVal) / previousVal) * 100 : 0
         const sign = delta >= 0 ? '+' : ''
         const deltaColor = (metric.invertTrend ? delta <= 0 : delta >= 0) ? '#10b981' : '#ef4444'
 
@@ -199,50 +233,50 @@ export function createMetricChartOption(
             <span style="color: ${deltaColor}; font-weight: 500;">(${sign}${delta.toFixed(1)}%)</span>
           </div>
         `
-      },
+      }
     },
     legend: {
-      show: false,
+      show: false
     },
     grid: {
       left: '1%',
       right: '1%',
       bottom: labelRotate > 0 ? '10%' : '5%',
-      top: '5%',
-      containLabel: true,
+      top: annotations?.length ? '18%' : '5%', // Extra space for annotation labels
+      containLabel: true
     },
     xAxis: {
       type: 'category',
       boundaryGap: false,
       data: xAxisData,
       axisLine: {
-        lineStyle: { color: '#e5e7eb' },
+        lineStyle: { color: '#e5e7eb' }
       },
       axisLabel: {
         color: '#6b7280',
         fontSize: 10,
         interval: labelInterval,
-        rotate: labelRotate,
+        rotate: labelRotate
       },
-      axisTick: { show: false },
+      axisTick: { show: false }
     },
     yAxis: {
       type: 'value',
       axisLine: { show: false },
       splitLine: {
-        lineStyle: { color: '#f3f4f6' },
+        lineStyle: { color: '#f3f4f6' }
       },
       axisLabel: {
         color: '#6b7280',
         fontSize: 10,
-        formatter: (value: number) => formatAxisValue(value, metric.format),
-      },
+        formatter: (value: number) => formatAxisValue(value, metric.format)
+      }
     },
     series: [
       {
         name: currentLabel,
         type: 'line',
-        smooth: true,
+        smooth: 0.3,
         symbol: 'none',
         areaStyle: {
           color: {
@@ -253,22 +287,100 @@ export function createMetricChartOption(
             y2: 1,
             colorStops: [
               { offset: 0, color: '#7763f140' },
-              { offset: 1, color: '#7763f105' },
-            ],
-          },
+              { offset: 1, color: '#7763f105' }
+            ]
+          }
         },
         lineStyle: {
           color: '#7763f1',
-          width: 2,
+          width: 2
         },
         data: currentValues,
+        // Annotations as vertical dashed lines
+        markLine: annotations?.length
+          ? {
+              silent: false,
+              symbol: ['none', 'none'],
+              emphasis: {
+                lineStyle: {
+                  width: 2,
+                  opacity: 1
+                }
+              },
+              tooltip: {
+                show: true,
+                trigger: 'item',
+                formatter: (params: { data: { annotation?: Annotation } }) => {
+                  const ann = params.data?.annotation
+                  if (!ann) return ''
+                  const bulletColor = ann.color || '#7763f1'
+                  return `
+                    <div style="display: flex; align-items: center; gap: 6px; font-weight: 600; margin-bottom: 4px;">
+                      <span style="color: ${bulletColor}; font-size: 14px;">●</span>
+                      ${ann.title}
+                    </div>
+                    <div style="color: #6b7280; font-size: 11px;">${ann.date}</div>
+                    ${ann.description ? `<div style="margin-top: 8px;">${ann.description}</div>` : ''}
+                  `
+                }
+              },
+              data: annotations
+                .filter((a) => {
+                  // Filter annotations within the current date range
+                  if (currentData.length < 2) return false
+                  // Use annotation's own timezone (or fallback to workspace timezone)
+                  const tz = a.timezone || workspaceTimezone || 'UTC'
+                  const annotationDate = dayjs.tz(a.date, tz)
+                  const dataStart = dayjs.tz(currentData[0].timestamp, tz)
+                  const dataEnd = dayjs.tz(currentData[currentData.length - 1].timestamp, tz)
+                  return annotationDate.isBetween(dataStart, dataEnd, 'day', '[]')
+                })
+                .map((a, index) => {
+                  const tz = a.timezone || workspaceTimezone || 'UTC'
+                  const bulletColor = a.color || '#7763f1'
+                  // Truncate long titles for the always-visible label
+                  const shortTitle = a.title.length > 20 ? a.title.slice(0, 20) + '…' : a.title
+                  return {
+                    xAxis: findDataPointLabelForAnnotation(a.date, currentData, granularity, tz),
+                    annotation: a,
+                    lineStyle: {
+                      color: '#000',
+                      type: 'dotted' as const,
+                      width: 1
+                    },
+                    label: {
+                      show: true,
+                      formatter: `{bullet|●} {title|${shortTitle}}`,
+                      // Stagger positioning: alternate top/bottom for readability
+                      position: (index % 2 === 0 ? 'insideEndTop' : 'insideEndBottom') as const,
+                      rotate: 0, // Horizontal text
+                      backgroundColor: 'rgba(0, 0, 0, 0.45)',
+                      padding: [4, 6, 2, 6] as [number, number, number, number],
+                      borderRadius: 4,
+                      rich: {
+                        bullet: {
+                          color: bulletColor,
+                          fontSize: 12,
+                          lineHeight: 12
+                        },
+                        title: {
+                          color: '#fff',
+                          fontSize: 11,
+                          lineHeight: 12
+                        }
+                      }
+                    }
+                  }
+                })
+            }
+          : undefined
       },
       ...(hasComparison
         ? [
             {
               name: previousLabel,
               type: 'line' as const,
-              smooth: true,
+              smooth: 0.3,
               symbol: 'none' as const,
               areaStyle: {
                 color: {
@@ -279,19 +391,19 @@ export function createMetricChartOption(
                   y2: 1,
                   colorStops: [
                     { offset: 0, color: '#9ca3af30' },
-                    { offset: 1, color: '#9ca3af05' },
-                  ],
-                },
+                    { offset: 1, color: '#9ca3af05' }
+                  ]
+                }
               },
               lineStyle: {
                 color: '#9ca3af',
-                width: 2,
-                type: 'dashed' as const,
+                width: 1,
+                type: 'solid' as const
               },
-              data: previousValues,
-            },
+              data: previousValues
+            }
           ]
-        : []),
-    ],
+        : [])
+    ]
   }
 }

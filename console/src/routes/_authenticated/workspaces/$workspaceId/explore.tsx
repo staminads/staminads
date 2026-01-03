@@ -446,7 +446,8 @@ function Explore() {
 
         <ExploreTemplates
           onSelectTemplate={handleSelectTemplate}
-          customDimensionLabels={workspace.custom_dimensions}
+          onOpenAssistant={() => setIsAssistantOpen(true)}
+          customDimensionLabels={workspace.settings.custom_dimensions}
         />
 
         {/* AI Assistant */}
@@ -501,7 +502,7 @@ function Explore() {
         onFiltersChange={setFilters}
         minSessions={minSessions}
         onMinSessionsChange={setMinSessions}
-        customDimensionLabels={workspace.custom_dimensions}
+        customDimensionLabels={workspace.settings.custom_dimensions}
       />
 
       <ExploreSummary
@@ -510,9 +511,9 @@ function Explore() {
         loading={isInitialFetching && !totals}
         bestTimeScore={extremesData?.max ?? undefined}
         maxMedianDuration={maxMedianDuration}
-        timescoreReference={workspace.timescore_reference ?? 60}
+        timescoreReference={workspace.settings.timescore_reference ?? 60}
         maxDimensionValues={extremesData?.maxDimensionValues}
-        customDimensionLabels={workspace.custom_dimensions}
+        customDimensionLabels={workspace.settings.custom_dimensions}
       />
 
       <div className="rounded-md overflow-hidden">
@@ -524,10 +525,10 @@ function Explore() {
           onExpandedRowsChange={setExpandedRowKeys}
           loadingRows={loadingRows}
           maxMedianDuration={maxMedianDuration}
-          timescoreReference={workspace.timescore_reference ?? 60}
+          timescoreReference={workspace.settings.timescore_reference ?? 60}
           showComparison={showComparison}
           loading={isInitialFetching && reportData.length === 0}
-          customDimensionLabels={workspace.custom_dimensions}
+          customDimensionLabels={workspace.settings.custom_dimensions}
           totals={totals}
           onBreakdownClick={openBreakdown}
           onBreakdownHover={prefetchBreakdown}
@@ -563,7 +564,7 @@ function Explore() {
         onSubmit={confirmBreakdown}
         excludeDimensions={dimensions.slice(0, (breakdownState?.selectedRow?.parentDimensionIndex ?? -1) + 1)}
         initialDimensions={breakdownState?.breakdownDimensions ?? []}
-        customDimensionLabels={workspace.custom_dimensions}
+        customDimensionLabels={workspace.settings.custom_dimensions}
       />
 
       {/* Breakdown Drawer */}
@@ -578,8 +579,8 @@ function Explore() {
           dateRange={dateRange}
           timezone={timezone}
           minSessions={minSessions}
-          timescoreReference={workspace.timescore_reference ?? 60}
-          customDimensionLabels={workspace.custom_dimensions}
+          timescoreReference={workspace.settings.timescore_reference ?? 60}
+          customDimensionLabels={workspace.settings.custom_dimensions}
           dimensions={dimensions}
         />
       )}
@@ -595,7 +596,7 @@ function Explore() {
         timezone={timezone}
         minSessions={minSessions}
         showComparison={showComparison}
-        customDimensionLabels={workspace.custom_dimensions}
+        customDimensionLabels={workspace.settings.custom_dimensions}
       />
     </div>
   )

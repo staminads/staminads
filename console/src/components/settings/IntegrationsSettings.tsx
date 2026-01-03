@@ -29,7 +29,7 @@ export function IntegrationsSettings({ workspace }: IntegrationsSettingsProps) {
   const [isEnabled, setIsEnabled] = useState(false)
 
   // Find existing anthropic integration
-  const anthropicIntegration = workspace.integrations?.find(
+  const anthropicIntegration = workspace.settings.integrations?.find(
     (i) => i.type === 'anthropic'
   )
 
@@ -91,11 +91,11 @@ export function IntegrationsSettings({ workspace }: IntegrationsSettingsProps) {
     }
 
     // Replace or add the integration
-    const otherIntegrations = workspace.integrations?.filter((i) => i.type !== 'anthropic') || []
+    const otherIntegrations = workspace.settings.integrations?.filter((i) => i.type !== 'anthropic') || []
 
     updateMutation.mutate({
       id: workspace.id,
-      integrations: [...otherIntegrations, updatedIntegration],
+      settings: { integrations: [...otherIntegrations, updatedIntegration] },
     })
   }
 
@@ -131,11 +131,11 @@ export function IntegrationsSettings({ workspace }: IntegrationsSettingsProps) {
       updated_at: new Date().toISOString(),
     }
 
-    const otherIntegrations = workspace.integrations?.filter((i) => i.type !== 'anthropic') || []
+    const otherIntegrations = workspace.settings.integrations?.filter((i) => i.type !== 'anthropic') || []
 
     updateMutation.mutate({
       id: workspace.id,
-      integrations: [...otherIntegrations, updatedIntegration],
+      settings: { integrations: [...otherIntegrations, updatedIntegration] },
     })
   }
 

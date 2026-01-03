@@ -107,27 +107,32 @@ describe('AssistantService', () => {
     website: 'https://example.com',
     timezone: 'UTC',
     currency: 'USD',
-    logo_url: null,
-    timescore_reference: 180,
-    bounce_threshold: 10,
     status: 'active',
-    custom_dimensions: {},
-    filters: [],
-    integrations: [mockIntegration],
     created_at: '2025-01-01 00:00:00',
     updated_at: '2025-01-01 00:00:00',
+    settings: {
+      timescore_reference: 180,
+      bounce_threshold: 10,
+      custom_dimensions: {},
+      filters: [],
+      integrations: [mockIntegration],
+      geo_enabled: true,
+      geo_store_city: true,
+      geo_store_region: true,
+      geo_coordinates_precision: 2,
+    },
   };
 
   const mockWorkspaceNoIntegration: Workspace = {
     ...mockWorkspace,
     id: 'ws-no-int',
-    integrations: [],
+    settings: { ...mockWorkspace.settings, integrations: [] },
   };
 
   const mockWorkspaceDisabledIntegration: Workspace = {
     ...mockWorkspace,
     id: 'ws-disabled',
-    integrations: [{ ...mockIntegration, enabled: false }],
+    settings: { ...mockWorkspace.settings, integrations: [{ ...mockIntegration, enabled: false }] },
   };
 
   beforeEach(async () => {
@@ -207,7 +212,7 @@ describe('AssistantService', () => {
       const result = await service.createJob({
         workspace_id: 'ws-1',
         prompt: 'Test prompt',
-        current_state: { metrics: ['sessions'] },
+        current_state: { dimensions: ['device'] },
         messages: [{ role: 'user', content: 'Previous message' }],
       });
 
@@ -215,7 +220,7 @@ describe('AssistantService', () => {
       expect(job).toBeDefined();
       expect(job!.workspace_id).toBe('ws-1');
       expect(job!.prompt).toBe('Test prompt');
-      expect(job!.current_state).toEqual({ metrics: ['sessions'] });
+      expect(job!.current_state).toEqual({ dimensions: ['device'] });
       expect(job!.messages).toHaveLength(1);
       expect(job!.status).toBe('pending');
     });
@@ -298,7 +303,6 @@ describe('AssistantService', () => {
       const job = service.getJob(job_id);
       job!.status = 'completed';
       job!.result = {
-        metrics: ['sessions'],
         dimensions: ['device'],
       };
 

@@ -41,7 +41,7 @@ export class FiltersService {
     tags?: string[],
   ): Promise<FilterDefinition[]> {
     const workspace = await this.workspacesService.get(workspaceId);
-    let filters = workspace.filters ?? [];
+    let filters = workspace.settings.filters ?? [];
 
     // Filter by tags if provided
     if (tags && tags.length > 0) {
@@ -61,7 +61,7 @@ export class FiltersService {
    */
   async get(workspaceId: string, filterId: string): Promise<FilterDefinition> {
     const workspace = await this.workspacesService.get(workspaceId);
-    const filter = (workspace.filters ?? []).find((f) => f.id === filterId);
+    const filter = (workspace.settings.filters ?? []).find((f) => f.id === filterId);
 
     if (!filter) {
       throw new NotFoundException(
@@ -77,7 +77,7 @@ export class FiltersService {
    */
   async create(dto: CreateFilterDto): Promise<FilterDefinition> {
     const workspace = await this.workspacesService.get(dto.workspace_id);
-    const filters = workspace.filters ?? [];
+    const filters = workspace.settings.filters ?? [];
 
     // Validate conditions and operations
     this.validateConditions(dto.conditions);
@@ -119,7 +119,7 @@ export class FiltersService {
    */
   async update(dto: UpdateFilterDto): Promise<FilterDefinition> {
     const workspace = await this.workspacesService.get(dto.workspace_id);
-    const filters = workspace.filters ?? [];
+    const filters = workspace.settings.filters ?? [];
 
     const index = filters.findIndex((f) => f.id === dto.id);
     if (index === -1) {
@@ -170,7 +170,7 @@ export class FiltersService {
    */
   async delete(workspaceId: string, filterId: string): Promise<void> {
     const workspace = await this.workspacesService.get(workspaceId);
-    const filters = workspace.filters ?? [];
+    const filters = workspace.settings.filters ?? [];
 
     const index = filters.findIndex((f) => f.id === filterId);
     if (index === -1) {
@@ -191,7 +191,7 @@ export class FiltersService {
    */
   async reorder(dto: ReorderFiltersDto): Promise<void> {
     const workspace = await this.workspacesService.get(dto.workspace_id);
-    const filters = workspace.filters ?? [];
+    const filters = workspace.settings.filters ?? [];
 
     // Update order based on the provided order
     const updatedFilters = filters.map((f) => {
@@ -215,7 +215,7 @@ export class FiltersService {
    */
   async listTags(workspaceId: string): Promise<string[]> {
     const workspace = await this.workspacesService.get(workspaceId);
-    const filters = workspace.filters ?? [];
+    const filters = workspace.settings.filters ?? [];
 
     const tagSet = new Set<string>();
     for (const filter of filters) {
@@ -285,7 +285,7 @@ export class FiltersService {
   ): Promise<void> {
     await this.workspacesService.update({
       id: workspace.id,
-      filters,
-    } as any);
+      settings: { filters },
+    });
   }
 }

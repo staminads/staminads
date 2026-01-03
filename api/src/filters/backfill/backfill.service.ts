@@ -184,7 +184,7 @@ export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
       completed_at: null,
       error_message: null,
       retry_count: 0,
-      filters_snapshot: JSON.stringify(workspace.filters ?? []),
+      filters_snapshot: JSON.stringify(workspace.settings.filters ?? []),
     };
 
     await this.clickhouse.insertSystem('backfill_tasks', [task]);
@@ -396,7 +396,7 @@ export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
   async getBackfillSummary(workspaceId: string): Promise<BackfillSummary> {
     // Get current filter version from workspace
     const workspace = await this.workspacesService.get(workspaceId);
-    const currentVersion = computeFilterVersion(workspace.filters ?? []);
+    const currentVersion = computeFilterVersion(workspace.settings.filters ?? []);
 
     // Get all tasks for workspace, ordered by created_at DESC (use FINAL for ReplacingMergeTree)
     const tasks = await this.clickhouse.querySystem<BackfillTask>(

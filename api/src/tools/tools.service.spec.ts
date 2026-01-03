@@ -32,7 +32,7 @@ describe('ToolsService', () => {
       ok,
       status,
       headers: {
-        get: (name: string) => allHeaders[name.toLowerCase()] || null,
+        get: (name: string) => (allHeaders as Record<string, string>)[name.toLowerCase()] || null,
       },
       text: () => Promise.resolve(typeof body === 'string' ? body : body.toString()),
       json: () => Promise.resolve(JSON.parse(typeof body === 'string' ? body : body.toString())),

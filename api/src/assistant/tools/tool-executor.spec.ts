@@ -97,7 +97,8 @@ describe('ToolExecutor', () => {
           { device: 'mobile', sessions: 100 },
           { device: 'desktop', sessions: 50 },
         ],
-        meta: { total_rows: 2, execution_time_ms: 10 },
+        meta: { total_rows: 2, metrics: ['sessions'], dimensions: ['device'], dateRange: { start: '2025-01-01', end: '2025-01-07' } },
+        query: { sql: 'SELECT ...', params: {} },
       });
 
       const result = (await executor.execute('get_dimension_values', {
@@ -127,7 +128,8 @@ describe('ToolExecutor', () => {
           { browser: 'Chrome Desktop', sessions: 50 },
           { browser: 'Firefox', sessions: 30 },
         ],
-        meta: { total_rows: 3, execution_time_ms: 10 },
+        meta: { total_rows: 3, metrics: ['sessions'], dimensions: ['browser'], dateRange: { start: '2025-01-01', end: '2025-01-07' } },
+        query: { sql: 'SELECT ...', params: {} },
       });
 
       const result = (await executor.execute('get_dimension_values', {
@@ -147,7 +149,8 @@ describe('ToolExecutor', () => {
           browser: `Browser ${i}`,
           sessions: 200 - i,
         })),
-        meta: { total_rows: 200, execution_time_ms: 10 },
+        meta: { total_rows: 200, metrics: ['sessions'], dimensions: ['browser'], dateRange: { start: '2025-01-01', end: '2025-01-07' } },
+        query: { sql: 'SELECT ...', params: {} },
       });
 
       const result = (await executor.execute('get_dimension_values', {
@@ -235,7 +238,8 @@ describe('ToolExecutor', () => {
           { device: 'mobile', sessions: 100, median_duration: 45 },
           { device: 'desktop', sessions: 50, median_duration: 30 },
         ],
-        meta: { total_rows: 10, execution_time_ms: 10 },
+        meta: { total_rows: 10, metrics: ['sessions', 'median_duration'], dimensions: ['device'], dateRange: { start: '2025-01-01', end: '2025-01-07' } },
+        query: { sql: 'SELECT ...', params: {} },
       });
 
       const result = (await executor.execute('preview_query', {
@@ -254,7 +258,8 @@ describe('ToolExecutor', () => {
           device: `Device ${i}`,
           sessions: 100 - i,
         })),
-        meta: { total_rows: 20, execution_time_ms: 10 },
+        meta: { total_rows: 20, metrics: ['sessions'], dimensions: ['device'], dateRange: { start: '2025-01-01', end: '2025-01-07' } },
+        query: { sql: 'SELECT ...', params: {} },
       });
 
       const result = (await executor.execute('preview_query', {

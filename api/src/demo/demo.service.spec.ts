@@ -98,6 +98,46 @@ describe('DemoService', () => {
       );
     });
 
+    it('creates workspace with settings JSON including annotations', async () => {
+      clickhouse.querySystem.mockResolvedValue([]);
+      clickhouse.createWorkspaceDatabase.mockResolvedValue(undefined);
+      clickhouse.insertSystem.mockResolvedValue(undefined);
+
+      (generators.generateEventsByDay as jest.Mock).mockReturnValue([]);
+
+      await service.generate();
+
+      // Get the workspace row that was inserted
+      const workspacesInsertCall = clickhouse.insertSystem.mock.calls.find(
+        (call) => call[0] === 'workspaces',
+      );
+      expect(workspacesInsertCall).toBeDefined();
+
+      const workspaceRow = workspacesInsertCall![1][0] as { settings: string };
+
+      // Verify settings is a JSON string
+      expect(typeof workspaceRow.settings).toBe('string');
+
+      // Parse and verify settings structure
+      const settings = JSON.parse(workspaceRow.settings) as {
+        timescore_reference: number;
+        bounce_threshold: number;
+        annotations: Array<{ title: string; timezone: string; color: string }>;
+      };
+      expect(settings.timescore_reference).toBe(180);
+      expect(settings.bounce_threshold).toBe(10);
+      expect(Array.isArray(settings.annotations)).toBe(true);
+      expect(settings.annotations.length).toBeGreaterThan(0);
+
+      // Verify iPhone launch annotation exists
+      const launchAnnotation = settings.annotations.find(
+        (a) => a.title === 'iPhone 16 Launch',
+      );
+      expect(launchAnnotation).toBeDefined();
+      expect(launchAnnotation!.timezone).toBe('America/New_York');
+      expect(launchAnnotation!.color).toBe('#22c55e');
+    });
+
     it('inserts events in batches', async () => {
       clickhouse.querySystem.mockResolvedValue([]);
       clickhouse.createWorkspaceDatabase.mockResolvedValue(undefined);

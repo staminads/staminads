@@ -93,7 +93,7 @@ export class AnalyticsService {
 
     // Build metric context from workspace settings
     const metricContext: MetricContext = {
-      bounce_threshold: workspace.bounce_threshold ?? 10,
+      bounce_threshold: workspace.settings.bounce_threshold ?? 10,
     };
 
     // Handle comparison period
@@ -304,7 +304,7 @@ export class AnalyticsService {
 
     // Build metric context from workspace settings
     const metricContext: MetricContext = {
-      bounce_threshold: workspace.bounce_threshold ?? 10,
+      bounce_threshold: workspace.settings.bounce_threshold ?? 10,
     };
 
     // Build query with resolved dates

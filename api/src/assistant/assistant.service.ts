@@ -384,7 +384,7 @@ export class AssistantService implements OnModuleInit, OnModuleDestroy {
   private getAnthropicIntegration(
     workspace: Workspace,
   ): AnthropicIntegration | null {
-    const integrations = workspace.integrations || [];
+    const integrations = workspace.settings.integrations || [];
     return (
       (integrations.find(
         (i) => i.type === 'anthropic' && i.enabled,

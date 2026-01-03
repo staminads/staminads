@@ -6,12 +6,13 @@ import { SearchOutlined, EditOutlined, LoadingOutlined } from '@ant-design/icons
 import { api } from '../../../../lib/api'
 import { workspaceQueryOptions } from '../../../../lib/queries'
 import { IntegrationsSettings } from '../../../../components/settings/IntegrationsSettings'
+import { AnnotationsSettings } from '../../../../components/settings/AnnotationsSettings'
 import { TimeScoreDistribution } from '../../../../components/settings/TimeScoreDistribution'
 import { CodeSnippet } from '../../../../components/setup/CodeSnippet'
 import { z } from 'zod'
 
 const settingsSearchSchema = z.object({
-  section: z.enum(['workspace', 'dimensions', 'integrations', 'sdk']).optional().default('workspace'),
+  section: z.enum(['workspace', 'dimensions', 'integrations', 'annotations', 'sdk']).optional().default('workspace'),
 })
 
 export const Route = createFileRoute('/_authenticated/workspaces/$workspaceId/settings')({
@@ -52,12 +53,13 @@ const currencyOptions = [
   { value: 'BRL', label: 'BRL - Brazilian Real' },
 ]
 
-type SettingsSection = 'workspace' | 'dimensions' | 'integrations' | 'sdk'
+type SettingsSection = 'workspace' | 'dimensions' | 'integrations' | 'annotations' | 'sdk'
 
 const menuItems: { key: SettingsSection; label: string }[] = [
   { key: 'workspace', label: 'Workspace' },
   { key: 'dimensions', label: 'Custom Dimensions' },
   { key: 'integrations', label: 'Integrations' },
+  { key: 'annotations', label: 'Annotations' },
   { key: 'sdk', label: 'Install SDK' },
 ]
 
@@ -132,7 +134,15 @@ function Settings() {
   const onFinish = (values: { name: string; website: string; logo_url?: string; timezone: string; currency: string; timescore_reference?: number; bounce_threshold?: number }) => {
     updateWorkspaceMutation.mutate({
       id: workspaceId,
-      ...values,
+      name: values.name,
+      website: values.website,
+      logo_url: values.logo_url,
+      timezone: values.timezone,
+      currency: values.currency,
+      settings: {
+        timescore_reference: values.timescore_reference,
+        bounce_threshold: values.bounce_threshold,
+      },
     })
   }
 
@@ -161,7 +171,7 @@ function Settings() {
 
   // Helper to get labels from custom_dimensions, handling legacy formats
   const getLabels = (): Record<string, string> => {
-    const cd = workspace.custom_dimensions
+    const cd = workspace.settings.custom_dimensions
     if (!cd) return {}
     // If it's already a simple label map (Record<string, string>)
     if (typeof cd === 'object' && !Array.isArray(cd)) {
@@ -195,7 +205,7 @@ function Settings() {
 
     updateLabelMutation.mutate({
       id: workspaceId,
-      custom_dimensions: updatedLabels,
+      settings: { custom_dimensions: updatedLabels },
     })
   }
 
@@ -213,8 +223,8 @@ function Settings() {
             logo_url: workspace.logo_url,
             timezone: workspace.timezone,
             currency: workspace.currency,
-            timescore_reference: workspace.timescore_reference,
-            bounce_threshold: workspace.bounce_threshold ?? 10,
+            timescore_reference: workspace.settings.timescore_reference,
+            bounce_threshold: workspace.settings.bounce_threshold ?? 10,
           }}
         >
           <Form.Item
@@ -290,7 +300,7 @@ function Settings() {
           <div className="mb-6 -mt-2">
             <TimeScoreDistribution
               workspaceId={workspaceId}
-              timescoreReference={workspace.timescore_reference ?? 60}
+              timescoreReference={workspace.settings.timescore_reference ?? 60}
             />
           </div>
 
@@ -460,6 +470,7 @@ function Settings() {
           {section === 'workspace' && workspaceContent}
           {section === 'dimensions' && dimensionsContent}
           {section === 'integrations' && <IntegrationsSettings workspace={workspace} />}
+          {section === 'annotations' && <AnnotationsSettings workspace={workspace} />}
           {section === 'sdk' && sdkContent}
         </div>
       </div>

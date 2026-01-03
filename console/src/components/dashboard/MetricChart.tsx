@@ -3,6 +3,7 @@ import { Empty } from 'antd'
 import { createMetricChartOption, formatDateRange } from '../../lib/chart-utils'
 import type { ChartDataPoint, MetricConfig } from '../../types/dashboard'
 import type { Granularity } from '../../types/analytics'
+import type { Annotation } from '../../types/workspace'
 
 interface MetricChartProps {
   metric: MetricConfig
@@ -13,6 +14,8 @@ interface MetricChartProps {
   compareDateRange: { start: string; end: string }
   loading?: boolean
   height?: number
+  annotations?: Annotation[]
+  timezone?: string
 }
 
 export function MetricChart({
@@ -24,6 +27,8 @@ export function MetricChart({
   compareDateRange,
   loading = false,
   height = 180,
+  annotations,
+  timezone,
 }: MetricChartProps) {
   if (loading) {
     return (
@@ -52,6 +57,8 @@ export function MetricChart({
     granularity,
     currentLabel,
     previousLabel,
+    annotations,
+    timezone,
   )
 
   return (

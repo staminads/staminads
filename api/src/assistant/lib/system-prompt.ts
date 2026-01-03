@@ -8,8 +8,8 @@ export function buildSystemPrompt(
   workspace: Workspace,
   currentState?: ExploreStateDto,
 ): string {
-  const customDimensionLabels = workspace.custom_dimensions
-    ? Object.entries(workspace.custom_dimensions)
+  const customDimensionLabels = workspace.settings.custom_dimensions
+    ? Object.entries(workspace.settings.custom_dimensions)
         .map(([slot, label]) => `cd_${slot}: ${label}`)
         .join(', ')
     : 'None configured';

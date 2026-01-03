@@ -5,6 +5,7 @@ import { generateEventsByDay, getCachedFilters, clearFilterCache } from './fixtu
 import { TrackingEvent } from '../events/entities/event.entity';
 import { DEMO_CUSTOM_DIMENSION_LABELS } from './fixtures/demo-filters';
 import { BackfillTask } from '../filters/backfill/backfill-task.entity';
+import { Annotation, WorkspaceSettings, DEFAULT_WORKSPACE_SETTINGS } from '../workspaces/entities/workspace.entity';
 
 const DEMO_WORKSPACE_ID = 'demo-apple';
 const DEMO_WORKSPACE_NAME = 'Apple Demo';
@@ -13,20 +14,38 @@ const SESSION_COUNT = 200_000;
 const DAYS_RANGE = 90;
 const BATCH_SIZE = 10_000;
 
-interface Workspace {
+interface WorkspaceRow {
   id: string;
   name: string;
   website: string;
   timezone: string;
   currency: string;
   logo_url: string | null;
-  timescore_reference: number;
-  bounce_threshold: number;
+  settings: string; // JSON string
   status: string;
-  custom_dimensions: string;
-  filters: string;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Generate demo annotations that correlate with demo data patterns.
+ */
+function generateDemoAnnotations(endDate: Date): Annotation[] {
+  // iPhone launch date: 5 days before end date (matches the 3x traffic spike in demo data)
+  const launchDate = new Date(endDate);
+  launchDate.setDate(launchDate.getDate() - 5);
+  const launchDateStr = launchDate.toISOString().split('T')[0];
+
+  return [
+    {
+      id: randomUUID(),
+      date: launchDateStr,
+      timezone: 'America/New_York',
+      title: 'iPhone 16 Launch',
+      description: 'Official launch day with keynote and product availability',
+      color: '#22c55e', // Green (positive events)
+    },
+  ];
 }
 
 function toClickHouseDateTime(date: Date = new Date()): string {
@@ -48,14 +67,15 @@ export class DemoService {
     // Delete existing demo workspace if it exists
     await this.deleteExistingDemo();
 
-    // Create new workspace with fixed ID
-    const workspace = await this.createWorkspace(DEMO_WORKSPACE_ID);
+    // Generate events day-by-day using streaming generator
+    const endDate = new Date();
+
+    // Create new workspace with fixed ID (needs endDate for annotations)
+    const workspace = await this.createWorkspace(DEMO_WORKSPACE_ID, endDate);
 
     this.logger.log(`Created workspace: ${DEMO_WORKSPACE_ID}`);
     this.logger.log(`Generating ${SESSION_COUNT.toLocaleString()} sessions over ${DAYS_RANGE} days...`);
 
-    // Generate and insert events day-by-day using streaming generator
-    const endDate = new Date();
     const generator = generateEventsByDay({
       workspaceId: DEMO_WORKSPACE_ID,
       sessionCount: SESSION_COUNT,
@@ -154,21 +174,28 @@ export class DemoService {
     return true;
   }
 
-  private async createWorkspace(workspaceId: string): Promise<Workspace> {
+  private async createWorkspace(workspaceId: string, endDate: Date): Promise<WorkspaceRow> {
     const now = toClickHouseDateTime();
 
-    const workspace: Workspace = {
+    // Build settings with demo-specific values
+    const settings: WorkspaceSettings = {
+      ...DEFAULT_WORKSPACE_SETTINGS,
+      timescore_reference: 180, // 3 minutes
+      bounce_threshold: 10,
+      custom_dimensions: DEMO_CUSTOM_DIMENSION_LABELS,
+      filters: getCachedFilters().filters,
+      annotations: generateDemoAnnotations(endDate),
+    };
+
+    const workspace: WorkspaceRow = {
       id: workspaceId,
       name: DEMO_WORKSPACE_NAME,
       website: DEMO_WEBSITE,
       timezone: 'America/New_York',
       currency: 'USD',
       logo_url: 'https://www.apple.com/ac/structured-data/images/knowledge_graph_logo.png',
-      timescore_reference: 180, // 3 minutes
-      bounce_threshold: 10,
+      settings: JSON.stringify(settings),
       status: 'active',
-      custom_dimensions: JSON.stringify(DEMO_CUSTOM_DIMENSION_LABELS),
-      filters: JSON.stringify(getCachedFilters().filters),
       created_at: now,
       updated_at: now,
     };

@@ -100,8 +100,10 @@ describe('Workspaces Integration', () => {
         currency: dto.currency,
         logo_url: dto.logo_url,
         status: 'initializing',
-        timescore_reference: 60,
-        bounce_threshold: 10,
+        settings: {
+          timescore_reference: 60,
+          bounce_threshold: 10,
+        },
       });
       expect(response.body.created_at).toBeDefined();
       expect(response.body.updated_at).toBeDefined();
@@ -126,9 +128,11 @@ describe('Workspaces Integration', () => {
         currency: dto.currency,
         logo_url: dto.logo_url,
         status: 'initializing',
-        timescore_reference: 60,
-        bounce_threshold: 10,
       });
+      // Settings is stored as JSON string in ClickHouse
+      const settings = JSON.parse(rows[0].settings as string);
+      expect(settings.timescore_reference).toBe(60);
+      expect(settings.bounce_threshold).toBe(10);
     });
 
     it('creates workspace with custom bounce_threshold', async () => {
@@ -138,7 +142,9 @@ describe('Workspaces Integration', () => {
         website: 'https://bounce-test.com',
         timezone: 'UTC',
         currency: 'USD',
-        bounce_threshold: 30,
+        settings: {
+          bounce_threshold: 30,
+        },
       };
 
       const response = await request(app.getHttpServer())
@@ -147,7 +153,7 @@ describe('Workspaces Integration', () => {
         .send(dto)
         .expect(201);
 
-      expect(response.body.bounce_threshold).toBe(30);
+      expect(response.body.settings.bounce_threshold).toBe(30);
     });
 
     it('creates workspace without optional logo_url', async () => {
@@ -228,7 +234,7 @@ describe('Workspaces Integration', () => {
         timezone: 'UTC',
         currency: 'USD',
         status: 'active',
-        timescore_reference: 60,
+        settings: JSON.stringify({ timescore_reference: 60, bounce_threshold: 10 }),
         created_at: toClickHouseDateTime(),
         updated_at: toClickHouseDateTime(),
       };
@@ -277,7 +283,7 @@ describe('Workspaces Integration', () => {
           timezone: 'UTC',
           currency: 'USD',
           status: 'active',
-          timescore_reference: 60,
+          settings: JSON.stringify({ timescore_reference: 60, bounce_threshold: 10 }),
           created_at: toClickHouseDateTime(new Date(now - 2000)),
           updated_at: toClickHouseDateTime(),
         },
@@ -288,7 +294,7 @@ describe('Workspaces Integration', () => {
           timezone: 'UTC',
           currency: 'USD',
           status: 'active',
-          timescore_reference: 60,
+          settings: JSON.stringify({ timescore_reference: 60, bounce_threshold: 10 }),
           created_at: toClickHouseDateTime(new Date(now - 1000)),
           updated_at: toClickHouseDateTime(),
         },
@@ -299,7 +305,7 @@ describe('Workspaces Integration', () => {
           timezone: 'UTC',
           currency: 'USD',
           status: 'active',
-          timescore_reference: 60,
+          settings: JSON.stringify({ timescore_reference: 60, bounce_threshold: 10 }),
           created_at: toClickHouseDateTime(new Date(now)),
           updated_at: toClickHouseDateTime(),
         },
@@ -391,30 +397,32 @@ describe('Workspaces Integration', () => {
       // Update with integration only
       const updateDto = {
         id: 'integration_test_ws',
-        integrations: [
-          {
-            id: 'anthropic_1',
-            type: 'anthropic',
-            enabled: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            settings: {
-              api_key_encrypted: 'sk-ant-test-key',
-              model: 'claude-sonnet-4-5-20250929',
-              max_tokens: 4096,
-              temperature: 0.7,
+        settings: {
+          integrations: [
+            {
+              id: 'anthropic_1',
+              type: 'anthropic',
+              enabled: true,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              settings: {
+                api_key_encrypted: 'sk-ant-test-key',
+                model: 'claude-sonnet-4-5-20250929',
+                max_tokens: 4096,
+                temperature: 0.7,
+              },
+              limits: {
+                max_requests_per_hour: 60,
+                max_tokens_per_day: 100000,
+              },
+              usage: {
+                requests_this_hour: 0,
+                tokens_today: 0,
+                last_reset: new Date().toISOString(),
+              },
             },
-            limits: {
-              max_requests_per_hour: 60,
-              max_tokens_per_day: 100000,
-            },
-            usage: {
-              requests_this_hour: 0,
-              tokens_today: 0,
-              last_reset: new Date().toISOString(),
-            },
-          },
-        ],
+          ],
+        },
       };
       const response = await request(app.getHttpServer())
         .post('/api/workspaces.update')
@@ -423,10 +431,10 @@ describe('Workspaces Integration', () => {
         .expect(201);
 
       // Integration should be added
-      expect(response.body.integrations).toHaveLength(1);
-      expect(response.body.integrations[0].type).toBe('anthropic');
+      expect(response.body.settings.integrations).toHaveLength(1);
+      expect(response.body.settings.integrations[0].type).toBe('anthropic');
       // API key should be encrypted (contains ':' separators)
-      expect(response.body.integrations[0].settings.api_key_encrypted).toContain(':');
+      expect(response.body.settings.integrations[0].settings.api_key_encrypted).toContain(':');
 
       // Original fields must be preserved
       expect(response.body.name).toBe('Integration Test');
@@ -454,7 +462,9 @@ describe('Workspaces Integration', () => {
       // Send update with only some fields (others should be preserved)
       const updateDto = {
         id: 'partial_update_test_ws',
-        timescore_reference: 120,
+        settings: {
+          timescore_reference: 120,
+        },
       };
       const response = await request(app.getHttpServer())
         .post('/api/workspaces.update')
@@ -468,7 +478,7 @@ describe('Workspaces Integration', () => {
       expect(response.body.timezone).toBe('Asia/Tokyo');
       expect(response.body.currency).toBe('JPY');
       // Updated field should apply
-      expect(response.body.timescore_reference).toBe(120);
+      expect(response.body.settings.timescore_reference).toBe(120);
     });
 
     it('updates bounce_threshold', async () => {
@@ -490,10 +500,10 @@ describe('Workspaces Integration', () => {
       const response = await request(app.getHttpServer())
         .post('/api/workspaces.update')
         .set('Authorization', `Bearer ${authToken}`)
-        .send({ id: 'bounce_update_test', bounce_threshold: 20 })
+        .send({ id: 'bounce_update_test', settings: { bounce_threshold: 20 } })
         .expect(201);
 
-      expect(response.body.bounce_threshold).toBe(20);
+      expect(response.body.settings.bounce_threshold).toBe(20);
     });
 
     it('returns 404 for non-existent workspace', async () => {
@@ -521,7 +531,7 @@ describe('Workspaces Integration', () => {
         timezone: 'UTC',
         currency: 'USD',
         status: 'active',
-        timescore_reference: 60,
+        settings: JSON.stringify({ timescore_reference: 60, bounce_threshold: 10 }),
         created_at: toClickHouseDateTime(),
         updated_at: toClickHouseDateTime(),
       };
@@ -584,9 +594,8 @@ describe('Workspaces Integration', () => {
       expect(columnMap['website']).toBe('String');
       expect(columnMap['timezone']).toBe('String');
       expect(columnMap['currency']).toBe('String');
-      expect(columnMap['logo_url']).toBe('String');
-      expect(columnMap['timescore_reference']).toMatch(/UInt32/);
-      expect(columnMap['bounce_threshold']).toMatch(/UInt32/);
+      expect(columnMap['logo_url']).toMatch(/Nullable\(String\)/);
+      expect(columnMap['settings']).toBe('String');
       expect(columnMap['status']).toMatch(/Enum8/);
       expect(columnMap['created_at']).toMatch(/DateTime64/);
       expect(columnMap['updated_at']).toMatch(/DateTime64/);
