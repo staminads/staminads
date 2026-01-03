@@ -60,6 +60,11 @@ export function resolveDatePreset(
         start: now.subtract(14, 'day').startOf('day').toISOString(),
         end: now.subtract(1, 'day').endOf('day').toISOString(),
       };
+    case 'last_28_days':
+      return {
+        start: now.subtract(28, 'day').startOf('day').toISOString(),
+        end: now.subtract(1, 'day').endOf('day').toISOString(),
+      };
     case 'last_30_days':
       return {
         start: now.subtract(30, 'day').startOf('day').toISOString(),
@@ -68,6 +73,11 @@ export function resolveDatePreset(
     case 'last_90_days':
       return {
         start: now.subtract(90, 'day').startOf('day').toISOString(),
+        end: now.subtract(1, 'day').endOf('day').toISOString(),
+      };
+    case 'last_91_days':
+      return {
+        start: now.subtract(91, 'day').startOf('day').toISOString(),
         end: now.subtract(1, 'day').endOf('day').toISOString(),
       };
     case 'this_week':
@@ -118,6 +128,16 @@ export function resolveDatePreset(
         end: lastYear.endOf('year').toISOString(),
       };
     }
+    case 'last_12_months':
+      return {
+        start: now.subtract(12, 'month').startOf('month').toISOString(),
+        end: now.subtract(1, 'day').endOf('day').toISOString(),
+      };
+    case 'all_time':
+      return {
+        start: dayjs('2020-01-01').startOf('day').toISOString(),
+        end: now.endOf('day').toISOString(),
+      };
     default:
       throw new Error(`Unknown date preset: ${preset}`);
   }

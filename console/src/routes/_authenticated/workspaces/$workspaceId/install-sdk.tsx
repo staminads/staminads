@@ -36,14 +36,14 @@ function InstallSDK() {
     try {
       const result = await api.analytics.query({
         workspace_id: workspaceId,
-        metrics: ['events'],
+        metrics: ['sessions'],
         dateRange: { preset: 'all_time' }
       })
 
-      // Check data array for event count
+      // Check data array for session count
       if (result.data && Array.isArray(result.data) && result.data.length > 0) {
-        const events = (result.data[0] as Record<string, unknown>)?.events ?? 0
-        if (typeof events === 'number' && events > 0) {
+        const sessions = (result.data[0] as Record<string, unknown>)?.sessions ?? 0
+        if (typeof sessions === 'number' && sessions > 0) {
           await api.workspaces.update({ id: workspaceId, status: 'active' })
           setEventDetected(true)
           queryClient.invalidateQueries({ queryKey: ['workspaces', workspaceId] })
@@ -65,7 +65,10 @@ function InstallSDK() {
     return () => clearInterval(interval)
   }, [eventDetected, checkEvents])
 
-  const handleSkip = () => {
+  const handleSkip = async () => {
+    await api.workspaces.update({ id: workspaceId, status: 'active' })
+    queryClient.invalidateQueries({ queryKey: ['workspaces', workspaceId] })
+    queryClient.invalidateQueries({ queryKey: ['workspaces'] })
     navigate({ to: '/workspaces/$workspaceId', params: { workspaceId } })
   }
 
@@ -76,6 +79,7 @@ function InstallSDK() {
   // Generate the SDK snippet with workspace_id pre-filled and version for cache busting
   const versionParam = sdkVersion ? `?v=${sdkVersion}` : ''
   const sdkSnippet = `<!-- Staminads -->
+<link rel="dns-prefetch" href="${window.location.origin}">
 <script src="${window.location.origin}/sdk/staminads.min.js${versionParam}"></script>
 <script>
   Staminads.init({
@@ -100,12 +104,12 @@ function InstallSDK() {
             <Alert
               type="success"
               icon={<CheckCircleFilled />}
-              message="Event detected!"
+              title="Event detected!"
               description="Your SDK is working correctly. You can now continue to your dashboard."
               showIcon
             />
           ) : (
-            <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-lg border border-blue-200 animate-pulse">
+            <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
               <Spin indicator={<LoadingOutlined style={{ fontSize: 20 }} spin />} />
               <div>
                 <div className="font-medium text-blue-900">Waiting for first event...</div>
@@ -117,14 +121,14 @@ function InstallSDK() {
           )}
         </div>
 
-        <div className="mt-8 flex gap-3">
+        <div className="mt-8 flex justify-end">
           {eventDetected ? (
             <Button type="primary" size="large" onClick={handleContinue}>
               Continue to Dashboard
             </Button>
           ) : (
-            <Button type="default" size="large" onClick={handleSkip}>
-              Skip for now
+            <Button type="link" onClick={handleSkip}>
+              or skip for now →
             </Button>
           )}
         </div>

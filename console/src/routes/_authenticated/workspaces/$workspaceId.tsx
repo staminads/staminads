@@ -62,6 +62,20 @@ function WorkspaceLayout() {
     }
   }, [timezonePopoverOpen])
 
+  // Redirect to install-sdk if workspace is not active
+  const isInstallSdkPage = currentPath.endsWith('/install-sdk')
+  useEffect(() => {
+    if (workspace.status !== 'active' && !isInstallSdkPage) {
+      navigate({
+        to: '/workspaces/$workspaceId/install-sdk',
+        params: { workspaceId },
+        replace: true,
+      })
+    }
+  }, [workspace.status, isInstallSdkPage, navigate, workspaceId])
+
+  const isWorkspaceActive = workspace.status === 'active'
+
   // Build timezone options with workspace timezone first, then all IANA timezones
   const allTimezones = Intl.supportedValuesOf('timeZone')
   const timezoneOptions = [
@@ -129,75 +143,81 @@ function WorkspaceLayout() {
                 },
               ]}
             />
-            <nav className="flex gap-1">
-              {[
-                { to: '/workspaces/$workspaceId', label: 'Dashboard', exact: true },
-                { to: '/workspaces/$workspaceId/explore', label: 'Explore' },
-                { to: '/workspaces/$workspaceId/filters', label: 'Filters' },
-                { to: '/workspaces/$workspaceId/settings', label: 'Settings' },
-              ].map(({ to, label, exact }) => {
-                const resolvedPath = to.replace('$workspaceId', workspaceId)
-                const isActive = exact
-                  ? currentPath === resolvedPath
-                  : currentPath.startsWith(resolvedPath)
-                return (
-                  <Link
-                    key={to}
-                    to={to}
-                    params={{ workspaceId }}
-                    className={`px-4 py-2 rounded transition-colors ${
-                      isActive
-                        ? '!text-[var(--primary)] bg-white'
-                        : '!text-gray-500 hover:!text-[var(--primary)]'
-                    }`}
-                  >
-                    {label}
-                  </Link>
-                )
-              })}
-            </nav>
+            {isWorkspaceActive && (
+              <nav className="flex gap-1">
+                {[
+                  { to: '/workspaces/$workspaceId', label: 'Dashboard', exact: true },
+                  { to: '/workspaces/$workspaceId/explore', label: 'Explore' },
+                  { to: '/workspaces/$workspaceId/filters', label: 'Filters' },
+                  { to: '/workspaces/$workspaceId/settings', label: 'Settings' },
+                ].map(({ to, label, exact }) => {
+                  const resolvedPath = to.replace('$workspaceId', workspaceId)
+                  const isActive = exact
+                    ? currentPath === resolvedPath
+                    : currentPath.startsWith(resolvedPath)
+                  return (
+                    <Link
+                      key={to}
+                      to={to}
+                      params={{ workspaceId }}
+                      className={`px-4 py-2 rounded transition-colors ${
+                        isActive
+                          ? '!text-[var(--primary)] bg-white'
+                          : '!text-gray-500 hover:!text-[var(--primary)]'
+                      }`}
+                    >
+                      {label}
+                    </Link>
+                  )
+                })}
+              </nav>
+            )}
           </Space>
 
           {/* Right: Sync Status + Timezone + Logout */}
           <Space>
-            <SyncStatusIcon workspaceId={workspaceId} />
-            <Tooltip title={`Timezone: ${timezone}`} placement="left">
-              <Popover
-                open={timezonePopoverOpen}
-                onOpenChange={setTimezonePopoverOpen}
-                trigger="click"
-                placement="bottom"
-                destroyOnHidden
-                content={
-                  <Select
-                    ref={timezoneSelectRef}
-                    value={timezone}
-                    onChange={(value) => {
-                      setTimezone(value)
-                      setTimezonePopoverOpen(false)
-                      message.success(`Timezone set to ${value}`)
-                    }}
-                    variant="filled"
-                    className="w-48"
-                    showSearch
-                    popupMatchSelectWidth={false}
-                    optionFilterProp="label"
-                    options={timezoneOptions}
+            {isWorkspaceActive && (
+              <>
+                <SyncStatusIcon workspaceId={workspaceId} />
+                <Tooltip title={`Timezone: ${timezone}`} placement="left">
+                  <Popover
                     open={timezonePopoverOpen}
-                    onOpenChange={(open) => {
-                      if (!open) setTimezonePopoverOpen(false)
-                    }}
-                    getPopupContainer={(trigger) => trigger.parentElement!}
-                  />
-                }
-              >
-                <Button
-                  type="text"
-                  icon={<GlobalOutlined />}
-                  className="!text-gray-500 hover:!text-gray-800 hover:!bg-gray-100"
-                />
-              </Popover>
-            </Tooltip>
+                    onOpenChange={setTimezonePopoverOpen}
+                    trigger="click"
+                    placement="bottom"
+                    destroyOnHidden
+                    content={
+                      <Select
+                        ref={timezoneSelectRef}
+                        value={timezone}
+                        onChange={(value) => {
+                          setTimezone(value)
+                          setTimezonePopoverOpen(false)
+                          message.success(`Timezone set to ${value}`)
+                        }}
+                        variant="filled"
+                        className="w-48"
+                        showSearch
+                        popupMatchSelectWidth={false}
+                        optionFilterProp="label"
+                        options={timezoneOptions}
+                        open={timezonePopoverOpen}
+                        onOpenChange={(open) => {
+                          if (!open) setTimezonePopoverOpen(false)
+                        }}
+                        getPopupContainer={(trigger) => trigger.parentElement!}
+                      />
+                    }
+                  >
+                    <Button
+                      type="text"
+                      icon={<GlobalOutlined />}
+                      className="!text-gray-500 hover:!text-gray-800 hover:!bg-gray-100"
+                    />
+                  </Popover>
+                </Tooltip>
+              </>
+            )}
             <Tooltip title="Logout" placement="left">
               <Button
                 type="text"

@@ -55,8 +55,10 @@ export const DATE_PRESETS = [
   'yesterday',
   'last_7_days',
   'last_14_days',
+  'last_28_days',
   'last_30_days',
   'last_90_days',
+  'last_91_days',
   'this_week',
   'last_week',
   'this_month',
@@ -65,6 +67,8 @@ export const DATE_PRESETS = [
   'last_quarter',
   'this_year',
   'last_year',
+  'last_12_months',
+  'all_time',
 ] as const;
 
 export type DatePreset = (typeof DATE_PRESETS)[number];
