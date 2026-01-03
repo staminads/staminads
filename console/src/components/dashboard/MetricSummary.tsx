@@ -1,4 +1,5 @@
-import { Statistic, Skeleton } from 'antd'
+import { Statistic, Skeleton, Tooltip } from 'antd'
+import { InfoCircleOutlined } from '@ant-design/icons'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import { formatValue } from '../../lib/chart-utils'
 import { METRICS, type DashboardData, type MetricKey } from '../../types/dashboard'
@@ -46,7 +47,14 @@ export function MetricSummary({
               <Skeleton active paragraph={false} title={{ width: '60%' }} />
             ) : (
               <>
-                <div className="text-xs text-gray-500 mb-1">{metric.label}</div>
+                <div className="text-xs text-gray-500 mb-1">
+                  {metric.label}
+                  {metric.tooltip && (
+                    <Tooltip title={metric.tooltip}>
+                      <InfoCircleOutlined className="ml-1.5 text-gray-400 cursor-help" />
+                    </Tooltip>
+                  )}
+                </div>
                 <div className="flex items-baseline gap-2">
                   <span className="text-xl font-semibold text-gray-800">
                     {formatValue(currentTotal, metric.format)}

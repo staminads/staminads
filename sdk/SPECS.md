@@ -852,7 +852,27 @@ function isBot(): boolean {
 
 ## 8. Public API
 
-### 8.1 Initialization
+### 8.1 Initialization (Global Config Pattern)
+
+The SDK auto-initializes from `window.StaminadsConfig`. No explicit `init()` call required.
+
+```html
+<!-- Recommended usage -->
+<script>
+window.StaminadsConfig = {
+  workspace_id: 'ws_abc123',
+  endpoint: 'https://your-api.com',
+  debug: true
+};
+</script>
+<script async src="staminads.min.js"></script>
+```
+
+**Benefits:**
+- No race conditions with async loading
+- No stub/queue complexity
+- Works naturally with `async` attribute
+- Simpler integration snippet
 
 ```typescript
 interface StaminadsConfig {
@@ -895,12 +915,12 @@ interface HeartbeatTier {
 // | 5 min    | 30s     | 21s    | 2 (Low)    |
 // | 10+ min  | STOPPED | STOPPED| Max duration |
 
-// Initialize
-Staminads.init({
-  workspace_id: 'ws_abc123',      // required
-  endpoint: 'https://your-api.com', // required (no default - OSS)
-  debug: true,
-});
+// Global config declaration for TypeScript
+declare global {
+  interface Window {
+    StaminadsConfig?: StaminadsConfig;
+  }
+}
 ```
 
 ### 8.1.1 Session Management Rules
@@ -982,37 +1002,44 @@ Staminads.setDimensions({ 1: 'val', 2: 'val' }); // Set multiple
 
 ### 8.2 Methods
 
+All async methods return Promises and internally await SDK initialization. This ensures the SDK is fully ready before executing, even if called immediately after script load.
+
 ```typescript
 interface StaminadsAPI {
-  // Initialization
-  init(config: StaminadsConfig): void;
+  // Session info (async - awaits initialization)
+  getSessionId(): Promise<string>;
+  getVisitorId(): Promise<string>;
+  getFocusDuration(): Promise<number>;   // Returns milliseconds
+  getTotalDuration(): Promise<number>;   // Returns milliseconds
 
-  // Session info
-  getSessionId(): string;
-  getVisitorId(): string;
-  getConfig(): Readonly<StaminadsConfig> | null; // Defensive copy
-  getFocusDuration(): number;      // Returns milliseconds
-  getTotalDuration(): number;      // Returns milliseconds
+  // Synchronous methods (safe to call anytime)
+  getConfig(): Readonly<StaminadsConfig> | null; // Returns null if not initialized
+  debug(): SessionDebugInfo;                      // Returns partial info if not initialized
 
-  // Manual tracking
-  trackPageView(url?: string): void;
-  trackEvent(name: string, properties?: Record<string, any>): void;
-  trackConversion(data: ConversionData): void;
+  // Manual tracking (async)
+  trackPageView(url?: string): Promise<void>;
+  trackEvent(name: string, properties?: Record<string, any>): Promise<void>;
+  trackConversion(data: ConversionData): Promise<void>;
 
-  // Custom Dimensions
-  setDimension(index: number, value: string): void;  // Set single dimension (1-10)
-  setDimensions(dimensions: Record<number, string>): void; // Set multiple dimensions
-  getDimension(index: number): string | null;        // Get dimension value
-  clearDimensions(): void;                           // Clear all dimensions
+  // Custom Dimensions (async)
+  setDimension(index: number, value: string): Promise<void>;  // Set single dimension (1-10)
+  setDimensions(dimensions: Record<number, string>): Promise<void>; // Set multiple
+  getDimension(index: number): Promise<string | null>;        // Get dimension value
+  clearDimensions(): Promise<void>;                           // Clear all dimensions
 
-  // Control
-  pause(): void;                   // Pause all tracking
-  resume(): void;                  // Resume tracking
-  reset(): void;                   // Clear session, start fresh
-
-  // Debug
-  debug(): SessionDebugInfo;       // Get internal state
+  // Control (async)
+  pause(): Promise<void>;                   // Pause all tracking
+  resume(): Promise<void>;                  // Resume tracking
+  reset(): Promise<void>;                   // Clear session, start fresh
 }
+
+// Note: No init() method in public API - SDK auto-initializes from window.StaminadsConfig
+```
+
+**Error Handling**: If SDK methods are called without `window.StaminadsConfig` being set, they will throw:
+```typescript
+throw new Error('Staminads not configured. Set window.StaminadsConfig before loading the SDK.');
+```
 
 interface ConversionData {
   id?: string;                     // Optional, auto-generated if not provided

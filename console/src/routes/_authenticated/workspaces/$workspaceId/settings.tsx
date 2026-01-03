@@ -1,16 +1,17 @@
 import { useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useSuspenseQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Form, Input, InputNumber, Button, Select, message, Table, Tag, Modal, Avatar } from 'antd'
-import { SearchOutlined, EditOutlined } from '@ant-design/icons'
+import { useSuspenseQuery, useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
+import { Form, Input, InputNumber, Button, Select, message, Table, Tag, Modal, Avatar, Spin } from 'antd'
+import { SearchOutlined, EditOutlined, LoadingOutlined } from '@ant-design/icons'
 import { api } from '../../../../lib/api'
 import { workspaceQueryOptions } from '../../../../lib/queries'
 import { IntegrationsSettings } from '../../../../components/settings/IntegrationsSettings'
 import { TimeScoreDistribution } from '../../../../components/settings/TimeScoreDistribution'
+import { CodeSnippet } from '../../../../components/setup/CodeSnippet'
 import { z } from 'zod'
 
 const settingsSearchSchema = z.object({
-  section: z.enum(['workspace', 'dimensions', 'integrations']).optional().default('workspace'),
+  section: z.enum(['workspace', 'dimensions', 'integrations', 'sdk']).optional().default('workspace'),
 })
 
 export const Route = createFileRoute('/_authenticated/workspaces/$workspaceId/settings')({
@@ -51,12 +52,13 @@ const currencyOptions = [
   { value: 'BRL', label: 'BRL - Brazilian Real' },
 ]
 
-type SettingsSection = 'workspace' | 'dimensions' | 'integrations'
+type SettingsSection = 'workspace' | 'dimensions' | 'integrations' | 'sdk'
 
-const menuItems = [
-  { key: 'workspace' as const, label: 'Workspace' },
-  { key: 'dimensions' as const, label: 'Custom Dimensions' },
-  { key: 'integrations' as const, label: 'Integrations' },
+const menuItems: { key: SettingsSection; label: string }[] = [
+  { key: 'workspace', label: 'Workspace' },
+  { key: 'dimensions', label: 'Custom Dimensions' },
+  { key: 'integrations', label: 'Integrations' },
+  { key: 'sdk', label: 'Install SDK' },
 ]
 
 function Settings() {
@@ -65,6 +67,34 @@ function Settings() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { data: workspace } = useSuspenseQuery(workspaceQueryOptions(workspaceId))
+
+  // Fetch SDK version for cache busting
+  const { data: sdkVersion } = useQuery({
+    queryKey: ['sdk-version'],
+    queryFn: async () => {
+      const res = await fetch('/sdk/version.json')
+      const data = await res.json()
+      return data.version as string
+    },
+    staleTime: Infinity
+  })
+
+  // Check if workspace has sessions
+  const { data: sessionCount } = useQuery({
+    queryKey: ['workspace-sessions', workspaceId],
+    queryFn: async () => {
+      const result = await api.analytics.query({
+        workspace_id: workspaceId,
+        metrics: ['sessions'],
+        dateRange: { preset: 'all_time' }
+      })
+      if (result.data && Array.isArray(result.data) && result.data.length > 0) {
+        return (result.data[0] as Record<string, unknown>)?.sessions as number ?? 0
+      }
+      return 0
+    },
+    refetchInterval: section === 'sdk' ? 3000 : false, // Poll only when on SDK section
+  })
 
   const setActiveSection = (newSection: SettingsSection) => {
     navigate({ to: '.', search: { section: newSection } })
@@ -365,6 +395,39 @@ function Settings() {
     </div>
   )
 
+  // Generate the SDK snippet with workspace_id pre-filled and version for cache busting
+  const versionParam = sdkVersion ? `?v=${sdkVersion}` : ''
+  const sdkSnippet = `<!-- Staminads -->
+<script>
+(function(w,d,s,e,n){
+  w.Staminads=w.Staminads||{_queue:[],init:function(){this._queue.push(['init',arguments])}};
+  var js=d.createElement(s);js.async=1;js.src=e;d.head.appendChild(js);
+  w.Staminads.init({workspace_id:'${workspaceId}',endpoint:n});
+})(window,document,'script','${window.location.origin}/sdk/staminads.min.js${versionParam}','${window.location.origin}');
+</script>`
+
+  const sdkContent = (
+    <div className="max-w-xl">
+      <p className="text-gray-500 mb-6">
+        Add this code snippet to your website's{' '}
+        <code className="bg-gray-100 px-1 rounded">&lt;head&gt;</code> or{' '}
+        <code className="bg-gray-100 px-1 rounded">&lt;body&gt;</code> tag.
+      </p>
+      <CodeSnippet code={sdkSnippet} />
+      {sessionCount === 0 && (
+        <div className="mt-6 flex items-center gap-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <Spin indicator={<LoadingOutlined style={{ fontSize: 20 }} spin />} />
+          <div>
+            <div className="font-medium text-blue-900">Waiting for first event...</div>
+            <div className="text-sm text-blue-700">
+              Install the SDK on your website and we'll detect it automatically.
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
   return (
     <div className="flex-1 p-6">
       <h1 className="text-2xl font-light text-gray-800 mb-6">Settings</h1>
@@ -397,6 +460,7 @@ function Settings() {
           {section === 'workspace' && workspaceContent}
           {section === 'dimensions' && dimensionsContent}
           {section === 'integrations' && <IntegrationsSettings workspace={workspace} />}
+          {section === 'sdk' && sdkContent}
         </div>
       </div>
     </div>

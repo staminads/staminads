@@ -3,19 +3,23 @@
  * Ultra-reliable web analytics for tracking TimeScore metrics
  *
  * @example
- * ```typescript
- * import Staminads from '@staminads/sdk';
- *
- * Staminads.init({
+ * ```html
+ * <script>
+ * window.StaminadsConfig = {
  *   workspace_id: 'ws_abc123',
  *   endpoint: 'https://your-api.com',
- * });
+ * };
+ * </script>
+ * <script async src="staminads.min.js"></script>
+ * ```
  *
+ * Then use the SDK (all methods are async):
+ * ```typescript
  * // Track custom dimension
- * Staminads.setDimension(1, 'premium-user');
+ * await Staminads.setDimension(1, 'premium-user');
  *
  * // Track conversion
- * Staminads.trackConversion({
+ * await Staminads.trackConversion({
  *   action: 'purchase',
  *   value: 99.99,
  *   currency: 'USD',
@@ -34,9 +38,8 @@ import type {
 // Create singleton instance
 const sdk = new StaminadsSDK();
 
-// Public API wrapper
+// Public API wrapper (no init method - uses global config)
 const Staminads: StaminadsAPI = {
-  init: (config: StaminadsConfig) => sdk.init(config),
   getSessionId: () => sdk.getSessionId(),
   getVisitorId: () => sdk.getVisitorId(),
   getConfig: () => sdk.getConfig(),
@@ -45,13 +48,7 @@ const Staminads: StaminadsAPI = {
   trackPageView: (url?: string) => sdk.trackPageView(url),
   trackEvent: (name: string, properties?: Record<string, string>) =>
     sdk.trackEvent(name, properties),
-  // Alias for trackEvent - convenient shorthand
-  track: (name: string, properties?: Record<string, unknown>) =>
-    sdk.trackEvent(name, properties as Record<string, string> | undefined),
   trackConversion: (data: ConversionData) => sdk.trackConversion(data),
-  // Alias for trackConversion with positional args
-  conversion: (action: string, value?: number, currency?: string) =>
-    sdk.trackConversion({ action, value, currency }),
   setDimension: (index: number, value: string) => sdk.setDimension(index, value),
   setDimensions: (dimensions: Record<number, string>) => sdk.setDimensions(dimensions),
   getDimension: (index: number) => sdk.getDimension(index),
@@ -69,6 +66,11 @@ export type {
   ConversionData,
   SessionDebugInfo,
 };
+
+// Auto-initialize from global config
+if (typeof window !== 'undefined' && window.StaminadsConfig) {
+  sdk.init(window.StaminadsConfig);
+}
 
 // Default export for UMD/ESM/CJS
 export default Staminads;

@@ -81,12 +81,23 @@ export class StaminadsSDK {
   private isTracking = false;
   private isPaused = false;
   private isInitialized = false;
+  private initPromise: Promise<void> | null = null;
   private flushed = false;
 
   /**
-   * Initialize the SDK
+   * Initialize the SDK (called by index.ts from global config)
+   * Returns the init promise so callers can await if needed
    */
-  async init(userConfig: StaminadsConfig): Promise<void> {
+  init(userConfig: StaminadsConfig): Promise<void> {
+    // Store the promise for ensureInitialized to await
+    this.initPromise = this.initializeAsync(userConfig);
+    return this.initPromise;
+  }
+
+  /**
+   * Async initialization logic
+   */
+  private async initializeAsync(userConfig: StaminadsConfig): Promise<void> {
     // Validate required fields
     if (!userConfig.workspace_id) {
       throw new Error('workspace_id is required');
@@ -760,32 +771,32 @@ export class StaminadsSDK {
   /**
    * Get session ID
    */
-  getSessionId(): string {
-    this.ensureInitialized();
+  async getSessionId(): Promise<string> {
+    await this.ensureInitialized();
     return this.sessionManager?.getSessionId() || '';
   }
 
   /**
    * Get visitor ID
    */
-  getVisitorId(): string {
-    this.ensureInitialized();
+  async getVisitorId(): Promise<string> {
+    await this.ensureInitialized();
     return this.sessionManager?.getVisitorId() || '';
   }
 
   /**
    * Get focus duration in milliseconds
    */
-  getFocusDuration(): number {
-    this.ensureInitialized();
+  async getFocusDuration(): Promise<number> {
+    await this.ensureInitialized();
     return this.durationTracker?.getFocusDurationMs() || 0;
   }
 
   /**
    * Get total duration in milliseconds
    */
-  getTotalDuration(): number {
-    this.ensureInitialized();
+  async getTotalDuration(): Promise<number> {
+    await this.ensureInitialized();
     const session = this.sessionManager?.getSession();
     if (!session) return 0;
     return Date.now() - session.created_at;
@@ -794,8 +805,8 @@ export class StaminadsSDK {
   /**
    * Track page view
    */
-  trackPageView(url?: string): void {
-    this.ensureInitialized();
+  async trackPageView(url?: string): Promise<void> {
+    await this.ensureInitialized();
     if (url) {
       // Update navigation tracker
       window.history.pushState({}, '', url);
@@ -806,16 +817,16 @@ export class StaminadsSDK {
   /**
    * Track custom event
    */
-  trackEvent(name: string, properties?: Record<string, string>): void {
-    this.ensureInitialized();
+  async trackEvent(name: string, properties?: Record<string, string>): Promise<void> {
+    await this.ensureInitialized();
     this.sendEvent('ping', { event_name: name, ...properties });
   }
 
   /**
    * Track conversion
    */
-  trackConversion(data: ConversionData): void {
-    this.ensureInitialized();
+  async trackConversion(data: ConversionData): Promise<void> {
+    await this.ensureInitialized();
 
     const properties: Record<string, string> = {
       conversion_name: data.action,
@@ -832,40 +843,40 @@ export class StaminadsSDK {
   /**
    * Set custom dimension
    */
-  setDimension(index: number, value: string): void {
-    this.ensureInitialized();
+  async setDimension(index: number, value: string): Promise<void> {
+    await this.ensureInitialized();
     this.sessionManager?.setDimension(index, value);
   }
 
   /**
    * Set multiple dimensions
    */
-  setDimensions(dimensions: Record<number, string>): void {
-    this.ensureInitialized();
+  async setDimensions(dimensions: Record<number, string>): Promise<void> {
+    await this.ensureInitialized();
     this.sessionManager?.setDimensions(dimensions);
   }
 
   /**
    * Get dimension value
    */
-  getDimension(index: number): string | null {
-    this.ensureInitialized();
+  async getDimension(index: number): Promise<string | null> {
+    await this.ensureInitialized();
     return this.sessionManager?.getDimension(index) || null;
   }
 
   /**
    * Clear all dimensions
    */
-  clearDimensions(): void {
-    this.ensureInitialized();
+  async clearDimensions(): Promise<void> {
+    await this.ensureInitialized();
     this.sessionManager?.clearDimensions();
   }
 
   /**
    * Pause tracking
    */
-  pause(): void {
-    this.ensureInitialized();
+  async pause(): Promise<void> {
+    await this.ensureInitialized();
     this.isPaused = true;
     this.durationTracker?.pauseFocus();
     this.stopHeartbeat(true); // Accumulate time
@@ -874,8 +885,8 @@ export class StaminadsSDK {
   /**
    * Resume tracking
    */
-  resume(): void {
-    this.ensureInitialized();
+  async resume(): Promise<void> {
+    await this.ensureInitialized();
     this.isPaused = false;
     this.durationTracker?.resumeFocus();
 
@@ -887,8 +898,8 @@ export class StaminadsSDK {
   /**
    * Reset session
    */
-  reset(): void {
-    this.ensureInitialized();
+  async reset(): Promise<void> {
+    await this.ensureInitialized();
     if (!this.sessionManager) return;
 
     this.sessionManager.reset();
@@ -921,11 +932,15 @@ export class StaminadsSDK {
   }
 
   /**
-   * Ensure SDK is initialized
+   * Ensure SDK is initialized (awaits init promise if needed)
    */
-  private ensureInitialized(): void {
-    if (!this.isInitialized) {
-      throw new Error('Staminads must be initialized before use. Call Staminads.init() first.');
+  private async ensureInitialized(): Promise<void> {
+    if (this.isInitialized) return;
+
+    if (!this.initPromise) {
+      throw new Error('Staminads not configured. Set window.StaminadsConfig before loading the SDK.');
     }
+
+    await this.initPromise;
   }
 }

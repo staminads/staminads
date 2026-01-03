@@ -20,67 +20,78 @@ Ultra-reliable web analytics SDK for tracking **TimeScore** metrics with millise
 
 ## Installation
 
-Via npm:
+### Via script tag (Recommended)
+
+The SDK auto-initializes from `window.StaminadsConfig`. No explicit `init()` call required.
+
+```html
+<script>
+window.StaminadsConfig = {
+  workspace_id: 'ws_your_workspace_id',
+  endpoint: 'https://your-api.com',
+  debug: false // optional
+};
+</script>
+<script async src="path/to/staminads.min.js"></script>
+```
+
+### Via npm
 
 ```bash
 npm install @staminads/sdk
 ```
 
 ```typescript
-import Staminads from '@staminads/sdk'
-
-Staminads.init({
-  workspace_id: 'ws_your_workspace_id', // required
-  endpoint: 'https://your-api.com', // required (no default - OSS)
+// Set config before importing (or in a separate script tag)
+window.StaminadsConfig = {
+  workspace_id: 'ws_your_workspace_id',
+  endpoint: 'https://your-api.com',
   sessionTimeout: 30 * 60 * 1000, // optional - 30 min default
   debug: false, // optional
   adClickIds: ['gclid', 'fbclid'] // optional - custom ad click IDs
-})
-```
+};
 
-Or via script tag:
+import Staminads from '@staminads/sdk';
 
-```html
-<script src="path/to/staminads.min.js"></script>
-<script>
-  Staminads.init({
-    workspace_id: 'ws_your_workspace_id',
-    endpoint: 'https://your-api.com'
-  })
-</script>
+// SDK is auto-initialized, ready to use
+await Staminads.trackEvent('my_event');
 ```
 
 ## API
 
+All methods (except `getConfig()` and `debug()`) are async and return Promises.
+
 ```typescript
-// Initialize (required)
-Staminads.init(config);
+// Session info (async)
+await Staminads.getSessionId();       // Current session UUID
+await Staminads.getVisitorId();       // Persistent visitor UUID
+await Staminads.getFocusDuration();   // Active time in milliseconds
+await Staminads.getTotalDuration();   // Wall clock time in milliseconds
 
-// Session info
-Staminads.getSessionId();       // Current session UUID
-Staminads.getVisitorId();       // Persistent visitor UUID
-Staminads.getFocusDuration();   // Active time in milliseconds
-Staminads.getTotalDuration();   // Wall clock time in milliseconds
+// Synchronous methods
+Staminads.getConfig();                // Returns config or null
+Staminads.debug();                    // Get debug info
 
-// Manual tracking
-Staminads.trackPageView(url?);  // Track SPA navigation
-Staminads.trackEvent(name, properties?);
-Staminads.trackConversion({ action, value?, currency?, properties? });
+// Manual tracking (async)
+await Staminads.trackPageView(url?);  // Track SPA navigation
+await Staminads.trackEvent(name, properties?);
+await Staminads.trackConversion({ action, value?, currency?, properties? });
 
-// Custom Dimensions
-Staminads.setDimension(1, 'premium');    // Set stm_1 = 'premium'
-Staminads.setDimensions({ 1: 'a', 2: 'b' }); // Set multiple
-Staminads.getDimension(1);               // Get dimension value
-Staminads.clearDimensions();             // Clear all
+// Custom Dimensions (async)
+await Staminads.setDimension(1, 'premium');    // Set stm_1 = 'premium'
+await Staminads.setDimensions({ 1: 'a', 2: 'b' }); // Set multiple
+await Staminads.getDimension(1);               // Get dimension value
+await Staminads.clearDimensions();             // Clear all
 
-// Control
-Staminads.pause();              // Pause tracking
-Staminads.resume();             // Resume tracking
-Staminads.reset();              // Clear session, start fresh
-Staminads.debug();              // Get debug info
+// Control (async)
+await Staminads.pause();              // Pause tracking
+await Staminads.resume();             // Resume tracking
+await Staminads.reset();              // Clear session, start fresh
 ```
 
 ## Configuration
+
+Set `window.StaminadsConfig` before loading the SDK script:
 
 ```typescript
 interface StaminadsConfig {
@@ -94,6 +105,13 @@ interface StaminadsConfig {
   adClickIds?: string[] // Default: ['gclid', 'fbclid', 'msclkid', ...]
   trackSPA?: boolean // Default: true
   trackScroll?: boolean // Default: true
+}
+
+// TypeScript global declaration
+declare global {
+  interface Window {
+    StaminadsConfig?: StaminadsConfig;
+  }
 }
 ```
 

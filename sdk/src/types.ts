@@ -2,6 +2,13 @@
  * Staminads SDK Types
  */
 
+// Global window declaration for StaminadsConfig
+declare global {
+  interface Window {
+    StaminadsConfig?: StaminadsConfig;
+  }
+}
+
 // Heartbeat Tier Configuration
 export interface HeartbeatTier {
   /** Duration threshold in ms. Tier applies when activeTime >= after. */
@@ -207,26 +214,21 @@ export interface QueuedPayload {
 
 // Public API
 export interface StaminadsAPI {
-  init(config: StaminadsConfig): void;
-  getSessionId(): string;
-  getVisitorId(): string;
+  getSessionId(): Promise<string>;
+  getVisitorId(): Promise<string>;
   getConfig(): Readonly<StaminadsConfig> | null;
-  getFocusDuration(): number;
-  getTotalDuration(): number;
-  trackPageView(url?: string): void;
-  trackEvent(name: string, properties?: Record<string, string>): void;
-  /** Alias for trackEvent - convenient shorthand */
-  track(name: string, properties?: Record<string, unknown>): void;
-  trackConversion(data: ConversionData): void;
-  /** Alias for trackConversion with positional args */
-  conversion(action: string, value?: number, currency?: string): void;
-  setDimension(index: number, value: string): void;
-  setDimensions(dimensions: Record<number, string>): void;
-  getDimension(index: number): string | null;
-  clearDimensions(): void;
-  pause(): void;
-  resume(): void;
-  reset(): void;
+  getFocusDuration(): Promise<number>;
+  getTotalDuration(): Promise<number>;
+  trackPageView(url?: string): Promise<void>;
+  trackEvent(name: string, properties?: Record<string, string>): Promise<void>;
+  trackConversion(data: ConversionData): Promise<void>;
+  setDimension(index: number, value: string): Promise<void>;
+  setDimensions(dimensions: Record<number, string>): Promise<void>;
+  getDimension(index: number): Promise<string | null>;
+  clearDimensions(): Promise<void>;
+  pause(): Promise<void>;
+  resume(): Promise<void>;
+  reset(): Promise<void>;
   debug(): SessionDebugInfo;
 }
 

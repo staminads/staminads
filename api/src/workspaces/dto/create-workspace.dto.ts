@@ -6,10 +6,19 @@ import {
   IsNumber,
   Min,
   Max,
+  MinLength,
+  MaxLength,
+  Matches,
 } from 'class-validator';
 
 export class CreateWorkspaceDto {
   @IsString()
+  @MinLength(2)
+  @MaxLength(50)
+  @Matches(/^[a-z][a-z0-9_]*$/, {
+    message:
+      'ID must start with a letter and contain only lowercase letters, numbers, and underscores',
+  })
   id: string;
 
   @IsString()

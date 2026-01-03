@@ -24,6 +24,7 @@ export interface MetricConfig {
   color: string
   previousColor: string
   invertTrend?: boolean // For metrics like bounce_rate where lower is better
+  tooltip?: string
 }
 
 export interface ChartDataPoint {
@@ -56,10 +57,11 @@ export const METRICS: MetricConfig[] = [
   },
   {
     key: 'median_duration',
-    label: 'Median Duration',
+    label: 'Median TimeScore',
     format: 'duration',
     color: '#10b981',
     previousColor: '#9ca3af',
+    tooltip: 'TimeScore is the median session duration across all sessions',
   },
   {
     key: 'bounce_rate',

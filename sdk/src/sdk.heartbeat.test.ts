@@ -491,7 +491,7 @@ describe('Tiered Heartbeat', () => {
       expect((sdk as any).heartbeatTimeout).toBeNull();
 
       // Explicit resume
-      sdk.resume();
+      await sdk.resume();
 
       // Should reset and restart
       expect((sdk as any).heartbeatState.maxDurationReached).toBe(false);
@@ -512,7 +512,7 @@ describe('Tiered Heartbeat', () => {
       vi.advanceTimersByTime(2 * 60 * 1000);
 
       // Pause
-      sdk.pause();
+      await sdk.pause();
 
       // Check accumulated time
       const accumulated = (sdk as any).heartbeatState.accumulatedActiveMs;

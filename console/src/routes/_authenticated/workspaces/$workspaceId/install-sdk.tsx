@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useSuspenseQuery, useQueryClient, useQuery } from '@tanstack/react-query'
+import { useQueryClient, useQuery } from '@tanstack/react-query'
 import { Button, Spin, Alert } from 'antd'
 import { CheckCircleFilled, LoadingOutlined } from '@ant-design/icons'
-import { workspaceQueryOptions } from '../../../../lib/queries'
 import { api } from '../../../../lib/api'
 import { CodeSnippet } from '../../../../components/setup/CodeSnippet'
 
@@ -15,7 +14,6 @@ function InstallSDK() {
   const { workspaceId } = Route.useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { data: workspace } = useSuspenseQuery(workspaceQueryOptions(workspaceId))
 
   // Fetch SDK version for cache busting
   const { data: sdkVersion } = useQuery({
@@ -28,7 +26,8 @@ function InstallSDK() {
     staleTime: Infinity
   })
 
-  const [eventDetected, setEventDetected] = useState(workspace.status === 'active')
+  const [eventDetected, setEventDetected] = useState(false)
+  const [skipping, setSkipping] = useState(false)
 
   const checkEvents = useCallback(async () => {
     if (eventDetected) return
@@ -66,10 +65,15 @@ function InstallSDK() {
   }, [eventDetected, checkEvents])
 
   const handleSkip = async () => {
-    await api.workspaces.update({ id: workspaceId, status: 'active' })
-    queryClient.invalidateQueries({ queryKey: ['workspaces', workspaceId] })
-    queryClient.invalidateQueries({ queryKey: ['workspaces'] })
-    navigate({ to: '/workspaces/$workspaceId', params: { workspaceId } })
+    setSkipping(true)
+    try {
+      await api.workspaces.update({ id: workspaceId, status: 'active' })
+      queryClient.invalidateQueries({ queryKey: ['workspaces', workspaceId] })
+      queryClient.invalidateQueries({ queryKey: ['workspaces'] })
+      await navigate({ to: '/workspaces/$workspaceId', params: { workspaceId } })
+    } finally {
+      setSkipping(false)
+    }
   }
 
   const handleContinue = () => {
@@ -79,14 +83,13 @@ function InstallSDK() {
   // Generate the SDK snippet with workspace_id pre-filled and version for cache busting
   const versionParam = sdkVersion ? `?v=${sdkVersion}` : ''
   const sdkSnippet = `<!-- Staminads -->
-<link rel="dns-prefetch" href="${window.location.origin}">
-<script src="${window.location.origin}/sdk/staminads.min.js${versionParam}"></script>
 <script>
-  Staminads.init({
-    workspace_id: '${workspaceId}',
-    endpoint: '${window.location.origin}'
-  });
-</script>`
+window.StaminadsConfig = {
+  workspace_id: '${workspaceId}',
+  endpoint: '${window.location.origin}'
+};
+</script>
+<script async src="${window.location.origin}/sdk/staminads.min.js${versionParam}"></script>`
 
   return (
     <div className="flex-1 p-6">
@@ -94,7 +97,8 @@ function InstallSDK() {
         <h1 className="text-2xl font-light text-gray-800 mb-2">Install the SDK</h1>
         <p className="text-gray-500 mb-8">
           Add this code snippet to your website's{' '}
-          <code className="bg-gray-100 px-1 rounded">&lt;head&gt;</code> tag.
+          <code className="bg-gray-100 px-1 rounded">&lt;head&gt;</code> or{' '}
+          <code className="bg-gray-100 px-1 rounded">&lt;body&gt;</code> tag.
         </p>
 
         <CodeSnippet code={sdkSnippet} />
@@ -127,7 +131,7 @@ function InstallSDK() {
               Continue to Dashboard
             </Button>
           ) : (
-            <Button type="link" onClick={handleSkip}>
+            <Button type="link" onClick={handleSkip} loading={skipping}>
               or skip for now →
             </Button>
           )}

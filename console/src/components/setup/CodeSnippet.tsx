@@ -37,7 +37,7 @@ export function CodeSnippet({ code, language = 'html' }: CodeSnippetProps) {
         type="primary"
         icon={copied ? <CheckOutlined /> : <CopyOutlined />}
         onClick={handleCopy}
-        className="absolute! bottom-2 right-2"
+        className="absolute! top-2 right-2"
       >
         {copied ? 'Copied' : 'Copy'}
       </Button>

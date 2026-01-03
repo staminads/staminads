@@ -1,4 +1,5 @@
-import { Card } from 'antd'
+import { Card, Tooltip } from 'antd'
+import { InfoCircleOutlined } from '@ant-design/icons'
 import { MetricChart } from './MetricChart'
 import type { MetricConfig, MetricData } from '../../types/dashboard'
 import type { Granularity } from '../../types/analytics'
@@ -29,7 +30,14 @@ export function MetricCard({
       className="shadow-sm h-full"
       styles={{ body: { padding: '16px' } }}
     >
-      <div className="text-sm font-medium text-gray-600 mb-3">{metric.label}</div>
+      <div className="text-sm font-medium text-gray-600 mb-3">
+        {metric.label}
+        {metric.tooltip && (
+          <Tooltip title={metric.tooltip}>
+            <InfoCircleOutlined className="ml-1.5 text-gray-400 cursor-help" />
+          </Tooltip>
+        )}
+      </div>
       <MetricChart
         metric={metric}
         currentData={data?.current ?? []}

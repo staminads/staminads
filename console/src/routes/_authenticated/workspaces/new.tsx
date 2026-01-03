@@ -1,10 +1,16 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Form, Input, Button, message, Avatar } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../../lib/api'
-import { nanoid } from 'nanoid'
+
+const toSnakeCase = (str: string) =>
+  str
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .replace(/_+/g, '_')
 
 export const Route = createFileRoute('/_authenticated/workspaces/new')({
   component: NewWorkspaceForm,
@@ -15,6 +21,7 @@ function NewWorkspaceForm() {
   const queryClient = useQueryClient()
   const [form] = Form.useForm()
   const [detectingLogo, setDetectingLogo] = useState(false)
+  const logoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const mutation = useMutation({
     mutationFn: api.workspaces.create,
@@ -26,9 +33,8 @@ function NewWorkspaceForm() {
     onError: () => message.error('Failed to create workspace'),
   })
 
-  const onFinish = (values: { name: string; website: string; logo_url?: string }) => {
+  const onFinish = (values: { id: string; name: string; website: string; logo_url?: string }) => {
     mutation.mutate({
-      id: nanoid(),
       ...values,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       currency: 'USD',
@@ -60,16 +66,29 @@ function NewWorkspaceForm() {
 
   const isValidUrl = (url: string) => {
     try {
-      new URL(url)
-      return true
+      const parsed = new URL(url)
+      const parts = parsed.hostname.split('.')
+      // If starts with www, require 3 parts (www.example.com), otherwise 2 (example.com)
+      const minParts = parts[0] === 'www' ? 3 : 2
+      return parts.length >= minParts && parts[parts.length - 1].length >= 2
     } catch {
       return false
     }
   }
 
-  const onValuesChange = (changedValues: { website?: string }) => {
-    if (changedValues.website && isValidUrl(changedValues.website)) {
-      detectLogo(changedValues.website)
+  const onValuesChange = (changedValues: { name?: string; website?: string }) => {
+    if (changedValues.name !== undefined) {
+      form.setFieldValue('id', toSnakeCase(changedValues.name))
+    }
+    if (changedValues.website !== undefined) {
+      if (logoDebounceRef.current) {
+        clearTimeout(logoDebounceRef.current)
+      }
+      if (isValidUrl(changedValues.website)) {
+        logoDebounceRef.current = setTimeout(() => {
+          detectLogo(changedValues.website)
+        }, 800)
+      }
     }
   }
 
@@ -77,7 +96,7 @@ function NewWorkspaceForm() {
 
   return (
     <div className="flex-1 flex items-center justify-center p-6">
-      <div className="bg-white/95 backdrop-blur-sm p-8 rounded-lg shadow-xl w-full max-w-sm">
+      <div className="bg-white/95 backdrop-blur-sm p-8 rounded-lg shadow-xl w-full max-w-md">
         <h2 className="text-2xl font-light text-center mb-8 text-gray-800">
           New Workspace
         </h2>
@@ -88,7 +107,18 @@ function NewWorkspaceForm() {
             label="Name"
             rules={[{ required: true, message: 'Name is required' }]}
           >
-            <Input placeholder="My Website" size="large" />
+            <Input placeholder="My Website" />
+          </Form.Item>
+
+          <Form.Item
+            name="id"
+            label="ID"
+            rules={[
+              { required: true, message: 'ID is required' },
+              { pattern: /^[a-z][a-z0-9_]*$/, message: 'Must start with a letter and contain only lowercase letters, numbers, and underscores' },
+            ]}
+          >
+            <Input placeholder="my_website" />
           </Form.Item>
 
           <Form.Item
@@ -99,7 +129,7 @@ function NewWorkspaceForm() {
               { type: 'url', message: 'Must be a valid URL' }
             ]}
           >
-            <Input placeholder="https://example.com" size="large" />
+            <Input placeholder="https://example.com" />
           </Form.Item>
 
           <Form.Item
@@ -108,7 +138,6 @@ function NewWorkspaceForm() {
           >
             <Input
               placeholder="https://example.com/logo.png"
-              size="large"
               suffix={
                 <Button
                   type="link"
@@ -135,7 +164,6 @@ function NewWorkspaceForm() {
               htmlType="submit"
               loading={mutation.isPending}
               block
-              size="large"
             >
               Create Workspace
             </Button>
