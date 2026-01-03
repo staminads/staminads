@@ -48,6 +48,11 @@ const templates: ExploreTemplate[] = [
     dimensions: ['day_of_week', 'hour', 'is_weekend']
   },
   {
+    title: 'Geography',
+    description: 'Engagement by country and region',
+    dimensions: ['country', 'region', 'city', 'timezone']
+  },
+  {
     title: 'Not-mapped channels',
     description: 'Traffic not classified by filter rules',
     dimensions: ['referrer_domain', 'utm_source', 'utm_medium', 'utm_campaign'],

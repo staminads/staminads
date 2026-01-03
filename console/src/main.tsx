@@ -7,6 +7,7 @@ import type { ThemeConfig } from 'antd'
 import { createAppRouter } from './router'
 import { AuthProvider, useAuth } from './lib/auth'
 import './index.css'
+import 'flag-icons/css/flag-icons.min.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {

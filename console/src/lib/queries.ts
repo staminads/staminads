@@ -49,3 +49,10 @@ export const backfillSummaryQueryOptions = (workspaceId: string) =>
     queryFn: () => api.filters.backfillSummary(workspaceId),
     staleTime: 5000,
   })
+
+export const liveAnalyticsQueryOptions = (query: AnalyticsQuery) =>
+  queryOptions({
+    queryKey: ['analytics', 'live', query],
+    queryFn: () => api.analytics.query(query),
+    refetchInterval: 15000,
+  })

@@ -7,7 +7,12 @@ import { determineGranularityForRange, computeDateRange } from '../../lib/date-u
 import { useDashboardParams } from '../../hooks/useDashboardParams'
 import { MetricSummary } from './MetricSummary'
 import { MetricChart } from './MetricChart'
-import { TopPagesWidget, type PageData } from './TopPagesWidget'
+import { TabbedPagesWidget, type PageData } from './TabbedPagesWidget'
+import { TabbedSourcesWidget, type SourceData } from './TabbedSourcesWidget'
+import { TabbedChannelsWidget, type ChannelData } from './TabbedChannelsWidget'
+import { TabbedCampaignsWidget, type CampaignData } from './TabbedCampaignsWidget'
+import { TabbedCountriesWidget, type CountryData } from './TabbedCountriesWidget'
+import { CountriesMapWidget } from './CountriesMapWidget'
 import { METRICS, extractDashboardData, type MetricKey, type ComparisonMode } from '../../types/dashboard'
 import type { DatePreset, Granularity } from '../../types/analytics'
 
@@ -15,6 +20,7 @@ interface DashboardGridProps {
   workspaceId: string
   workspaceTimezone: string
   workspaceCreatedAt?: string
+  timescoreReference: number
   comparison: ComparisonMode
   customStart?: string
   customEnd?: string
@@ -24,6 +30,7 @@ export function DashboardGrid({
   workspaceId,
   workspaceTimezone,
   workspaceCreatedAt: _workspaceCreatedAt,
+  timescoreReference,
   comparison,
   customStart,
   customEnd,
@@ -109,6 +116,140 @@ export function DashboardGrid({
     placeholderData: keepPreviousData,
   })
 
+  // Sources query - referrer_domain with channel=not-mapped filter (new/unmapped sources)
+  const sourcesQuery = {
+    workspace_id: workspaceId,
+    metrics: ['sessions', 'median_duration'],
+    dimensions: ['referrer_domain'],
+    filters: [{ dimension: 'channel', operator: 'equals' as const, values: ['not-mapped'] }],
+    dateRange: {
+      preset: period as DatePreset,
+      ...(period === 'custom' && customStart && customEnd && {
+        start: customStart,
+        end: customEnd,
+        preset: undefined,
+      }),
+    },
+    ...(showComparison && {
+      compareDateRange: {
+        preset: period as DatePreset,
+        ...(period === 'custom' && customStart && customEnd && {
+          start: customStart,
+          end: customEnd,
+          preset: undefined,
+        }),
+      },
+    }),
+    order: { sessions: 'desc' as const },
+    limit: 10,
+    timezone,
+  }
+
+  const { data: sourcesResponse, isFetching: sourcesFetching } = useQuery({
+    ...analyticsQueryOptions(sourcesQuery),
+    placeholderData: keepPreviousData,
+  })
+
+  // Channels query - channel dimension (all traffic)
+  const channelsQuery = {
+    workspace_id: workspaceId,
+    metrics: ['sessions', 'median_duration'],
+    dimensions: ['channel'],
+    dateRange: {
+      preset: period as DatePreset,
+      ...(period === 'custom' && customStart && customEnd && {
+        start: customStart,
+        end: customEnd,
+        preset: undefined,
+      }),
+    },
+    ...(showComparison && {
+      compareDateRange: {
+        preset: period as DatePreset,
+        ...(period === 'custom' && customStart && customEnd && {
+          start: customStart,
+          end: customEnd,
+          preset: undefined,
+        }),
+      },
+    }),
+    order: { sessions: 'desc' as const },
+    limit: 10,
+    timezone,
+  }
+
+  const { data: channelsResponse, isFetching: channelsFetching } = useQuery({
+    ...analyticsQueryOptions(channelsQuery),
+    placeholderData: keepPreviousData,
+  })
+
+  // Campaigns query - utm_campaign dimension
+  const campaignsQuery = {
+    workspace_id: workspaceId,
+    metrics: ['sessions', 'median_duration'],
+    dimensions: ['utm_campaign'],
+    filters: [{ dimension: 'utm_campaign', operator: 'isNotEmpty' as const }],
+    dateRange: {
+      preset: period as DatePreset,
+      ...(period === 'custom' && customStart && customEnd && {
+        start: customStart,
+        end: customEnd,
+        preset: undefined,
+      }),
+    },
+    ...(showComparison && {
+      compareDateRange: {
+        preset: period as DatePreset,
+        ...(period === 'custom' && customStart && customEnd && {
+          start: customStart,
+          end: customEnd,
+          preset: undefined,
+        }),
+      },
+    }),
+    order: { sessions: 'desc' as const },
+    limit: 10,
+    timezone,
+  }
+
+  const { data: campaignsResponse, isFetching: campaignsFetching } = useQuery({
+    ...analyticsQueryOptions(campaignsQuery),
+    placeholderData: keepPreviousData,
+  })
+
+  // Countries query - country dimension
+  const countriesQuery = {
+    workspace_id: workspaceId,
+    metrics: ['sessions', 'median_duration'],
+    dimensions: ['country'],
+    dateRange: {
+      preset: period as DatePreset,
+      ...(period === 'custom' && customStart && customEnd && {
+        start: customStart,
+        end: customEnd,
+        preset: undefined,
+      }),
+    },
+    ...(showComparison && {
+      compareDateRange: {
+        preset: period as DatePreset,
+        ...(period === 'custom' && customStart && customEnd && {
+          start: customStart,
+          end: customEnd,
+          preset: undefined,
+        }),
+      },
+    }),
+    order: { sessions: 'desc' as const },
+    limit: 10,
+    timezone,
+  }
+
+  const { data: countriesResponse, isFetching: countriesFetching } = useQuery({
+    ...analyticsQueryOptions(countriesQuery),
+    placeholderData: keepPreviousData,
+  })
+
   // Transform API response to widget format
   const pagesData: PageData[] = useMemo(() => {
     if (!pagesResponse?.data) return []
@@ -143,6 +284,126 @@ export function DashboardGrid({
       bounce_rate: row.bounce_rate as number,
     }))
   }, [pagesResponse])
+
+  // Transform sources response to widget format
+  const sourcesData: SourceData[] = useMemo(() => {
+    if (!sourcesResponse?.data) return []
+
+    const hasComparison = typeof sourcesResponse.data === 'object' && 'current' in sourcesResponse.data
+
+    if (hasComparison) {
+      const { current, previous } = sourcesResponse.data as {
+        current: Record<string, unknown>[]
+        previous: Record<string, unknown>[]
+      }
+      return current.map((row) => {
+        const prevRow = previous?.find((p) => p.referrer_domain === row.referrer_domain)
+        return {
+          dimension_value: row.referrer_domain as string,
+          sessions: row.sessions as number,
+          median_duration: row.median_duration as number,
+          prev_sessions: prevRow?.sessions as number | undefined,
+          prev_median_duration: prevRow?.median_duration as number | undefined,
+        }
+      })
+    }
+
+    return (sourcesResponse.data as Record<string, unknown>[]).map((row) => ({
+      dimension_value: row.referrer_domain as string,
+      sessions: row.sessions as number,
+      median_duration: row.median_duration as number,
+    }))
+  }, [sourcesResponse])
+
+  // Transform channels response to widget format
+  const channelsData: ChannelData[] = useMemo(() => {
+    if (!channelsResponse?.data) return []
+
+    const hasComparison = typeof channelsResponse.data === 'object' && 'current' in channelsResponse.data
+
+    if (hasComparison) {
+      const { current, previous } = channelsResponse.data as {
+        current: Record<string, unknown>[]
+        previous: Record<string, unknown>[]
+      }
+      return current.map((row) => {
+        const prevRow = previous?.find((p) => p.channel === row.channel)
+        return {
+          dimension_value: row.channel as string,
+          sessions: row.sessions as number,
+          median_duration: row.median_duration as number,
+          prev_sessions: prevRow?.sessions as number | undefined,
+          prev_median_duration: prevRow?.median_duration as number | undefined,
+        }
+      })
+    }
+
+    return (channelsResponse.data as Record<string, unknown>[]).map((row) => ({
+      dimension_value: row.channel as string,
+      sessions: row.sessions as number,
+      median_duration: row.median_duration as number,
+    }))
+  }, [channelsResponse])
+
+  // Transform campaigns response to widget format
+  const campaignsData: CampaignData[] = useMemo(() => {
+    if (!campaignsResponse?.data) return []
+
+    const hasComparison = typeof campaignsResponse.data === 'object' && 'current' in campaignsResponse.data
+
+    if (hasComparison) {
+      const { current, previous } = campaignsResponse.data as {
+        current: Record<string, unknown>[]
+        previous: Record<string, unknown>[]
+      }
+      return current.map((row) => {
+        const prevRow = previous?.find((p) => p.utm_campaign === row.utm_campaign)
+        return {
+          dimension_value: row.utm_campaign as string,
+          sessions: row.sessions as number,
+          median_duration: row.median_duration as number,
+          prev_sessions: prevRow?.sessions as number | undefined,
+          prev_median_duration: prevRow?.median_duration as number | undefined,
+        }
+      })
+    }
+
+    return (campaignsResponse.data as Record<string, unknown>[]).map((row) => ({
+      dimension_value: row.utm_campaign as string,
+      sessions: row.sessions as number,
+      median_duration: row.median_duration as number,
+    }))
+  }, [campaignsResponse])
+
+  // Transform countries response to widget format
+  const countriesData: CountryData[] = useMemo(() => {
+    if (!countriesResponse?.data) return []
+
+    const hasComparison = typeof countriesResponse.data === 'object' && 'current' in countriesResponse.data
+
+    if (hasComparison) {
+      const { current, previous } = countriesResponse.data as {
+        current: Record<string, unknown>[]
+        previous: Record<string, unknown>[]
+      }
+      return current.map((row) => {
+        const prevRow = previous?.find((p) => p.country === row.country)
+        return {
+          dimension_value: row.country as string,
+          sessions: row.sessions as number,
+          median_duration: row.median_duration as number,
+          prev_sessions: prevRow?.sessions as number | undefined,
+          prev_median_duration: prevRow?.median_duration as number | undefined,
+        }
+      })
+    }
+
+    return (countriesResponse.data as Record<string, unknown>[]).map((row) => ({
+      dimension_value: row.country as string,
+      sessions: row.sessions as number,
+      median_duration: row.median_duration as number,
+    }))
+  }, [countriesResponse])
 
   if (isError) {
     return (
@@ -183,21 +444,54 @@ export function DashboardGrid({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-        <TopPagesWidget
-          title="Top Visited Pages"
+        <TabbedPagesWidget
+          title="Top Pages"
           data={pagesData}
           loading={pagesFetching && !pagesResponse}
-          sortBy="sessions"
           showComparison={showComparison}
           workspaceId={workspaceId}
         />
-        <TopPagesWidget
-          title="Most Engaging Pages"
-          data={pagesData}
-          loading={pagesFetching && !pagesResponse}
-          sortBy="median_duration"
+        <TabbedSourcesWidget
+          title="Sources not mapped"
+          data={sourcesData}
+          loading={sourcesFetching && !sourcesResponse}
           showComparison={showComparison}
-          workspaceId={workspaceId}
+          showFavicon
+          emptyText="No unmapped sources"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+        <TabbedChannelsWidget
+          title="Top Channels"
+          data={channelsData}
+          loading={channelsFetching && !channelsResponse}
+          showComparison={showComparison}
+          emptyText="No channel data"
+        />
+        <TabbedCampaignsWidget
+          title="Top Campaigns"
+          data={campaignsData}
+          loading={campaignsFetching && !campaignsResponse}
+          showComparison={showComparison}
+          emptyText="No campaign data"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+        <TabbedCountriesWidget
+          title="Top Countries"
+          data={countriesData}
+          loading={countriesFetching && !countriesResponse}
+          showComparison={showComparison}
+          emptyText="No country data"
+        />
+        <CountriesMapWidget
+          title="Countries Map"
+          data={countriesData}
+          loading={countriesFetching && !countriesResponse}
+          timescoreReference={timescoreReference}
+          emptyText="No country data"
         />
       </div>
     </div>

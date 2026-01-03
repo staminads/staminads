@@ -81,6 +81,7 @@ export const METRICS: MetricConfig[] = [
 ]
 
 export const PERIOD_LABELS: Record<DatePreset, string> = {
+  last_30_minutes: 'Last 30 Minutes',
   today: 'Today',
   yesterday: 'Yesterday',
   last_7_days: 'Last 7 Days',

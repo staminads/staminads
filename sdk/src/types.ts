@@ -122,7 +122,7 @@ export interface DeviceInfo {
 }
 
 // Events
-export type EventName = 'screen_view' | 'ping' | 'scroll' | 'conversion';
+export type EventName = 'screen_view' | 'ping' | 'scroll' | 'goal';
 
 export interface TrackEventPayload {
   // Required
@@ -191,8 +191,8 @@ export interface TrackEventPayload {
   properties?: Record<string, string>;
 }
 
-// Conversion
-export interface ConversionData {
+// Goal
+export interface GoalData {
   id?: string;
   action: string;
   value?: number;
@@ -221,7 +221,7 @@ export interface StaminadsAPI {
   getTotalDuration(): Promise<number>;
   trackPageView(url?: string): Promise<void>;
   trackEvent(name: string, properties?: Record<string, string>): Promise<void>;
-  trackConversion(data: ConversionData): Promise<void>;
+  trackGoal(data: GoalData): Promise<void>;
   setDimension(index: number, value: string): Promise<void>;
   setDimensions(dimensions: Record<number, string>): Promise<void>;
   getDimension(index: number): Promise<string | null>;

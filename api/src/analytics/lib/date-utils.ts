@@ -38,6 +38,11 @@ export function resolveDatePreset(
   const now = dayjs().tz(tz);
 
   switch (preset) {
+    case 'last_30_minutes':
+      return {
+        start: now.subtract(30, 'minute').toISOString(),
+        end: now.toISOString(),
+      };
     case 'today':
       return {
         start: now.startOf('day').toISOString(),

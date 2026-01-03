@@ -53,6 +53,11 @@ export const DIMENSIONS: Record<string, DimensionDefinition> = {
   is_weekend: { name: 'is_weekend', column: 'is_weekend', type: 'boolean', category: 'Time' },
 
   // Geo
+  country: { name: 'country', column: 'country', type: 'string', category: 'Geo' },
+  region: { name: 'region', column: 'region', type: 'string', category: 'Geo' },
+  city: { name: 'city', column: 'city', type: 'string', category: 'Geo' },
+  latitude: { name: 'latitude', column: 'latitude', type: 'number', category: 'Geo' },
+  longitude: { name: 'longitude', column: 'longitude', type: 'number', category: 'Geo' },
   language: { name: 'language', column: 'language', type: 'string', category: 'Geo' },
   timezone: { name: 'timezone', column: 'timezone', type: 'string', category: 'Geo' },
 

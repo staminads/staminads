@@ -50,6 +50,9 @@ const DIMENSION_EXAMPLES: Record<string, [string, string]> = {
   is_weekend: ['true', 'false'],
 
   // Geo
+  country: ['US', 'GB'],
+  region: ['California', 'England'],
+  city: ['New York', 'London'],
   language: ['en-US', 'fr-FR'],
   timezone: ['America/New_York', 'Europe/Paris'],
 }

@@ -7,7 +7,7 @@ import type {
   StaminadsConfig,
   InternalConfig,
   TrackEventPayload,
-  ConversionData,
+  GoalData,
   SessionDebugInfo,
   DeviceInfo,
   EventName,
@@ -823,21 +823,21 @@ export class StaminadsSDK {
   }
 
   /**
-   * Track conversion
+   * Track goal
    */
-  async trackConversion(data: ConversionData): Promise<void> {
+  async trackGoal(data: GoalData): Promise<void> {
     await this.ensureInitialized();
 
     const properties: Record<string, string> = {
-      conversion_name: data.action,
+      goal_name: data.action,
     };
 
-    if (data.id) properties.conversion_id = data.id;
-    if (data.value !== undefined) properties.conversion_value = String(data.value);
-    if (data.currency) properties.conversion_currency = data.currency;
+    if (data.id) properties.goal_id = data.id;
+    if (data.value !== undefined) properties.goal_value = String(data.value);
+    if (data.currency) properties.goal_currency = data.currency;
     if (data.properties) Object.assign(properties, data.properties);
 
-    this.sendEvent('conversion', properties);
+    this.sendEvent('goal', properties);
   }
 
   /**

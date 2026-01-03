@@ -107,23 +107,23 @@ test.describe('Session Lifecycle', () => {
     expect(events[0].payload.event_name).toBe('button_click');
   });
 
-  test('tracks conversions via conversion()', async ({ page, request }) => {
+  test('tracks goals via trackGoal()', async ({ page, request }) => {
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
 
-    // Track conversion
-    await page.click('#btn-conversion');
+    // Track goal
+    await page.click('#btn-goal');
     await page.waitForTimeout(500);
 
-    const response = await request.get('/api/test/events/conversion');
+    const response = await request.get('/api/test/events/goal');
     const events = await response.json();
 
     expect(events.length).toBe(1);
-    expect(events[0].payload.name).toBe('conversion');
-    expect(events[0].payload.conversion_name).toBe('signup');
+    expect(events[0].payload.name).toBe('goal');
+    expect(events[0].payload.goal_name).toBe('signup');
     // Value is sent as string in the payload
-    expect(events[0].payload.conversion_value).toBe('99.99');
+    expect(events[0].payload.goal_value).toBe('99.99');
   });
 
   test('sets custom dimensions', async ({ page }) => {
@@ -192,7 +192,7 @@ declare global {
       getSessionId: () => string;
       getVisitorId: () => string;
       track: (name: string, data?: Record<string, unknown>) => void;
-      conversion: (name: string, value?: number, currency?: string) => void;
+      goal: (name: string, value?: number, currency?: string) => void;
       setDimension: (index: number, value: string) => void;
       getDimension: (index: number) => string | null;
     };

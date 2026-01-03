@@ -18,8 +18,8 @@
  * // Track custom dimension
  * await Staminads.setDimension(1, 'premium-user');
  *
- * // Track conversion
- * await Staminads.trackConversion({
+ * // Track goal
+ * await Staminads.trackGoal({
  *   action: 'purchase',
  *   value: 99.99,
  *   currency: 'USD',
@@ -31,7 +31,7 @@ import { StaminadsSDK } from './sdk';
 import type {
   StaminadsConfig,
   StaminadsAPI,
-  ConversionData,
+  GoalData,
   SessionDebugInfo,
 } from './types';
 
@@ -48,7 +48,7 @@ const Staminads: StaminadsAPI = {
   trackPageView: (url?: string) => sdk.trackPageView(url),
   trackEvent: (name: string, properties?: Record<string, string>) =>
     sdk.trackEvent(name, properties),
-  trackConversion: (data: ConversionData) => sdk.trackConversion(data),
+  trackGoal: (data: GoalData) => sdk.trackGoal(data),
   setDimension: (index: number, value: string) => sdk.setDimension(index, value),
   setDimensions: (dimensions: Record<number, string>) => sdk.setDimensions(dimensions),
   getDimension: (index: number) => sdk.getDimension(index),
@@ -63,7 +63,7 @@ const Staminads: StaminadsAPI = {
 export type {
   StaminadsConfig,
   StaminadsAPI,
-  ConversionData,
+  GoalData,
   SessionDebugInfo,
 };
 

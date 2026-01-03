@@ -75,7 +75,7 @@ Staminads.debug();                    // Get debug info
 // Manual tracking (async)
 await Staminads.trackPageView(url?);  // Track SPA navigation
 await Staminads.trackEvent(name, properties?);
-await Staminads.trackConversion({ action, value?, currency?, properties? });
+await Staminads.trackGoal({ action, value?, currency?, properties? });
 
 // Custom Dimensions (async)
 await Staminads.setDimension(1, 'premium');    // Set stm_1 = 'premium'
@@ -122,7 +122,7 @@ declare global {
 | `screen_view` | Page load, SPA navigation               | path, referrer, UTM       |
 | `ping`        | Heartbeat (10s desktop, 7s mobile)      | duration, max_scroll      |
 | `scroll`      | Scroll milestones (25%, 50%, 75%, 100%) | max_scroll                |
-| `conversion`  | trackConversion() call                  | action, value, properties |
+| `goal`        | trackGoal() call                        | action, value, properties |
 
 ## Ad Click ID Tracking
 

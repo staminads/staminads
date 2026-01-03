@@ -22,6 +22,7 @@ export const GRANULARITIES = ['hour', 'day', 'week', 'month', 'year'] as const
 export type Granularity = (typeof GRANULARITIES)[number]
 
 export const DATE_PRESETS = [
+  'last_30_minutes',
   'today',
   'yesterday',
   'last_7_days',

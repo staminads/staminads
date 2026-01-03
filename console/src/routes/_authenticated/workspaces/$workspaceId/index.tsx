@@ -3,6 +3,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { workspaceQueryOptions } from '../../../../lib/queries'
 import { DashboardGrid } from '../../../../components/dashboard/DashboardGrid'
 import { DashboardFilters } from '../../../../components/dashboard/DashboardFilters'
+import { LiveButton } from '../../../../components/live/LiveButton'
 import { useDashboardParams } from '../../../../hooks/useDashboardParams'
 
 export const Route = createFileRoute('/_authenticated/workspaces/$workspaceId/')({
@@ -27,7 +28,10 @@ function Dashboard() {
   return (
     <div className="flex-1 p-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-light text-gray-800">Dashboard</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-light text-gray-800">Dashboard</h1>
+          <LiveButton workspaceId={workspaceId} workspaceTimezone={workspace.timezone} />
+        </div>
         <DashboardFilters
           period={period}
           timezone={timezone}
@@ -45,6 +49,7 @@ function Dashboard() {
         workspaceId={workspaceId}
         workspaceTimezone={workspace.timezone}
         workspaceCreatedAt={workspace.created_at}
+        timescoreReference={workspace.timescore_reference ?? 60}
         comparison={comparison}
         customStart={customStart}
         customEnd={customEnd}

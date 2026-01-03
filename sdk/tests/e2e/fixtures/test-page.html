@@ -40,7 +40,7 @@
 
   <div id="controls">
     <button id="btn-track" onclick="trackCustomEvent()">Track Custom Event</button>
-    <button id="btn-conversion" onclick="trackConversion()">Track Conversion</button>
+    <button id="btn-goal" onclick="trackGoal()">Track Goal</button>
     <button id="btn-dimension" onclick="setDimension()">Set Dimension</button>
     <button id="btn-session-id" onclick="showSessionId()">Show Session ID</button>
     <button id="btn-visitor-id" onclick="showVisitorId()">Show Visitor ID</button>
@@ -94,9 +94,9 @@
       updateStatus('Tracked: button_click');
     }
 
-    function trackConversion() {
-      Staminads.trackConversion({ action: 'signup', value: 99.99, currency: 'USD' });
-      updateStatus('Tracked: conversion (signup, $99.99)');
+    function trackGoal() {
+      Staminads.trackGoal({ action: 'signup', value: 99.99, currency: 'USD' });
+      updateStatus('Tracked: goal (signup, $99.99)');
     }
 
     function setDimension() {

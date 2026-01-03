@@ -8,6 +8,7 @@ import type { ChartDataPoint, MetricConfig } from '../types/dashboard'
  */
 export function determineGranularity(preset: DatePreset): Granularity {
   const granularityMap: Record<DatePreset, Granularity> = {
+    last_30_minutes: 'hour',
     today: 'hour',
     yesterday: 'hour',
     last_7_days: 'day',

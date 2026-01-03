@@ -1019,7 +1019,7 @@ interface StaminadsAPI {
   // Manual tracking (async)
   trackPageView(url?: string): Promise<void>;
   trackEvent(name: string, properties?: Record<string, any>): Promise<void>;
-  trackConversion(data: ConversionData): Promise<void>;
+  trackGoal(data: GoalData): Promise<void>;
 
   // Custom Dimensions (async)
   setDimension(index: number, value: string): Promise<void>;  // Set single dimension (1-10)
@@ -1041,7 +1041,7 @@ interface StaminadsAPI {
 throw new Error('Staminads not configured. Set window.StaminadsConfig before loading the SDK.');
 ```
 
-interface ConversionData {
+interface GoalData {
   id?: string;                     // Optional, auto-generated if not provided
   action: string;                  // e.g., 'purchase', 'signup'
   value?: number;                  // Monetary value
@@ -1063,7 +1063,7 @@ interface TrackEventPayload {
   // Required fields
   workspace_id: string;            // Workspace identifier
   session_id: string;              // Session UUID
-  name: string;                    // Event name: 'screen_view', 'scroll', 'ping', 'conversion'
+  name: string;                    // Event name: 'screen_view', 'scroll', 'ping', 'goal'
   path: string;                    // Current page path (e.g., '/pricing')
   landing_page: string;            // Full landing URL
 
@@ -1129,7 +1129,7 @@ interface TrackEventPayload {
 | `screen_view` | Page load, SPA navigation | path, landing_page, referrer |
 | `ping` | Heartbeat (focus update) | duration, max_scroll |
 | `scroll` | Scroll milestone | max_scroll |
-| `conversion` | trackConversion() call | properties.action, properties.value |
+| `goal` | trackGoal() call | properties.action, properties.value |
 
 ### 9.3 Batch Endpoint
 
@@ -1140,15 +1140,15 @@ interface BatchPayload {
 }
 ```
 
-### 9.4 Conversion via Properties
+### 9.4 Goal via Properties
 
 ```typescript
-// Conversions are tracked as events with name='conversion'
-// Use properties for conversion-specific data
-const conversionEvent: TrackEventPayload = {
+// Goals are tracked as events with name='goal'
+// Use properties for goal-specific data
+const goalEvent: TrackEventPayload = {
   workspace_id: 'ws_xxx',
   session_id: 'sess_xxx',
-  name: 'conversion',
+  name: 'goal',
   path: '/checkout/success',
   landing_page: 'https://example.com/checkout/success',
   properties: {

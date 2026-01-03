@@ -84,17 +84,17 @@ app.get('/api/test/events', (_req, res) => {
 });
 
 // Get events filtered by name
-// Supports: event type (name), custom event name (event_name), conversion action (conversion_name)
+// Supports: event type (name), custom event name (event_name), goal action (goal_name)
 app.get('/api/test/events/:name', (req, res) => {
   const { name } = req.params;
   const filtered = events.filter((e) => {
     const p = e.payload as Record<string, unknown>;
-    // Match by event type (screen_view, ping, conversion)
+    // Match by event type (screen_view, ping, goal)
     if (p.name === name) return true;
     // Match by custom event name (for trackEvent/track calls)
     if (p.event_name === name) return true;
-    // Match by conversion action
-    if (p.conversion_name === name) return true;
+    // Match by goal action
+    if (p.goal_name === name) return true;
     return false;
   });
   res.json(filtered);
