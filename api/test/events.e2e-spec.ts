@@ -112,6 +112,8 @@ describe('Events Integration', () => {
           name: 'screen_view',
           path: '/test-page',
           landing_page: 'https://test.com/test-page',
+          created_at: Date.now(),
+          updated_at: Date.now(),
         })
         .expect(200);
 
@@ -145,6 +147,8 @@ describe('Events Integration', () => {
           name: 'screen_view',
           path: '/test',
           landing_page: 'https://test.com/test',
+          created_at: Date.now(),
+          updated_at: Date.now(),
         })
         .expect(400);
     });
@@ -161,6 +165,8 @@ describe('Events Integration', () => {
           name: 'screen_view',
           path: '/public-test',
           landing_page: 'https://test.com/public-test',
+          created_at: Date.now(),
+          updated_at: Date.now(),
         })
         .expect(200);
 
@@ -194,6 +200,8 @@ describe('Events Integration', () => {
               name: 'screen_view',
               path: '/page-1',
               landing_page: 'https://test.com/page-1',
+              created_at: Date.now(),
+              updated_at: Date.now(),
             },
             {
               workspace_id: workspaceId,
@@ -202,6 +210,8 @@ describe('Events Integration', () => {
               path: '/page-1',
               landing_page: 'https://test.com/page-1',
               max_scroll: 50,
+              created_at: Date.now(),
+              updated_at: Date.now(),
             },
           ],
         })
@@ -240,6 +250,8 @@ describe('Events Integration', () => {
               name: 'screen_view',
               path: '/page-1',
               landing_page: 'https://test.com/page-1',
+              created_at: Date.now(),
+              updated_at: Date.now(),
             },
             {
               workspace_id: 'ws-2', // Different workspace
@@ -247,6 +259,8 @@ describe('Events Integration', () => {
               name: 'scroll',
               path: '/page-1',
               landing_page: 'https://test.com/page-1',
+              created_at: Date.now(),
+              updated_at: Date.now(),
             },
           ],
         })
@@ -270,6 +284,7 @@ describe('Events Integration', () => {
       const sessionId = 'mv-test-session';
 
       // Insert multiple events for same session
+      const now = Date.now();
       const events = [
         {
           workspace_id: workspaceId,
@@ -277,6 +292,8 @@ describe('Events Integration', () => {
           name: 'screen_view',
           path: '/entry-page',
           landing_page: 'https://test.com/entry-page',
+          created_at: now,
+          updated_at: now,
         },
         {
           workspace_id: workspaceId,
@@ -285,6 +302,8 @@ describe('Events Integration', () => {
           path: '/entry-page',
           landing_page: 'https://test.com/entry-page',
           max_scroll: 75,
+          created_at: now,
+          updated_at: now + 100,
         },
         {
           workspace_id: workspaceId,
@@ -292,6 +311,8 @@ describe('Events Integration', () => {
           name: 'screen_view',
           path: '/exit-page',
           landing_page: 'https://test.com/entry-page',
+          created_at: now,
+          updated_at: now + 200,
         },
       ];
 
@@ -322,8 +343,8 @@ describe('Events Integration', () => {
       const session = sessions[0];
 
       expect(session.workspace_id).toBe(workspaceId);
-      expect(session.entry_page).toBe('/entry-page');
-      expect(session.exit_page).toBe('/exit-page');
+      expect(session.landing_path).toBe('/entry-page');
+      expect(session.exit_path).toBe('/exit-page');
       expect(session.max_scroll).toBe(75);
       // Duration should be calculated (might be small due to quick test)
       expect(typeof session.duration).toBe('number');

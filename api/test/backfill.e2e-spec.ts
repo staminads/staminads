@@ -647,7 +647,7 @@ describe('Backfill Integration', () => {
           is_weekend: false,
           channel: '',
           channel_group: '',
-          cd_1: '', // Not computed yet
+          stm_1: '', // Not computed yet
         },
         {
           id: 'session-2',
@@ -667,7 +667,7 @@ describe('Backfill Integration', () => {
           is_weekend: false,
           channel: '',
           channel_group: '',
-          cd_1: '',
+          stm_1: '',
         },
         {
           id: 'session-3',
@@ -687,7 +687,7 @@ describe('Backfill Integration', () => {
           is_weekend: false,
           channel: '',
           channel_group: '',
-          cd_1: '',
+          stm_1: '',
         },
       ];
 
@@ -701,18 +701,18 @@ describe('Backfill Integration', () => {
 
     it('verifies sessions exist before backfill', async () => {
       const result = await workspaceClient.query({
-        query: 'SELECT id, utm_source, channel, channel_group, cd_1 FROM sessions FINAL WHERE workspace_id = {ws:String}',
+        query: 'SELECT id, utm_source, channel, channel_group, stm_1 FROM sessions FINAL WHERE workspace_id = {ws:String}',
         query_params: { ws: testWorkspaceId },
         format: 'JSONEachRow',
       });
       const rows = (await result.json()) as Array<Record<string, unknown>>;
 
       expect(rows).toHaveLength(3);
-      // All channel and cd_1 values should be empty before backfill (non-nullable schema)
+      // All channel and stm_1 values should be empty before backfill (non-nullable schema)
       rows.forEach((row) => {
         expect(row.channel).toBe('');
         expect(row.channel_group).toBe('');
-        expect(row.cd_1).toBe('');
+        expect(row.stm_1).toBe('');
       });
     });
 

@@ -91,7 +91,7 @@ describe('Workspaces Integration', () => {
         .send(dto)
         .expect(201);
 
-      // Verify API response - status is 'active' after workspace creation completes
+      // Verify API response - status is 'initializing' until first event is received
       expect(response.body).toMatchObject({
         id: dto.id,
         name: dto.name,
@@ -99,7 +99,7 @@ describe('Workspaces Integration', () => {
         timezone: dto.timezone,
         currency: dto.currency,
         logo_url: dto.logo_url,
-        status: 'active',
+        status: 'initializing',
         timescore_reference: 60,
         bounce_threshold: 10,
       });
@@ -125,7 +125,7 @@ describe('Workspaces Integration', () => {
         timezone: dto.timezone,
         currency: dto.currency,
         logo_url: dto.logo_url,
-        status: 'active',
+        status: 'initializing',
         timescore_reference: 60,
         bounce_threshold: 10,
       });
@@ -627,9 +627,9 @@ describe('Workspaces Integration', () => {
       expect(columnNames).toContain('os');
       expect(columnNames).toContain('device');
 
-      // Entry/exit pages
-      expect(columnNames).toContain('entry_page');
-      expect(columnNames).toContain('exit_page');
+      // Landing/exit paths
+      expect(columnNames).toContain('landing_path');
+      expect(columnNames).toContain('exit_path');
     });
 
     it('events table has all required columns (in workspace database)', async () => {
