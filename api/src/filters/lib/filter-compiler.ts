@@ -93,18 +93,29 @@ export function validateDimension(dimension: string): void {
 export function compileCondition(c: FilterCondition): string {
   validateSourceField(c.field);
   const field = c.field;
-  const value = escapeSQL(c.value);
+  const value = escapeSQL(c.value ?? '');
 
   // Handle is_direct (boolean field stored as Bool in ClickHouse)
   if (field === 'is_direct') {
-    if (c.operator === 'equals') {
-      // Handle both string 'true'/'false' and boolean true/false (from JSON parsing)
-      const boolValue =
-        (c.value as unknown) === true || c.value === 'true' || c.value === '1';
-      return `is_direct = ${boolValue ? 1 : 0}`;
+    switch (c.operator) {
+      case 'equals': {
+        const boolValue =
+          (c.value as unknown) === true || c.value === 'true' || c.value === '1';
+        return `is_direct = ${boolValue ? 1 : 0}`;
+      }
+      case 'not_equals': {
+        const boolValue =
+          (c.value as unknown) === true || c.value === 'true' || c.value === '1';
+        return `is_direct != ${boolValue ? 1 : 0}`;
+      }
+      case 'is_empty':
+        return 'is_direct = 0'; // Treat false as "empty" for boolean
+      case 'is_not_empty':
+        return 'is_direct = 1'; // Treat true as "not empty" for boolean
+      default:
+        // contains/not_contains/regex don't make sense for boolean
+        return '0 = 1';
     }
-    // contains/regex don't make sense for boolean
-    return '0 = 1';
   }
 
   // String fields - check non-empty first (schema uses DEFAULT '')
@@ -112,11 +123,23 @@ export function compileCondition(c: FilterCondition): string {
     case 'equals':
       return `(${field} != '' AND ${field} = '${value}')`;
 
+    case 'not_equals':
+      return `(${field} != '' AND ${field} != '${value}')`;
+
     case 'contains':
       return `(${field} != '' AND position(${field}, '${value}') > 0)`;
 
+    case 'not_contains':
+      return `(${field} != '' AND position(${field}, '${value}') = 0)`;
+
+    case 'is_empty':
+      return `(${field} = '' OR ${field} IS NULL)`;
+
+    case 'is_not_empty':
+      return `(${field} != '' AND ${field} IS NOT NULL)`;
+
     case 'regex':
-      return `(${field} != '' AND match(${field}, '${escapeRegex(c.value)}'))`;
+      return `(${field} != '' AND match(${field}, '${escapeRegex(c.value ?? '')}'))`;
 
     default:
       // Unknown operator, never matches
@@ -135,14 +158,21 @@ export function compileConditions(conditions: FilterCondition[]): string {
 }
 
 /**
- * Build a CASE expression for a dimension.
+ * Build a CASE expression for a custom dimension (channel, channel_group, stm_*).
+ *
+ * For backfill, custom dimensions should be RESET to empty when no filter matches.
+ * This ensures that disabling a filter properly reclassifies sessions.
+ *
+ * For set_default_value, we DON'T check if the dimension is currently empty in the DB.
+ * In CASE WHEN, earlier branches naturally take precedence, so set_default_value
+ * at low priority will only apply if no higher-priority filter matched.
  */
 export function buildCaseExpression(
   dimension: string,
   branches: CaseBranch[],
 ): string {
   const whenClauses = branches.map((b) => {
-    let condition = b.conditionSQL;
+    const condition = b.conditionSQL;
     let thenValue: string;
 
     switch (b.action) {
@@ -156,8 +186,8 @@ export function buildCaseExpression(
         break;
 
       case 'set_default_value':
-        // Only set if dimension is currently empty
-        condition = `${condition} AND (${dimension} = '' OR ${dimension} IS NULL)`;
+        // In backfill context: earlier CASE branches take precedence.
+        // No need to check DB value - if we reach this branch, no earlier filter matched.
         thenValue = `'${escapeSQL(b.value!)}'`;
         break;
 
@@ -168,8 +198,8 @@ export function buildCaseExpression(
     return `WHEN ${condition} THEN ${thenValue}`;
   });
 
-  // ELSE preserves existing value (prevents data loss during backfill)
-  return `CASE\n    ${whenClauses.join('\n    ')}\n    ELSE ${dimension}\n  END`;
+  // ELSE '' resets unmatched sessions (custom dimensions should be re-evaluated from scratch)
+  return `CASE\n    ${whenClauses.join('\n    ')}\n    ELSE ''\n  END`;
 }
 
 /**

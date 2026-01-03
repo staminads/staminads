@@ -198,13 +198,88 @@ describe('compileCondition', () => {
       expect(compileCondition(condition)).toBe('is_direct = 0');
     });
 
-    it('returns 0 = 1 for non-equals operators on boolean', () => {
+    it('compiles is_direct not_equals true', () => {
+      const condition: FilterCondition = {
+        field: 'is_direct',
+        operator: 'not_equals',
+        value: 'true',
+      };
+      expect(compileCondition(condition)).toBe('is_direct != 1');
+    });
+
+    it('compiles is_direct is_empty as = 0', () => {
+      const condition: FilterCondition = {
+        field: 'is_direct',
+        operator: 'is_empty',
+      };
+      expect(compileCondition(condition)).toBe('is_direct = 0');
+    });
+
+    it('compiles is_direct is_not_empty as = 1', () => {
+      const condition: FilterCondition = {
+        field: 'is_direct',
+        operator: 'is_not_empty',
+      };
+      expect(compileCondition(condition)).toBe('is_direct = 1');
+    });
+
+    it('returns 0 = 1 for contains/not_contains/regex on boolean', () => {
       const condition: FilterCondition = {
         field: 'is_direct',
         operator: 'contains',
         value: 'true',
       };
       expect(compileCondition(condition)).toBe('0 = 1');
+    });
+  });
+
+  describe('not_equals operator', () => {
+    it('compiles to != with non-empty check', () => {
+      const condition: FilterCondition = {
+        field: 'utm_source',
+        operator: 'not_equals',
+        value: 'google',
+      };
+      expect(compileCondition(condition)).toBe(
+        "(utm_source != '' AND utm_source != 'google')",
+      );
+    });
+  });
+
+  describe('not_contains operator', () => {
+    it('compiles using position() = 0', () => {
+      const condition: FilterCondition = {
+        field: 'referrer_domain',
+        operator: 'not_contains',
+        value: 'facebook',
+      };
+      expect(compileCondition(condition)).toBe(
+        "(referrer_domain != '' AND position(referrer_domain, 'facebook') = 0)",
+      );
+    });
+  });
+
+  describe('is_empty operator', () => {
+    it('compiles to empty string OR NULL check', () => {
+      const condition: FilterCondition = {
+        field: 'utm_source',
+        operator: 'is_empty',
+      };
+      expect(compileCondition(condition)).toBe(
+        "(utm_source = '' OR utm_source IS NULL)",
+      );
+    });
+  });
+
+  describe('is_not_empty operator', () => {
+    it('compiles to non-empty AND NOT NULL check', () => {
+      const condition: FilterCondition = {
+        field: 'utm_source',
+        operator: 'is_not_empty',
+      };
+      expect(compileCondition(condition)).toBe(
+        "(utm_source != '' AND utm_source IS NOT NULL)",
+      );
     });
   });
 
@@ -259,8 +334,8 @@ describe('buildCaseExpression', () => {
     ];
     const result = buildCaseExpression('channel', branches);
     expect(result).toContain("WHEN utm_source = 'google' THEN 'Paid Search'");
-    // ELSE preserves existing value (prevents data loss during backfill)
-    expect(result).toContain('ELSE channel');
+    // ELSE '' resets unmatched sessions for custom dimensions
+    expect(result).toContain("ELSE ''");
   });
 
   it('builds CASE with unset_value action', () => {
@@ -275,7 +350,7 @@ describe('buildCaseExpression', () => {
     expect(result).toContain("WHEN utm_source = 'internal' THEN ''");
   });
 
-  it('builds CASE with set_default_value action', () => {
+  it('builds CASE with set_default_value action (no DB value check in backfill)', () => {
     const branches = [
       {
         conditionSQL: '1 = 1',
@@ -284,12 +359,13 @@ describe('buildCaseExpression', () => {
       },
     ];
     const result = buildCaseExpression('channel', branches);
-    expect(result).toContain(
-      "WHEN 1 = 1 AND (channel = '' OR channel IS NULL) THEN 'Direct'",
-    );
+    // In backfill, set_default_value just uses the condition - earlier CASE branches take precedence
+    expect(result).toContain("WHEN 1 = 1 THEN 'Direct'");
+    // Should NOT check existing DB value
+    expect(result).not.toContain("AND (channel = '' OR channel IS NULL)");
   });
 
-  it('includes ELSE dimension at the end (preserves existing value)', () => {
+  it('includes ELSE empty string at the end (resets unmatched sessions)', () => {
     const branches = [
       {
         conditionSQL: 'true',
@@ -298,8 +374,8 @@ describe('buildCaseExpression', () => {
       },
     ];
     const result = buildCaseExpression('channel', branches);
-    // ELSE preserves existing value (prevents data loss during backfill)
-    expect(result).toMatch(/ELSE channel\s*END$/);
+    // ELSE '' resets unmatched sessions for custom dimensions
+    expect(result).toMatch(/ELSE ''\s*END$/);
   });
 });
 
@@ -309,6 +385,133 @@ describe('compileFiltersToSQL', () => {
     // When no filters, setClause should be empty (no dimensions to update)
     expect(result.setClause).toBe('');
     expect(result.filterVersion).toBeTruthy();
+  });
+
+  describe('standard fields (utm_*) are NOT modified by backfill', () => {
+    /**
+     * This test verifies that standard fields like utm_medium and utm_campaign
+     * are NOT affected by backfill unless a filter explicitly targets them.
+     *
+     * The setClause should ONLY include dimensions that have filter operations.
+     * utm_medium may appear in conditions (WHEN clauses) but should never be
+     * a target of assignment (no "utm_medium = CASE..." clause).
+     */
+    it('does not assign utm_medium when no filter targets it', () => {
+      const filters: FilterDefinition[] = [
+        createFilter({
+          id: 'google-ads',
+          name: 'Google Ads',
+          enabled: true,
+          priority: 900,
+          conditions: [
+            { field: 'utm_source', operator: 'regex', value: '^google$' },
+            { field: 'utm_medium', operator: 'regex', value: '^cpc$' },
+          ],
+          operations: [
+            // Operations target channel/channel_group, NOT utm_medium
+            { dimension: 'channel_group', action: 'set_value', value: 'search-paid' },
+            { dimension: 'channel', action: 'set_value', value: 'google-ads' },
+          ],
+        }),
+      ];
+
+      const result = compileFiltersToSQL(filters);
+
+      // Check that utm_medium is NOT a target of assignment (no "utm_medium = CASE...")
+      // It may appear in conditions (WHEN clauses) but should never be assigned
+      expect(result.setClause).not.toMatch(/utm_medium\s*=\s*CASE/);
+      expect(result.setClause).not.toMatch(/utm_campaign\s*=\s*CASE/);
+
+      // Only channel and channel_group should be assignment targets
+      expect(result.setClause).toMatch(/channel\s*=\s*CASE/);
+      expect(result.setClause).toMatch(/channel_group\s*=\s*CASE/);
+    });
+
+    it('does not assign utm_medium even when used in conditions', () => {
+      // Filter uses utm_medium in CONDITIONS but doesn't have an OPERATION targeting it
+      const filters: FilterDefinition[] = [
+        createFilter({
+          id: 'test',
+          name: 'Test Filter',
+          enabled: true,
+          priority: 100,
+          conditions: [
+            { field: 'utm_medium', operator: 'equals', value: 'cpc' },
+          ],
+          operations: [
+            { dimension: 'channel', action: 'set_value', value: 'paid' },
+          ],
+        }),
+      ];
+
+      const result = compileFiltersToSQL(filters);
+
+      // utm_medium used in condition but NOT in operation, so should not be assigned
+      expect(result.setClause).not.toMatch(/utm_medium\s*=\s*CASE/);
+      expect(result.setClause).toMatch(/channel\s*=\s*CASE/);
+    });
+  });
+
+  describe('backfill resets unmatched sessions', () => {
+    /**
+     * When a filter is disabled and backfill runs, sessions that previously matched
+     * should be reset (channel becomes '') if no other filter now matches them.
+     *
+     * Scenario:
+     * - google-ads filter (disabled) - was setting channel='google-ads' for utm_medium='cpc'
+     * - google-organic filter (enabled) - sets channel='google-organic' for google traffic WITHOUT cpc
+     *
+     * Session in DB: { utm_source: 'google', utm_medium: 'cpc', channel: 'google-ads' }
+     * After backfill: channel should be '' (no filter matches)
+     */
+    it('uses ELSE empty string to reset unmatched sessions', () => {
+      const filters: FilterDefinition[] = [
+        createFilter({
+          id: 'google-organic',
+          name: 'Google Organic',
+          enabled: true,
+          priority: 50,
+          conditions: [
+            { field: 'utm_source', operator: 'contains', value: 'google' },
+            { field: 'utm_medium', operator: 'not_equals', value: 'cpc' },
+          ],
+          operations: [
+            { dimension: 'channel', action: 'set_value', value: 'google-organic' },
+          ],
+        }),
+      ];
+
+      const result = compileFiltersToSQL(filters);
+
+      // ELSE '' resets sessions where no filter matches
+      expect(result.setClause).toContain("ELSE ''");
+      expect(result.setClause).not.toContain('ELSE channel');
+    });
+
+    /**
+     * For set_default_value in backfill: earlier CASE branches naturally take precedence.
+     * No need to check DB value - if we reach this branch, no higher-priority filter matched.
+     */
+    it('set_default_value does not check existing DB value in backfill', () => {
+      const filters: FilterDefinition[] = [
+        createFilter({
+          id: 'catch-all',
+          name: 'Catch All',
+          enabled: true,
+          priority: 1,
+          conditions: [],
+          operations: [
+            { dimension: 'channel', action: 'set_default_value', value: 'direct' },
+          ],
+        }),
+      ];
+
+      const result = compileFiltersToSQL(filters);
+
+      // In backfill, set_default_value works like set_value
+      // (CASE WHEN ordering handles priority, not DB value check)
+      expect(result.setClause).not.toContain("AND (channel = '' OR channel IS NULL)");
+    });
   });
 
   it('compiles single filter with set_value', () => {

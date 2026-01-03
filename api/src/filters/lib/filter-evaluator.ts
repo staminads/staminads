@@ -32,21 +32,38 @@ export function evaluateCondition(
 ): boolean {
   const fieldValue = fieldValues[condition.field];
 
-  // Null/undefined field values never match
+  // Null/undefined field values: only is_empty matches
   if (fieldValue == null) {
-    return false;
+    return condition.operator === 'is_empty';
+  }
+
+  // Empty string handling for is_empty/is_not_empty
+  if (fieldValue === '') {
+    return condition.operator === 'is_empty';
   }
 
   switch (condition.operator) {
     case 'equals':
       return fieldValue === condition.value;
 
+    case 'not_equals':
+      return fieldValue !== condition.value;
+
     case 'contains':
-      return fieldValue.includes(condition.value);
+      return fieldValue.includes(condition.value ?? '');
+
+    case 'not_contains':
+      return !fieldValue.includes(condition.value ?? '');
+
+    case 'is_empty':
+      return false; // Already handled above
+
+    case 'is_not_empty':
+      return true; // Non-empty field, already handled null/empty above
 
     case 'regex':
       try {
-        const regex = new RegExp(condition.value);
+        const regex = new RegExp(condition.value ?? '');
         return regex.test(fieldValue);
       } catch {
         // Invalid regex never matches

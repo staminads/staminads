@@ -1,10 +1,10 @@
-export type FilterOperator = 'equals' | 'not_equals' | 'contains' | 'not_contains' | 'starts_with' | 'ends_with' | 'regex'
+export type FilterOperator = 'equals' | 'not_equals' | 'contains' | 'not_contains' | 'is_empty' | 'is_not_empty' | 'regex'
 export type FilterAction = 'set_value' | 'unset_value' | 'set_default_value'
 
 export interface FilterCondition {
   field: string
   operator: FilterOperator
-  value: string
+  value?: string // Optional for valueless operators (is_empty, is_not_empty)
 }
 
 export interface FilterOperation {
@@ -126,10 +126,13 @@ export const OPERATORS = [
   { value: 'not_equals' as const, label: 'not equals' },
   { value: 'contains' as const, label: 'contains' },
   { value: 'not_contains' as const, label: 'not contains' },
-  { value: 'starts_with' as const, label: 'starts with' },
-  { value: 'ends_with' as const, label: 'ends with' },
+  { value: 'is_empty' as const, label: 'is empty' },
+  { value: 'is_not_empty' as const, label: 'is not empty' },
   { value: 'regex' as const, label: 'matches regex' },
 ] as const
+
+// Operators that don't require a value
+export const VALUELESS_OPERATORS: FilterOperator[] = ['is_empty', 'is_not_empty']
 
 export const FILTER_ACTIONS = [
   { value: 'set_value' as const, label: 'Set value', description: 'Always set to specified value' },

@@ -140,6 +140,76 @@ describe('filter-evaluator', () => {
       });
     });
 
+    describe('not_equals operator', () => {
+      it('matches when value differs', () => {
+        const condition: FilterCondition = {
+          field: 'utm_source',
+          operator: 'not_equals',
+          value: 'google',
+        };
+        expect(evaluateCondition(condition, { utm_source: 'facebook' })).toBe(true);
+        expect(evaluateCondition(condition, { utm_source: 'google' })).toBe(false);
+      });
+
+      it('returns false for null/empty field', () => {
+        const condition: FilterCondition = {
+          field: 'utm_source',
+          operator: 'not_equals',
+          value: 'google',
+        };
+        expect(evaluateCondition(condition, { utm_source: null })).toBe(false);
+        expect(evaluateCondition(condition, { utm_source: '' })).toBe(false);
+      });
+    });
+
+    describe('not_contains operator', () => {
+      it('matches when substring not found', () => {
+        const condition: FilterCondition = {
+          field: 'referrer',
+          operator: 'not_contains',
+          value: 'google',
+        };
+        expect(evaluateCondition(condition, { referrer: 'https://facebook.com' })).toBe(true);
+        expect(evaluateCondition(condition, { referrer: 'https://google.com' })).toBe(false);
+      });
+
+      it('returns false for null/empty field', () => {
+        const condition: FilterCondition = {
+          field: 'referrer',
+          operator: 'not_contains',
+          value: 'google',
+        };
+        expect(evaluateCondition(condition, { referrer: null })).toBe(false);
+        expect(evaluateCondition(condition, { referrer: '' })).toBe(false);
+      });
+    });
+
+    describe('is_empty operator', () => {
+      it('matches null/undefined/empty string', () => {
+        const condition: FilterCondition = {
+          field: 'utm_source',
+          operator: 'is_empty',
+        };
+        expect(evaluateCondition(condition, { utm_source: null })).toBe(true);
+        expect(evaluateCondition(condition, {})).toBe(true);
+        expect(evaluateCondition(condition, { utm_source: '' })).toBe(true);
+        expect(evaluateCondition(condition, { utm_source: 'google' })).toBe(false);
+      });
+    });
+
+    describe('is_not_empty operator', () => {
+      it('matches non-empty values', () => {
+        const condition: FilterCondition = {
+          field: 'utm_source',
+          operator: 'is_not_empty',
+        };
+        expect(evaluateCondition(condition, { utm_source: 'google' })).toBe(true);
+        expect(evaluateCondition(condition, { utm_source: null })).toBe(false);
+        expect(evaluateCondition(condition, { utm_source: '' })).toBe(false);
+        expect(evaluateCondition(condition, {})).toBe(false);
+      });
+    });
+
     it('returns false for unknown operator', () => {
       const condition = {
         field: 'utm_source',

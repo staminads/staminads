@@ -8,21 +8,21 @@ function evaluateCondition(
   testValues: Record<string, string | null>
 ): boolean {
   const testValue = testValues[condition.field] ?? ''
-  const conditionValue = condition.value
+  const conditionValue = condition.value ?? ''
 
   switch (condition.operator) {
     case 'equals':
       return testValue === conditionValue
     case 'not_equals':
-      return testValue !== conditionValue
+      return testValue !== '' && testValue !== conditionValue
     case 'contains':
       return testValue.includes(conditionValue)
     case 'not_contains':
-      return !testValue.includes(conditionValue)
-    case 'starts_with':
-      return testValue.startsWith(conditionValue)
-    case 'ends_with':
-      return testValue.endsWith(conditionValue)
+      return testValue !== '' && !testValue.includes(conditionValue)
+    case 'is_empty':
+      return testValue === '' || testValue === null
+    case 'is_not_empty':
+      return testValue !== '' && testValue !== null
     case 'regex':
       try {
         return new RegExp(conditionValue).test(testValue)

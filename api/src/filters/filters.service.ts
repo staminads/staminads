@@ -240,11 +240,12 @@ export class FiltersService {
 
       // Validate regex patterns
       if (condition.operator === 'regex') {
+        const regexValue = condition.value ?? '';
         try {
-          new RegExp(condition.value);
+          new RegExp(regexValue);
         } catch {
           throw new BadRequestException(
-            `Invalid regex pattern: ${condition.value}`,
+            `Invalid regex pattern: ${regexValue}`,
           );
         }
       }

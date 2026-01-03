@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Select, Input, Button, Popconfirm } from 'antd'
 import { DeleteOutlined } from '@ant-design/icons'
 import type { FilterCondition, FilterOperator } from '../../types/filters'
-import { SOURCE_FIELDS, OPERATORS } from '../../types/filters'
+import { SOURCE_FIELDS, OPERATORS, VALUELESS_OPERATORS } from '../../types/filters'
 
 interface ConditionRowProps {
   index: number
@@ -60,16 +60,26 @@ export function ConditionRow({ index, value, onChange, onRemove, isOnlyCondition
       />
       <Select
         value={value.operator}
-        onChange={(operator) => onChange({ ...value, operator: operator as FilterOperator })}
+        onChange={(operator) => {
+          const newOperator = operator as FilterOperator
+          // Clear value when switching to a valueless operator
+          if (VALUELESS_OPERATORS.includes(newOperator)) {
+            onChange({ ...value, operator: newOperator, value: undefined })
+          } else {
+            onChange({ ...value, operator: newOperator })
+          }
+        }}
         options={OPERATORS.map((op) => ({ value: op.value, label: op.label }))}
         style={{ width: 160, flexShrink: 0 }}
       />
-      <Input
-        value={value.value}
-        onChange={(e) => onChange({ ...value, value: e.target.value })}
-        placeholder={value.operator === 'regex' ? 'Regular expression' : 'Value'}
-        style={{ flex: 1, minWidth: 0 }}
-      />
+      {!VALUELESS_OPERATORS.includes(value.operator) && (
+        <Input
+          value={value.value ?? ''}
+          onChange={(e) => onChange({ ...value, value: e.target.value })}
+          placeholder={value.operator === 'regex' ? 'Regular expression' : 'Value'}
+          style={{ flex: 1, minWidth: 0 }}
+        />
+      )}
       <Popconfirm
         title="Delete this condition?"
         onConfirm={onRemove}

@@ -1,10 +1,10 @@
-export type FilterOperator = 'equals' | 'regex' | 'contains';
+export type FilterOperator = 'equals' | 'not_equals' | 'contains' | 'not_contains' | 'is_empty' | 'is_not_empty' | 'regex';
 export type FilterAction = 'set_value' | 'unset_value' | 'set_default_value';
 
 export interface FilterCondition {
   field: string;
   operator: FilterOperator;
-  value: string;
+  value?: string; // Optional for valueless operators (is_empty, is_not_empty)
 }
 
 export interface FilterOperation {

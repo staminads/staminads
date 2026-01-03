@@ -130,17 +130,18 @@ export class FilterBackfillProcessor {
 
         // Validate regex patterns
         if (condition.operator === 'regex') {
+          const regexValue = condition.value ?? '';
           // Test JavaScript regex compilation
           try {
-            new RegExp(condition.value);
+            new RegExp(regexValue);
           } catch (e) {
             errors.push(
-              `Filter "${filter.name}" (${filter.id}): Invalid regex pattern "${condition.value}" - ${e instanceof Error ? e.message : 'unknown error'}`,
+              `Filter "${filter.name}" (${filter.id}): Invalid regex pattern "${regexValue}" - ${e instanceof Error ? e.message : 'unknown error'}`,
             );
           }
 
           // Check RE2 compatibility (ClickHouse uses RE2)
-          if (this.hasUnsupportedRE2Features(condition.value)) {
+          if (this.hasUnsupportedRE2Features(regexValue)) {
             errors.push(
               `Filter "${filter.name}" (${filter.id}): Regex pattern uses lookahead/lookbehind, not supported by ClickHouse RE2`,
             );
