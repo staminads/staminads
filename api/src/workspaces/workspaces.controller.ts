@@ -28,9 +28,9 @@ export class WorkspacesController {
   constructor(private readonly workspacesService: WorkspacesService) {}
 
   @Get('workspaces.list')
-  @ApiOperation({ summary: 'List all workspaces' })
-  list() {
-    return this.workspacesService.list();
+  @ApiOperation({ summary: 'List workspaces for current user' })
+  list(@Req() req: any) {
+    return this.workspacesService.list(req.user);
   }
 
   @Get('workspaces.get')

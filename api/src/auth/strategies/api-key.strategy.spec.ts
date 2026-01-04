@@ -11,7 +11,7 @@ describe('ApiKeyStrategy', () => {
   const mockApiKey: ApiKey = {
     id: 'key-001',
     key_hash: 'hash123',
-    key_prefix: 'sk_live_abc',
+    key_prefix: 'stam_live_abc',
     user_id: 'user-001',
     workspace_id: 'ws-001',
     name: 'Test Key',
@@ -57,7 +57,7 @@ describe('ApiKeyStrategy', () => {
       apiKeysService.updateLastUsed.mockResolvedValue(undefined);
 
       const result = await strategy.validate(
-        'stam_test_0000000000000000000000000000000000000000000000000000000000000000',
+        'stam_live_0000000000000000000000000000000000000000000000000000000000000000',
       );
 
       expect(result).toEqual<ApiKeyPayload>({
@@ -72,7 +72,7 @@ describe('ApiKeyStrategy', () => {
       apiKeysService.findByToken.mockResolvedValue(mockApiKey);
       apiKeysService.updateLastUsed.mockResolvedValue(undefined);
 
-      await strategy.validate('sk_live_test123');
+      await strategy.validate('stam_live_test123');
 
       expect(apiKeysService.updateLastUsed).toHaveBeenCalledWith('key-001');
     });
@@ -86,7 +86,7 @@ describe('ApiKeyStrategy', () => {
       );
     });
 
-    it('throws UnauthorizedException for Bearer prefix without sk_live_', async () => {
+    it('throws UnauthorizedException for Bearer prefix without stam_live_', async () => {
       await expect(strategy.validate('api_key_123')).rejects.toThrow(
         UnauthorizedException,
       );
@@ -95,10 +95,10 @@ describe('ApiKeyStrategy', () => {
     it('throws UnauthorizedException when API key not found', async () => {
       apiKeysService.findByToken.mockResolvedValue(null);
 
-      await expect(strategy.validate('sk_live_nonexistent')).rejects.toThrow(
+      await expect(strategy.validate('stam_live_nonexistent')).rejects.toThrow(
         UnauthorizedException,
       );
-      await expect(strategy.validate('sk_live_nonexistent')).rejects.toThrow(
+      await expect(strategy.validate('stam_live_nonexistent')).rejects.toThrow(
         'Invalid API key',
       );
     });
@@ -109,10 +109,10 @@ describe('ApiKeyStrategy', () => {
         status: 'revoked',
       });
 
-      await expect(strategy.validate('sk_live_revoked')).rejects.toThrow(
+      await expect(strategy.validate('stam_live_revoked')).rejects.toThrow(
         UnauthorizedException,
       );
-      await expect(strategy.validate('sk_live_revoked')).rejects.toThrow(
+      await expect(strategy.validate('stam_live_revoked')).rejects.toThrow(
         'API key is revoked',
       );
     });
@@ -123,10 +123,10 @@ describe('ApiKeyStrategy', () => {
         status: 'expired',
       });
 
-      await expect(strategy.validate('sk_live_expired')).rejects.toThrow(
+      await expect(strategy.validate('stam_live_expired')).rejects.toThrow(
         UnauthorizedException,
       );
-      await expect(strategy.validate('sk_live_expired')).rejects.toThrow(
+      await expect(strategy.validate('stam_live_expired')).rejects.toThrow(
         'API key is expired',
       );
     });
@@ -141,10 +141,10 @@ describe('ApiKeyStrategy', () => {
       });
 
       await expect(
-        strategy.validate('sk_live_expired_date'),
+        strategy.validate('stam_live_expired_date'),
       ).rejects.toThrow(UnauthorizedException);
       await expect(
-        strategy.validate('sk_live_expired_date'),
+        strategy.validate('stam_live_expired_date'),
       ).rejects.toThrow('API key has expired');
     });
 
@@ -158,7 +158,7 @@ describe('ApiKeyStrategy', () => {
       });
       apiKeysService.updateLastUsed.mockResolvedValue(undefined);
 
-      const result = await strategy.validate('sk_live_valid_future');
+      const result = await strategy.validate('stam_live_valid_future');
 
       expect(result.keyId).toBe('key-001');
     });
@@ -170,10 +170,10 @@ describe('ApiKeyStrategy', () => {
       });
 
       await expect(
-        strategy.validate('sk_live_no_workspace'),
+        strategy.validate('stam_live_no_workspace'),
       ).rejects.toThrow(UnauthorizedException);
       await expect(
-        strategy.validate('sk_live_no_workspace'),
+        strategy.validate('stam_live_no_workspace'),
       ).rejects.toThrow('API key not bound to workspace');
     });
 
@@ -184,7 +184,7 @@ describe('ApiKeyStrategy', () => {
       );
 
       // Should not throw - updateLastUsed errors are caught
-      const result = await strategy.validate('sk_live_test');
+      const result = await strategy.validate('stam_live_test');
 
       expect(result.keyId).toBe('key-001');
     });

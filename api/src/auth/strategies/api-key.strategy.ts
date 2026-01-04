@@ -18,8 +18,8 @@ export class ApiKeyStrategy extends PassportStrategy(Strategy, 'api-key') {
   }
 
   async validate(token: string): Promise<ApiKeyPayload> {
-    // Only accept sk_live_ prefixed tokens
-    if (!token.startsWith('sk_live_')) {
+    // Only accept stam_live_ prefixed tokens
+    if (!token.startsWith('stam_live_')) {
       throw new UnauthorizedException('Invalid API key format');
     }
 

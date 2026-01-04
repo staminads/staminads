@@ -54,7 +54,7 @@ export class AuthService {
     userAgent?: string,
   ): Promise<{
     access_token: string;
-    user: { id: string; email: string; name: string };
+    user: { id: string; email: string; name: string; is_super_admin: boolean };
   }> {
     const email = dto.email.toLowerCase();
 
@@ -103,6 +103,7 @@ export class AuthService {
           id: user.id,
           email: user.email,
           name: user.name,
+          is_super_admin: user.is_super_admin,
         },
       };
     }
@@ -138,6 +139,7 @@ export class AuthService {
           id: adminUser.id,
           email: adminUser.email,
           name: adminUser.name,
+          is_super_admin: adminUser.is_super_admin,
         },
       };
     }

@@ -210,10 +210,10 @@ describe('crypto', () => {
   });
 
   describe('generateApiKeyToken', () => {
-    it('generates key with sk_live_ prefix', () => {
+    it('generates key with stam_live_ prefix', () => {
       const { key, prefix } = generateApiKeyToken();
-      expect(key).toMatch(/^sk_live_[a-f0-9]{64}$/);
-      expect(prefix).toBe(key.substring(0, 15));
+      expect(key).toMatch(/^stam_live_[a-f0-9]{64}$/);
+      expect(prefix).toBe(key.substring(0, 17));
     });
 
     it('generates valid hash', () => {

@@ -9,11 +9,12 @@ export const Route = createFileRoute('/_authenticated/')({
     try {
       workspaces = await context.queryClient.ensureQueryData(workspacesQueryOptions)
     } catch {
-      // On API error, redirect to create new workspace
-      throw redirect({ to: '/workspaces/new' })
+      // On API error, redirect to no-access
+      throw redirect({ to: '/no-access' })
     }
     if (workspaces.length === 0) {
-      throw redirect({ to: '/workspaces/new' })
+      // User has no workspace memberships
+      throw redirect({ to: '/no-access' })
     }
     // Redirect to first workspace
     throw redirect({

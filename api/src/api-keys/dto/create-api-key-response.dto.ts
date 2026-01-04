@@ -7,7 +7,7 @@ import { PublicApiKey } from '../../common/entities/api-key.entity';
 export class CreateApiKeyResponseDto {
   /**
    * The full API key. This is ONLY returned once and is not stored.
-   * Format: sk_live_<64 hex chars>
+   * Format: stam_live_<64 hex chars>
    */
   key: string;
 

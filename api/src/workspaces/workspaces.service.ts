@@ -79,15 +79,31 @@ export class WorkspacesService {
     private readonly configService: ConfigService,
   ) {}
 
-  async list(): Promise<Workspace[]> {
-    // Use subquery with argMax to get latest version of each workspace
-    // This handles ClickHouse async DELETE race condition
+  async list(user: CurrentUser): Promise<Workspace[]> {
+    // Super admins see all workspaces
+    if (user.isSuperAdmin) {
+      const rows = await this.clickhouse.querySystem<WorkspaceRow>(
+        `SELECT * FROM workspaces
+         WHERE (id, updated_at) IN (
+           SELECT id, max(updated_at) FROM workspaces GROUP BY id
+         )
+         ORDER BY created_at DESC`,
+      );
+      return rows.map(parseWorkspace);
+    }
+
+    // Regular users only see workspaces they are members of
     const rows = await this.clickhouse.querySystem<WorkspaceRow>(
       `SELECT * FROM workspaces
-       WHERE (id, updated_at) IN (
+       WHERE id IN (
+         SELECT workspace_id FROM workspace_memberships FINAL
+         WHERE user_id = {userId:String}
+       )
+       AND (id, updated_at) IN (
          SELECT id, max(updated_at) FROM workspaces GROUP BY id
        )
        ORDER BY created_at DESC`,
+      { userId: user.id },
     );
     return rows.map(parseWorkspace);
   }

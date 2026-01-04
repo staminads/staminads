@@ -24,7 +24,7 @@ export function RequireScope(...scopes: ApiScope[]) {
     ApiSecurity('api-key'),
     ApiHeader({
       name: 'Authorization',
-      description: 'Bearer sk_live_...',
+      description: 'Bearer stam_live_...',
       required: true,
     }),
   );

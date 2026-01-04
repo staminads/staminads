@@ -24,7 +24,7 @@ describe('ApiKeysService', () => {
   const mockApiKey: ApiKey = {
     id: 'key-test-001',
     key_hash: 'hash123',
-    key_prefix: 'sk_live_abc1234',
+    key_prefix: 'stam_live_abc1234',
     user_id: 'user-001',
     workspace_id: 'ws-001',
     name: 'Test API Key',
@@ -88,9 +88,9 @@ describe('ApiKeysService', () => {
     // Setup default mocks for crypto functions
     (crypto.generateId as jest.Mock).mockReturnValue('key-new-001');
     (crypto.generateApiKeyToken as jest.Mock).mockReturnValue({
-      key: 'stam_test_0000000000000000000000000000000000000000000000000000000000000000',
+      key: 'stam_live_0000000000000000000000000000000000000000000000000000000000000000',
       hash: 'hash_of_the_key',
-      prefix: 'stam_test_000000',
+      prefix: 'stam_live_000000',
     });
     (crypto.hashToken as jest.Mock).mockReturnValue('hash_of_the_key');
 
@@ -120,7 +120,7 @@ describe('ApiKeysService', () => {
       const result = await service.create(dto, 'user-001');
 
       expect(result.key).toBe(
-        'stam_test_0000000000000000000000000000000000000000000000000000000000000000',
+        'stam_live_0000000000000000000000000000000000000000000000000000000000000000',
       );
       expect(result.apiKey.id).toBe('key-new-001');
       expect(result.apiKey.name).toBe('My API Key');
@@ -163,7 +163,7 @@ describe('ApiKeysService', () => {
           expect.objectContaining({
             id: 'key-new-001',
             key_hash: 'hash_of_the_key',
-            key_prefix: 'stam_test_000000',
+            key_prefix: 'stam_live_000000',
             user_id: 'user-001',
             workspace_id: 'ws-001',
             name: 'Test Key',
@@ -188,7 +188,7 @@ describe('ApiKeysService', () => {
 
       // Full key is returned in response
       expect(result.key).toBeDefined();
-      expect(result.key).toContain('sk_live_');
+      expect(result.key).toContain('stam_live_');
 
       // But apiKey object does not contain key_hash
       expect(result.apiKey).not.toHaveProperty('key_hash');

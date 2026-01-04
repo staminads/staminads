@@ -151,7 +151,7 @@ export function generateToken(): { token: string; hash: string } {
 
 /**
  * Generate an API key with prefix.
- * Format: sk_live_<64 hex chars>
+ * Format: stam_live_<64 hex chars>
  */
 export function generateApiKeyToken(): {
   key: string;
@@ -159,9 +159,9 @@ export function generateApiKeyToken(): {
   prefix: string;
 } {
   const randomPart = randomBytes(32).toString('hex');
-  const key = `sk_live_${randomPart}`;
+  const key = `stam_live_${randomPart}`;
   const hash = createHash('sha256').update(key).digest('hex');
-  const prefix = key.substring(0, 15); // "sk_live_" + 7 chars
+  const prefix = key.substring(0, 17); // "stam_live_" + 7 chars
   return { key, hash, prefix };
 }
 

@@ -43,7 +43,7 @@ function WorkspaceLayout() {
   const { workspaceId } = Route.useParams()
   const { data: workspaces } = useSuspenseQuery(workspacesQueryOptions)
   const { data: workspace } = useSuspenseQuery(workspaceQueryOptions(workspaceId))
-  const { logout } = useAuth()
+  const { logout, user } = useAuth()
   const { message } = App.useApp()
   const { timezone, setTimezone, workspaceTimezone } = useTimezone(workspace.timezone)
   const navigate = useNavigate()
@@ -132,7 +132,8 @@ function WorkspaceLayout() {
                     </div>
                   ),
                 })),
-                {
+                // Only show "New workspace" option for super admins
+                ...(user?.isSuperAdmin ? [{
                   value: 'new',
                   label: (
                     <div className="flex items-center gap-2 text-[var(--primary)]">
@@ -140,7 +141,7 @@ function WorkspaceLayout() {
                       <span>New workspace</span>
                     </div>
                   ),
-                },
+                }] : []),
               ]}
             />
             {isWorkspaceActive && (
