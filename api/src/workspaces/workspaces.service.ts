@@ -228,10 +228,7 @@ export class WorkspacesService {
     integrations: Integration[],
     workspaceId: string,
   ): Integration[] {
-    const encryptionKey = this.configService.get<string>('ENCRYPTION_KEY');
-    if (!encryptionKey) {
-      throw new Error('ENCRYPTION_KEY not configured');
-    }
+    const encryptionKey = this.configService.get<string>('ENCRYPTION_KEY')!;
 
     return integrations.map((integration) => {
       if (integration.type === 'anthropic') {

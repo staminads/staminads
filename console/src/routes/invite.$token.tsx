@@ -1,29 +1,10 @@
 import { useState, useEffect } from 'react'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import {
-  Card,
-  Typography,
-  Button,
-  Form,
-  Input,
-  Alert,
-  Spin,
-  Result,
-  Avatar,
-  Tag,
-  Divider,
-} from 'antd'
-import {
-  UserOutlined,
-  LockOutlined,
-  TeamOutlined,
-  GlobalOutlined,
-} from '@ant-design/icons'
+import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
+import { Button, Form, Input, Spin, Avatar, Tag } from 'antd'
+import { TeamOutlined, GlobalOutlined } from '@ant-design/icons'
 import { useAuth } from '../lib/useAuth'
 import { api } from '../lib/api'
 import type { InvitationDetails } from '../types/invitation'
-
-const { Title, Text, Paragraph } = Typography
 
 export const Route = createFileRoute('/invite/$token')({
   component: InviteAcceptPage,
@@ -128,66 +109,57 @@ function InviteAcceptPage() {
     }
   }
 
-  // Loading state
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Spin size="large" tip="Loading invitation..." />
-      </div>
-    )
-  }
-
-  // Error state
-  if (error && !invitation) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <Card className="w-full max-w-md">
-          <Result
-            status="error"
-            title="Invalid Invitation"
-            subTitle={error}
-            extra={
-              <a href="/login">
-                <Button type="primary">Go to Login</Button>
-              </a>
-            }
-          />
-        </Card>
-      </div>
-    )
-  }
-
-  // Expired state
-  if (expired) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <Card className="w-full max-w-md">
-          <Result
-            status="warning"
-            title="Invitation Expired"
-            subTitle="This invitation link has expired. Please contact the workspace administrator for a new invitation."
-            extra={
-              <a href="/login">
-                <Button type="primary">Go to Login</Button>
-              </a>
-            }
-          />
-        </Card>
-      </div>
-    )
-  }
-
-  if (!invitation) return null
-
   const roleColors: Record<string, string> = {
     admin: 'purple',
     editor: 'blue',
     viewer: 'default',
   }
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <Card className="w-full max-w-md">
+  const renderContent = () => {
+    // Loading state
+    if (loading) {
+      return (
+        <div className="text-center py-8">
+          <Spin size="large" />
+          <p className="mt-4 text-gray-600">Loading invitation...</p>
+        </div>
+      )
+    }
+
+    // Error state
+    if (error && !invitation) {
+      return (
+        <div className="text-center">
+          <p className="text-red-600 mb-6">{error}</p>
+          <Link to="/login">
+            <Button type="primary" block size="large">
+              Go to sign in
+            </Button>
+          </Link>
+        </div>
+      )
+    }
+
+    // Expired state
+    if (expired) {
+      return (
+        <div className="text-center">
+          <p className="text-gray-600 mb-6">
+            This invitation link has expired. Please contact the workspace administrator for a new invitation.
+          </p>
+          <Link to="/login">
+            <Button type="primary" block size="large">
+              Go to sign in
+            </Button>
+          </Link>
+        </div>
+      )
+    }
+
+    if (!invitation) return null
+
+    return (
+      <>
         {/* Workspace Info */}
         <div className="text-center mb-6">
           {invitation.workspace.logo_url ? (
@@ -204,13 +176,13 @@ function InviteAcceptPage() {
             />
           )}
 
-          <Title level={3} className="!mb-1">
+          <h2 className="text-xl font-semibold mb-1">
             Join {invitation.workspace.name}
-          </Title>
+          </h2>
 
           <div className="flex items-center justify-center gap-2 text-gray-500 mb-2">
             <GlobalOutlined />
-            <Text type="secondary">{invitation.workspace.website}</Text>
+            <span>{invitation.workspace.website}</span>
           </div>
 
           <Tag color={roleColors[invitation.role]}>
@@ -218,24 +190,13 @@ function InviteAcceptPage() {
           </Tag>
         </div>
 
-        <Divider />
+        <div className="border-t border-gray-200 my-6" />
 
-        <Paragraph className="text-center text-gray-600 mb-6">
+        <p className="text-center text-gray-600 mb-6">
           <strong>{invitation.inviter.name}</strong> invited you to join this
           workspace as {invitation.role === 'admin' ? 'an' : 'a'}{' '}
           <strong>{invitation.role}</strong>.
-        </Paragraph>
-
-        {error && (
-          <Alert
-            message={error}
-            type="error"
-            showIcon
-            className="mb-6"
-            closable
-            onClose={() => setError(null)}
-          />
-        )}
+        </p>
 
         {/* Existing User Flow */}
         {invitation.existingUser ? (
@@ -243,9 +204,9 @@ function InviteAcceptPage() {
             {isAuthenticated && currentUserEmail === invitation.email ? (
               // Logged in as correct user
               <div className="text-center">
-                <Paragraph>
+                <p className="text-gray-600 mb-4">
                   You're signed in as <strong>{currentUserEmail}</strong>
-                </Paragraph>
+                </p>
                 <Button
                   type="primary"
                   size="large"
@@ -259,12 +220,9 @@ function InviteAcceptPage() {
             ) : isAuthenticated ? (
               // Logged in as different user
               <div className="text-center">
-                <Alert
-                  type="warning"
-                  message="Email Mismatch"
-                  description={`This invitation is for ${invitation.email}, but you're signed in as ${currentUserEmail}. Please log out and sign in with the correct account.`}
-                  className="mb-4"
-                />
+                <p className="text-amber-600 mb-4">
+                  This invitation is for {invitation.email}, but you're signed in as {currentUserEmail}. Please sign out and sign in with the correct account.
+                </p>
                 <Button
                   type="primary"
                   size="large"
@@ -277,36 +235,34 @@ function InviteAcceptPage() {
             ) : (
               // Not logged in
               <div className="text-center">
-                <Paragraph>
-                  You already have an account. Please sign in to accept this
-                  invitation.
-                </Paragraph>
-                <a href={`/login?redirect=/invite/${token}`}>
+                <p className="text-gray-600 mb-4">
+                  You already have an account. Please sign in to accept this invitation.
+                </p>
+                <Link to="/login" search={{ redirect: `/invite/${token}` }}>
                   <Button type="primary" size="large" block>
                     Sign in to Accept
                   </Button>
-                </a>
+                </Link>
               </div>
             )}
           </div>
         ) : (
           /* New User Registration Flow */
           <div>
-            <Paragraph className="text-center mb-4">
+            <p className="text-center text-gray-600 mb-4">
               Create your account to join the workspace
-            </Paragraph>
+            </p>
 
             <Form
               name="accept-invitation"
               onFinish={handleNewUserSubmit}
               layout="vertical"
-              size="large"
             >
               <Form.Item label="Email">
                 <Input
                   value={invitation.email}
                   disabled
-                  prefix={<UserOutlined />}
+                  size="large"
                 />
               </Form.Item>
 
@@ -319,8 +275,8 @@ function InviteAcceptPage() {
                 ]}
               >
                 <Input
-                  prefix={<UserOutlined />}
                   placeholder="Enter your full name"
+                  size="large"
                   autoComplete="name"
                 />
               </Form.Item>
@@ -334,8 +290,8 @@ function InviteAcceptPage() {
                 ]}
               >
                 <Input.Password
-                  prefix={<LockOutlined />}
                   placeholder="Create a password"
+                  size="large"
                   autoComplete="new-password"
                 />
               </Form.Item>
@@ -356,17 +312,18 @@ function InviteAcceptPage() {
                 ]}
               >
                 <Input.Password
-                  prefix={<LockOutlined />}
                   placeholder="Confirm your password"
+                  size="large"
                   autoComplete="new-password"
                 />
               </Form.Item>
 
-              <Form.Item>
+              <Form.Item className="mb-0">
                 <Button
                   type="primary"
                   htmlType="submit"
                   block
+                  size="large"
                   loading={accepting}
                 >
                   Create Account & Join
@@ -376,14 +333,39 @@ function InviteAcceptPage() {
           </div>
         )}
 
-        <Divider />
+        <div className="border-t border-gray-200 my-6" />
 
-        <div className="text-center text-sm text-gray-500">
-          <Text type="secondary">
-            By joining, you agree to the workspace's terms and policies.
-          </Text>
-        </div>
-      </Card>
+        <p className="text-center text-xs text-gray-500">
+          By joining, you agree to the workspace's terms and policies.
+        </p>
+      </>
+    )
+  }
+
+  return (
+    <div
+      className="min-h-screen flex items-center justify-center bg-cover bg-center relative"
+      style={{
+        backgroundImage: 'url(/background.jpg)',
+      }}
+    >
+      <div className="bg-white/95 backdrop-blur-sm p-8 rounded-lg shadow-xl w-full max-w-sm">
+        <img src="/logo.svg" alt="Staminads" className="h-8 mx-auto mb-8" />
+        {renderContent()}
+      </div>
+
+      {/* Photo credit */}
+      <div className="absolute bottom-2 left-2 text-[10px] text-white/60">
+        Photo by{' '}
+        <a
+          href="https://unsplash.com/fr/@rodlong?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText"
+          className="underline hover:text-white/80"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Rod Long
+        </a>
+      </div>
     </div>
   )
 }

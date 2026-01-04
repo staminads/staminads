@@ -436,22 +436,6 @@ describe('AssistantService', () => {
       (crypto.decryptApiKey as jest.Mock).mockReturnValue('decrypted-api-key');
     });
 
-    it('throws error when ENCRYPTION_KEY not configured', async () => {
-      workspacesService.get.mockResolvedValue(mockWorkspace);
-      configService.get.mockReturnValue(undefined);
-
-      const { job_id } = await service.createJob({
-        workspace_id: 'ws-1',
-        prompt: 'Test',
-      });
-
-      await service.streamJob(job_id, mockRes as any);
-
-      expect(mockRes.write).toHaveBeenCalledWith(
-        expect.stringContaining('ENCRYPTION_KEY not configured'),
-      );
-    });
-
     it('streams text response to client', async () => {
       workspacesService.get.mockResolvedValue(mockWorkspace);
       configService.get.mockReturnValue('test-encryption-key');

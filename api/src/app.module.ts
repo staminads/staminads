@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { validate } from './config/env.validation';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { ApiKeysModule } from './api-keys/api-keys.module';
 import { AssistantModule } from './assistant/assistant.module';
@@ -24,6 +25,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      validate,
     }),
     CacheModule.register({
       isGlobal: true,

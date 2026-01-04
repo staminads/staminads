@@ -199,10 +199,7 @@ export class AssistantService implements OnModuleInit, OnModuleDestroy {
     }
 
     // Decrypt API key
-    const encryptionKey = this.configService.get<string>('ENCRYPTION_KEY');
-    if (!encryptionKey) {
-      throw new BadRequestException('ENCRYPTION_KEY not configured');
-    }
+    const encryptionKey = this.configService.get<string>('ENCRYPTION_KEY')!;
 
     const apiKey = decryptApiKey(
       integration.settings.api_key_encrypted,

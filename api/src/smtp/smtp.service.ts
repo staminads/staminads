@@ -103,10 +103,7 @@ export class SmtpService {
       throw new BadRequestException('Workspace not found');
     }
 
-    const encryptionKey = this.configService.get<string>('ENCRYPTION_KEY');
-    if (!encryptionKey) {
-      throw new Error('ENCRYPTION_KEY not configured');
-    }
+    const encryptionKey = this.configService.get<string>('ENCRYPTION_KEY')!;
 
     // Encrypt password if provided
     let passwordEncrypted: string | undefined;
@@ -173,10 +170,7 @@ export class SmtpService {
     const workspace = await this.workspacesService.get(workspaceId);
     if (workspace?.settings?.smtp?.enabled) {
       const smtp = workspace.settings.smtp;
-      const encryptionKey = this.configService.get<string>('ENCRYPTION_KEY');
-      if (!encryptionKey) {
-        throw new Error('ENCRYPTION_KEY not configured');
-      }
+      const encryptionKey = this.configService.get<string>('ENCRYPTION_KEY')!;
 
       // Port 465 uses implicit TLS, other ports use STARTTLS (auto-upgrade)
       const secure = smtp.port === 465;
