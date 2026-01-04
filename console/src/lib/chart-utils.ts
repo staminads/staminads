@@ -310,7 +310,7 @@ export function createMetricChartOption(
               tooltip: {
                 show: true,
                 trigger: 'item',
-                formatter: (params: { data: { annotation?: Annotation } }) => {
+                formatter: ((params: { data: { annotation?: Annotation } }) => {
                   const ann = params.data?.annotation
                   if (!ann) return ''
                   const bulletColor = ann.color || '#7763f1'
@@ -322,7 +322,8 @@ export function createMetricChartOption(
                     <div style="color: #6b7280; font-size: 11px;">${ann.date}</div>
                     ${ann.description ? `<div style="margin-top: 8px;">${ann.description}</div>` : ''}
                   `
-                }
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                }) as any
               },
               data: annotations
                 .filter((a) => {
@@ -352,7 +353,7 @@ export function createMetricChartOption(
                       show: true,
                       formatter: `{bullet|●} {title|${shortTitle}}`,
                       // Stagger positioning: alternate top/bottom for readability
-                      position: (index % 2 === 0 ? 'insideEndTop' : 'insideEndBottom') as const,
+                      position: index % 2 === 0 ? 'insideEndTop' : 'insideEndBottom',
                       rotate: 0, // Horizontal text
                       backgroundColor: 'rgba(0, 0, 0, 0.45)',
                       padding: [4, 6, 2, 6] as [number, number, number, number],

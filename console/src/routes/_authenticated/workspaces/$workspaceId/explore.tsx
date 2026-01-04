@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { Alert } from 'antd'
@@ -52,7 +52,6 @@ function Explore() {
     setFilters,
     setMinSessions,
     setPeriod,
-    setTimezone: _setTimezone,
     setComparison,
     setCustomRange,
     setAll,
@@ -69,10 +68,12 @@ function Explore() {
     clearMessages,
   } = useAssistant(workspaceId)
 
-  // Compute date range (needed for breakdown hook)
-  const dateRange = period === 'custom' && customStart && customEnd
-    ? { start: customStart, end: customEnd }
-    : { preset: period as DatePreset }
+  // Compute date range (needed for breakdown hook) - memoized to stabilize dependencies
+  const dateRange = useMemo(() => {
+    return period === 'custom' && customStart && customEnd
+      ? { start: customStart, end: customEnd }
+      : { preset: period as DatePreset }
+  }, [period, customStart, customEnd])
 
   // Breakdown drawer state
   const {

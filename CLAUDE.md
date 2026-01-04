@@ -6,7 +6,7 @@ Web analytics platform for tracking TimeScore metrics.
 
 ```
 /api          NestJS TypeScript API
-/console      Frontend (planned)
+/console      React frontend (Vite + TypeScript + Ant Design)
 ```
 
 ## API
@@ -96,6 +96,28 @@ cd api
 cp .env.example .env  # then edit with your values
 npm run start:dev
 ```
+
+## Console (Frontend)
+
+React application with Vite, TypeScript, TanStack Router/Query, and Ant Design.
+
+### Scripts
+
+```bash
+cd console
+npm run dev          # Start dev server
+npm run build        # Build for production
+npm run lint         # Run ESLint + TypeScript type checking
+npm run type-check   # TypeScript type checking only
+```
+
+### Linting
+
+The `npm run lint` command runs both ESLint and TypeScript compiler:
+- **ESLint**: Checks code style, React hooks rules, and React Refresh compatibility
+- **TypeScript** (`tsc --noEmit`): Checks all type errors (same errors shown in VSCode)
+
+This ensures CLI linting catches the same errors as your IDE.
 
 ## Development Guidelines
 

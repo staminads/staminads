@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState, useCallback } from 'react'
 import { Select, Input, Button, Popconfirm } from 'antd'
 import { DeleteOutlined } from '@ant-design/icons'
 import type { FilterOperation, FilterAction } from '../../types/filters'
@@ -55,14 +55,22 @@ export function OperationRow({ index, value, onChange, onRemove, isOnlyOperation
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const selectRef = useRef<any>(null)
   const [isOpen, setIsOpen] = useState(false)
+  const hasAutoFocused = useRef(false)
   const showValueInput = value.action === 'set_value' || value.action === 'set_default_value'
   const dimensionOptions = getDimensionOptions(customDimensionLabels)
 
-  useEffect(() => {
-    if (autoFocus && selectRef.current) {
-      selectRef.current.focus()
-      setIsOpen(true)
-      onFocused?.()
+  // Use ref callback to handle autoFocus without useEffect
+  const handleSelectRef = useCallback((node: unknown) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    selectRef.current = node as any
+    if (autoFocus && node && !hasAutoFocused.current) {
+      hasAutoFocused.current = true
+      // Defer focus to next tick to ensure DOM is ready
+      setTimeout(() => {
+        selectRef.current?.focus()
+        setIsOpen(true)
+        onFocused?.()
+      }, 0)
     }
   }, [autoFocus, onFocused])
 
@@ -70,7 +78,7 @@ export function OperationRow({ index, value, onChange, onRemove, isOnlyOperation
     <div className="flex items-center gap-2">
       <span className="text-xs text-gray-400 w-4 shrink-0">{index + 1}.</span>
       <Select
-        ref={selectRef}
+        ref={handleSelectRef}
         value={value.dimension}
         onChange={(dimension) => onChange({ ...value, dimension })}
         options={dimensionOptions}

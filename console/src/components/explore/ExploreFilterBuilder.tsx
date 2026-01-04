@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { Popover, Form, Input, Button, Select, Tooltip, Tag, Space } from 'antd'
 import { LeftOutlined, SearchOutlined, PlusCircleOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
@@ -62,16 +62,11 @@ export function ExploreFilterBuilder({ value, onChange, customDimensionLabels }:
     }),
   )
 
-  useEffect(() => {
-    if (selectedDimension) {
-      setSelectedOperator('equals')
-      form.setFieldsValue({ operator: 'equals' })
-    }
-  }, [selectedDimension, form])
-
   const handleDimensionSelect = (dimension: DimensionWithMeta) => {
     setSelectedDimension(dimension)
+    setSelectedOperator('equals')
     form.resetFields()
+    form.setFieldsValue({ operator: 'equals' })
     setSearchTerm('')
   }
 

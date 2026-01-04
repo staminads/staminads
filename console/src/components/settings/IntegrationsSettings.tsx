@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { Form, Input, Select, Switch, Button, message, Popconfirm, Tooltip } from 'antd'
 import { EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -23,27 +23,28 @@ function maskApiKey(key: string): string {
 
 export function IntegrationsSettings({ workspace }: IntegrationsSettingsProps) {
   const queryClient = useQueryClient()
-  const [form] = Form.useForm()
   const [showApiKey, setShowApiKey] = useState(false)
-  const [apiKeyPlaceholder, setApiKeyPlaceholder] = useState('')
-  const [isEnabled, setIsEnabled] = useState(false)
 
   // Find existing anthropic integration
   const anthropicIntegration = workspace.settings.integrations?.find(
     (i) => i.type === 'anthropic'
   )
 
-  // Set up form initial values and placeholder
-  useEffect(() => {
+  // Derive state from props instead of using useEffect
+  const apiKeyPlaceholder = useMemo(() => {
     const hasKey = !!anthropicIntegration?.settings?.api_key_encrypted
-    setApiKeyPlaceholder(hasKey ? maskApiKey(anthropicIntegration.settings.api_key_encrypted) : '')
-    setIsEnabled(anthropicIntegration?.enabled ?? false)
+    return hasKey ? maskApiKey(anthropicIntegration.settings.api_key_encrypted) : ''
+  }, [anthropicIntegration])
 
-    form.setFieldsValue({
-      model: anthropicIntegration?.settings?.model ?? 'claude-haiku-4-5-20251001',
-      api_key: '', // Always start empty, user must enter new key to change
-    })
-  }, [workspace, anthropicIntegration, form])
+  // Use workspace.id as key to force form reset when workspace changes
+  const [form] = Form.useForm()
+  const [isEnabled, setIsEnabled] = useState(anthropicIntegration?.enabled ?? false)
+
+  // Compute initial form values
+  const initialValues = useMemo(() => ({
+    model: anthropicIntegration?.settings?.model ?? 'claude-haiku-4-5-20251001',
+    api_key: '', // Always start empty, user must enter new key to change
+  }), [anthropicIntegration?.settings?.model])
 
   const updateMutation = useMutation({
     mutationFn: api.workspaces.update,
@@ -156,7 +157,7 @@ export function IntegrationsSettings({ workspace }: IntegrationsSettingsProps) {
         </Tooltip>
       </div>
 
-      <Form form={form} layout="vertical" onFinish={onFinish}>
+      <Form form={form} layout="vertical" onFinish={onFinish} initialValues={initialValues} key={workspace.id}>
         <Form.Item
           name="api_key"
           label="API Key"

@@ -58,7 +58,7 @@ export function FilterTable({ workspaceId, filters, onEdit, searchText = '', cus
           f.conditions.some(
             (c) =>
               c.field.toLowerCase().includes(lower) ||
-              c.value.toLowerCase().includes(lower)
+              (c.value?.toLowerCase().includes(lower) ?? false)
           ) ||
           f.operations.some((op) => op.dimension.toLowerCase().includes(lower))
       )

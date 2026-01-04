@@ -12,7 +12,9 @@ import { TabbedSourcesWidget, type SourceData } from './TabbedSourcesWidget'
 import { TabbedChannelsWidget, type ChannelData } from './TabbedChannelsWidget'
 import { TabbedCampaignsWidget, type CampaignData } from './TabbedCampaignsWidget'
 import { TabbedCountriesWidget, type CountryData } from './TabbedCountriesWidget'
+import { TabbedDevicesWidget, type DeviceData } from './TabbedDevicesWidget'
 import { CountriesMapWidget } from './CountriesMapWidget'
+import { TrafficHeatmapWidget, type HeatmapDataPoint } from './TrafficHeatmapWidget'
 import { METRICS, extractDashboardData, type MetricKey, type ComparisonMode } from '../../types/dashboard'
 import type { DatePreset, Granularity } from '../../types/analytics'
 import type { Annotation } from '../../types/workspace'
@@ -20,7 +22,6 @@ import type { Annotation } from '../../types/workspace'
 interface DashboardGridProps {
   workspaceId: string
   workspaceTimezone: string
-  workspaceCreatedAt?: string
   timescoreReference: number
   comparison: ComparisonMode
   customStart?: string
@@ -31,7 +32,6 @@ interface DashboardGridProps {
 export function DashboardGrid({
   workspaceId,
   workspaceTimezone,
-  workspaceCreatedAt: _workspaceCreatedAt,
   timescoreReference,
   comparison,
   customStart,
@@ -253,6 +253,126 @@ export function DashboardGrid({
     placeholderData: keepPreviousData,
   })
 
+  // Devices query - device dimension
+  const devicesQuery = {
+    workspace_id: workspaceId,
+    metrics: ['sessions', 'median_duration'],
+    dimensions: ['device'],
+    dateRange: {
+      preset: period as DatePreset,
+      ...(period === 'custom' && customStart && customEnd && {
+        start: customStart,
+        end: customEnd,
+        preset: undefined,
+      }),
+    },
+    ...(showComparison && {
+      compareDateRange: {
+        preset: period as DatePreset,
+        ...(period === 'custom' && customStart && customEnd && {
+          start: customStart,
+          end: customEnd,
+          preset: undefined,
+        }),
+      },
+    }),
+    order: { sessions: 'desc' as const },
+    limit: 10,
+    timezone,
+  }
+
+  const { data: devicesResponse, isFetching: devicesFetching } = useQuery({
+    ...analyticsQueryOptions(devicesQuery),
+    placeholderData: keepPreviousData,
+  })
+
+  // Browsers query - browser dimension
+  const browsersQuery = {
+    workspace_id: workspaceId,
+    metrics: ['sessions', 'median_duration'],
+    dimensions: ['browser'],
+    dateRange: {
+      preset: period as DatePreset,
+      ...(period === 'custom' && customStart && customEnd && {
+        start: customStart,
+        end: customEnd,
+        preset: undefined,
+      }),
+    },
+    ...(showComparison && {
+      compareDateRange: {
+        preset: period as DatePreset,
+        ...(period === 'custom' && customStart && customEnd && {
+          start: customStart,
+          end: customEnd,
+          preset: undefined,
+        }),
+      },
+    }),
+    order: { sessions: 'desc' as const },
+    limit: 10,
+    timezone,
+  }
+
+  const { data: browsersResponse, isFetching: browsersFetching } = useQuery({
+    ...analyticsQueryOptions(browsersQuery),
+    placeholderData: keepPreviousData,
+  })
+
+  // OS query - os dimension
+  const osQuery = {
+    workspace_id: workspaceId,
+    metrics: ['sessions', 'median_duration'],
+    dimensions: ['os'],
+    dateRange: {
+      preset: period as DatePreset,
+      ...(period === 'custom' && customStart && customEnd && {
+        start: customStart,
+        end: customEnd,
+        preset: undefined,
+      }),
+    },
+    ...(showComparison && {
+      compareDateRange: {
+        preset: period as DatePreset,
+        ...(period === 'custom' && customStart && customEnd && {
+          start: customStart,
+          end: customEnd,
+          preset: undefined,
+        }),
+      },
+    }),
+    order: { sessions: 'desc' as const },
+    limit: 10,
+    timezone,
+  }
+
+  const { data: osResponse, isFetching: osFetching } = useQuery({
+    ...analyticsQueryOptions(osQuery),
+    placeholderData: keepPreviousData,
+  })
+
+  // Heatmap query - day_of_week x hour aggregation (no comparison)
+  const heatmapQuery = {
+    workspace_id: workspaceId,
+    metrics: ['sessions', 'median_duration'],
+    dimensions: ['day_of_week', 'hour'],
+    dateRange: {
+      preset: period as DatePreset,
+      ...(period === 'custom' && customStart && customEnd && {
+        start: customStart,
+        end: customEnd,
+        preset: undefined,
+      }),
+    },
+    timezone,
+  }
+
+  const { data: heatmapResponse, isFetching: heatmapFetching } = useQuery({
+    ...analyticsQueryOptions(heatmapQuery),
+    placeholderData: keepPreviousData,
+  })
+
   // Transform API response to widget format
   const pagesData: PageData[] = useMemo(() => {
     if (!pagesResponse?.data) return []
@@ -408,6 +528,112 @@ export function DashboardGrid({
     }))
   }, [countriesResponse])
 
+  // Transform devices response to widget format
+  const devicesData: DeviceData[] = useMemo(() => {
+    if (!devicesResponse?.data) return []
+
+    const hasComparison = typeof devicesResponse.data === 'object' && 'current' in devicesResponse.data
+
+    if (hasComparison) {
+      const { current, previous } = devicesResponse.data as {
+        current: Record<string, unknown>[]
+        previous: Record<string, unknown>[]
+      }
+      return current.map((row) => {
+        const prevRow = previous?.find((p) => p.device === row.device)
+        return {
+          dimension_value: row.device as string,
+          sessions: row.sessions as number,
+          median_duration: row.median_duration as number,
+          prev_sessions: prevRow?.sessions as number | undefined,
+          prev_median_duration: prevRow?.median_duration as number | undefined,
+        }
+      })
+    }
+
+    return (devicesResponse.data as Record<string, unknown>[]).map((row) => ({
+      dimension_value: row.device as string,
+      sessions: row.sessions as number,
+      median_duration: row.median_duration as number,
+    }))
+  }, [devicesResponse])
+
+  // Transform browsers response to widget format
+  const browsersData: DeviceData[] = useMemo(() => {
+    if (!browsersResponse?.data) return []
+
+    const hasComparison = typeof browsersResponse.data === 'object' && 'current' in browsersResponse.data
+
+    if (hasComparison) {
+      const { current, previous } = browsersResponse.data as {
+        current: Record<string, unknown>[]
+        previous: Record<string, unknown>[]
+      }
+      return current.map((row) => {
+        const prevRow = previous?.find((p) => p.browser === row.browser)
+        return {
+          dimension_value: row.browser as string,
+          sessions: row.sessions as number,
+          median_duration: row.median_duration as number,
+          prev_sessions: prevRow?.sessions as number | undefined,
+          prev_median_duration: prevRow?.median_duration as number | undefined,
+        }
+      })
+    }
+
+    return (browsersResponse.data as Record<string, unknown>[]).map((row) => ({
+      dimension_value: row.browser as string,
+      sessions: row.sessions as number,
+      median_duration: row.median_duration as number,
+    }))
+  }, [browsersResponse])
+
+  // Transform OS response to widget format
+  const osData: DeviceData[] = useMemo(() => {
+    if (!osResponse?.data) return []
+
+    const hasComparison = typeof osResponse.data === 'object' && 'current' in osResponse.data
+
+    if (hasComparison) {
+      const { current, previous } = osResponse.data as {
+        current: Record<string, unknown>[]
+        previous: Record<string, unknown>[]
+      }
+      return current.map((row) => {
+        const prevRow = previous?.find((p) => p.os === row.os)
+        return {
+          dimension_value: row.os as string,
+          sessions: row.sessions as number,
+          median_duration: row.median_duration as number,
+          prev_sessions: prevRow?.sessions as number | undefined,
+          prev_median_duration: prevRow?.median_duration as number | undefined,
+        }
+      })
+    }
+
+    return (osResponse.data as Record<string, unknown>[]).map((row) => ({
+      dimension_value: row.os as string,
+      sessions: row.sessions as number,
+      median_duration: row.median_duration as number,
+    }))
+  }, [osResponse])
+
+  // Transform heatmap response to widget format (no comparison support)
+  const heatmapData: HeatmapDataPoint[] = useMemo(() => {
+    if (!heatmapResponse?.data) return []
+
+    const rows = Array.isArray(heatmapResponse.data)
+      ? heatmapResponse.data
+      : []
+
+    return rows.map((row: Record<string, unknown>) => ({
+      day_of_week: row.day_of_week as number,
+      hour: row.hour as number,
+      sessions: row.sessions as number,
+      median_duration: row.median_duration as number,
+    }))
+  }, [heatmapResponse])
+
   if (isError) {
     return (
       <Alert
@@ -489,6 +715,23 @@ export function DashboardGrid({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+        <CountriesMapWidget
+          title="Countries Map"
+          data={countriesData}
+          loading={countriesFetching && !countriesResponse}
+          timescoreReference={timescoreReference}
+          emptyText="No country data"
+        />
+        <TrafficHeatmapWidget
+          title="Traffic by Day and Hour"
+          data={heatmapData}
+          loading={heatmapFetching && !heatmapResponse}
+          timescoreReference={timescoreReference}
+          emptyText="No traffic data"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
         <TabbedCountriesWidget
           title="Top Countries"
           data={countriesData}
@@ -497,12 +740,16 @@ export function DashboardGrid({
           timescoreReference={timescoreReference}
           emptyText="No country data"
         />
-        <CountriesMapWidget
-          title="Countries Map"
-          data={countriesData}
-          loading={countriesFetching && !countriesResponse}
+        <TabbedDevicesWidget
+          title="Devices"
+          devicesData={devicesData}
+          browsersData={browsersData}
+          osData={osData}
+          devicesLoading={devicesFetching && !devicesResponse}
+          browsersLoading={browsersFetching && !browsersResponse}
+          osLoading={osFetching && !osResponse}
+          showComparison={showComparison}
           timescoreReference={timescoreReference}
-          emptyText="No country data"
         />
       </div>
     </div>

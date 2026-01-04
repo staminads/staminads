@@ -5,7 +5,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { App, ConfigProvider } from 'antd'
 import type { ThemeConfig } from 'antd'
 import { createAppRouter } from './router'
-import { AuthProvider, useAuth } from './lib/auth'
+import { AuthProvider } from './lib/auth'
+import { useAuth } from './lib/useAuth'
 import './index.css'
 import 'flag-icons/css/flag-icons.min.css'
 
@@ -40,7 +41,7 @@ const theme: ThemeConfig = {
   },
 }
 
-function InnerApp() {
+export function InnerApp() {
   const auth = useAuth()
 
   if (auth.isLoading) {

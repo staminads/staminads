@@ -1,24 +1,20 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
+import { AuthContext } from './AuthContext'
 
-export interface AuthState {
-  token: string | null
-  isAuthenticated: boolean
-  isLoading: boolean
-  login: (email: string, password: string) => Promise<void>
-  logout: () => void
+// Re-export types for convenience
+export type { AuthState } from './AuthContext'
+
+// Helper to get token from localStorage (runs once during initial render)
+function getStoredToken(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem('token')
 }
 
-const AuthContext = createContext<AuthState | null>(null)
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-
-  useEffect(() => {
-    const stored = localStorage.getItem('token')
-    setToken(stored)
-    setIsLoading(false)
-  }, [])
+  // Use lazy initialization to avoid useEffect
+  const [token, setToken] = useState<string | null>(getStoredToken)
+  // Since we're using lazy init, loading is false immediately
+  const [isLoading] = useState(false)
 
   const login = async (email: string, password: string) => {
     const res = await fetch('/api/auth.login', {
@@ -50,8 +46,3 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 }
 
-export const useAuth = () => {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
-  return ctx
-}

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo } from 'react'
 import { Modal, Button, Tag, Empty, Checkbox, message, Row, Col } from 'antd'
 import { CloseOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
@@ -30,15 +30,6 @@ export function BreakdownModal({
 }: BreakdownModalProps) {
   const [selectedDimensions, setSelectedDimensions] = useState<string[]>(initialDimensions)
   const { data: dimensionsData } = useQuery(analyticsDimensionsQueryOptions)
-  const prevOpenRef = useRef(open)
-
-  // Reset selection only when modal opens (transitions from closed to open)
-  useEffect(() => {
-    if (open && !prevOpenRef.current) {
-      setSelectedDimensions(initialDimensions)
-    }
-    prevOpenRef.current = open
-  }, [open, initialDimensions])
 
   const dimensionsByCategory = useMemo(() => {
     if (!dimensionsData) return {}
@@ -89,7 +80,14 @@ export function BreakdownModal({
   }
 
   const handleCancel = () => {
+    setSelectedDimensions(initialDimensions) // Reset for next open
     onCancel()
+  }
+
+  const handleAfterOpenChange = (isOpen: boolean) => {
+    if (isOpen) {
+      setSelectedDimensions(initialDimensions)
+    }
   }
 
   return (
@@ -97,6 +95,7 @@ export function BreakdownModal({
       title={title}
       open={open}
       onCancel={handleCancel}
+      afterOpenChange={handleAfterOpenChange}
       width={1000}
       centered
       styles={{

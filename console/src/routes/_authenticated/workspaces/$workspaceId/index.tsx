@@ -48,7 +48,6 @@ function Dashboard() {
       <DashboardGrid
         workspaceId={workspaceId}
         workspaceTimezone={workspace.timezone}
-        workspaceCreatedAt={workspace.created_at}
         timescoreReference={workspace.settings.timescore_reference ?? 60}
         comparison={comparison}
         customStart={customStart}

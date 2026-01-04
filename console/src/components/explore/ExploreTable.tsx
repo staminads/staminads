@@ -251,6 +251,7 @@ export function ExploreTable({
   }, [
     dimensions,
     maxMedianDuration,
+    timescoreReference,
     showComparison,
     customDimensionLabels,
     totals,

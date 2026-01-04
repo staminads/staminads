@@ -9,7 +9,8 @@
     "dev": "vite",
     "prebuild": "npm run copy-sdk",
     "build": "tsc -b && vite build",
-    "lint": "eslint .",
+    "type-check": "tsc -p tsconfig.app.json --noEmit",
+    "lint": "eslint . && tsc -p tsconfig.app.json --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
