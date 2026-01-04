@@ -8,6 +8,7 @@ import { MembersService } from './members.service';
 import { ClickHouseService } from '../database/clickhouse.service';
 import { UsersService } from '../users/users.service';
 import { AuditService } from '../audit/audit.service';
+import { AuthService } from '../auth/auth.service';
 import {
   WorkspaceMembership,
   MemberWithUser,
@@ -18,6 +19,7 @@ describe('MembersService', () => {
   let clickhouseService: jest.Mocked<ClickHouseService>;
   let usersService: jest.Mocked<UsersService>;
   let auditService: jest.Mocked<AuditService>;
+  let authService: jest.Mocked<AuthService>;
 
   // Test data
   const workspaceId = 'ws_test123';
@@ -158,6 +160,10 @@ describe('MembersService', () => {
       log: jest.fn(),
     };
 
+    const mockAuthService = {
+      revokeAllSessions: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MembersService,
@@ -173,6 +179,10 @@ describe('MembersService', () => {
           provide: AuditService,
           useValue: mockAuditService,
         },
+        {
+          provide: AuthService,
+          useValue: mockAuthService,
+        },
       ],
     }).compile();
 
@@ -180,6 +190,7 @@ describe('MembersService', () => {
     clickhouseService = module.get(ClickHouseService);
     usersService = module.get(UsersService);
     auditService = module.get(AuditService);
+    authService = module.get(AuthService);
   });
 
   afterEach(() => {
@@ -735,9 +746,13 @@ describe('MembersService', () => {
           metadata: {
             user_id: editorId,
             role: 'editor',
+            sessions_revoked: true,
           },
         }),
       );
+
+      // Verify sessions were revoked
+      expect(authService.revokeAllSessions).toHaveBeenCalledWith(editorId);
     });
 
     it('should successfully remove member as admin', async () => {

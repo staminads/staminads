@@ -4,9 +4,15 @@ import { SmtpService } from './smtp.service';
 import { SmtpController } from './smtp.controller';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
 import { MailModule } from '../mail/mail.module';
+import { MembersModule } from '../members/members.module';
 
 @Module({
-  imports: [ConfigModule, WorkspacesModule, forwardRef(() => MailModule)],
+  imports: [
+    ConfigModule,
+    WorkspacesModule,
+    forwardRef(() => MailModule),
+    forwardRef(() => MembersModule),
+  ],
   controllers: [SmtpController],
   providers: [SmtpService],
   exports: [SmtpService],

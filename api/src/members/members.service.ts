@@ -3,10 +3,13 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { ClickHouseService } from '../database/clickhouse.service';
 import { UsersService } from '../users/users.service';
 import { AuditService } from '../audit/audit.service';
+import { AuthService } from '../auth/auth.service';
 import {
   WorkspaceMembership,
   MemberWithUser,
@@ -59,6 +62,8 @@ export class MembersService {
     private readonly clickhouse: ClickHouseService,
     private readonly usersService: UsersService,
     private readonly auditService: AuditService,
+    @Inject(forwardRef(() => AuthService))
+    private readonly authService: AuthService,
   ) {}
 
   /**
@@ -295,6 +300,9 @@ export class MembersService {
       `ALTER TABLE workspace_memberships DELETE WHERE id = '${targetMembership.id}'`,
     );
 
+    // Revoke all sessions for the removed user to force immediate logout
+    await this.authService.revokeAllSessions(dto.user_id);
+
     // Log audit event
     await this.auditService.log({
       user_id: actorId,
@@ -305,6 +313,7 @@ export class MembersService {
       metadata: {
         user_id: dto.user_id,
         role: targetMembership.role,
+        sessions_revoked: true,
       },
     });
   }

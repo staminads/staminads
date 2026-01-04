@@ -6,7 +6,6 @@ import {
   ApiQuery,
   ApiResponse,
 } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { SmtpService, SmtpInfo } from './smtp.service';
 import { MailService } from '../mail/mail.service';
 import {
@@ -15,10 +14,11 @@ import {
   DeleteSmtpDto,
   TestSmtpDto,
 } from './dto/smtp-settings.dto';
+import { WorkspaceAuthGuard } from '../common/guards/workspace.guard';
+import { RequirePermission } from '../common/decorators/require-permission.decorator';
 
 @ApiTags('smtp')
 @ApiSecurity('jwt-auth')
-@UseGuards(JwtAuthGuard)
 @Controller('api')
 export class SmtpController {
   constructor(
@@ -27,6 +27,7 @@ export class SmtpController {
   ) {}
 
   @Get('smtp.info')
+  @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Get SMTP status and settings' })
   @ApiQuery({ name: 'workspace_id', type: String, required: true })
   @ApiResponse({ status: 200, description: 'SMTP info (status + settings)' })
@@ -35,23 +36,26 @@ export class SmtpController {
   }
 
   @Post('smtp.update')
+  @UseGuards(WorkspaceAuthGuard)
+  @RequirePermission('workspace.smtp')
   @ApiOperation({ summary: 'Update SMTP settings (owner only)' })
   @ApiResponse({ status: 200, description: 'Updated SMTP settings' })
   async update(@Body() dto: UpdateSmtpDto): Promise<SmtpSettingsDto> {
-    // TODO: Check user is workspace owner
     return this.smtpService.updateSettings(dto.workspace_id, dto);
   }
 
   @Post('smtp.delete')
+  @UseGuards(WorkspaceAuthGuard)
+  @RequirePermission('workspace.smtp')
   @ApiOperation({ summary: 'Remove workspace SMTP (fall back to global)' })
   @ApiResponse({ status: 200, description: 'SMTP settings removed' })
   async delete(@Body() dto: DeleteSmtpDto): Promise<{ success: boolean }> {
-    // TODO: Check user is workspace owner
     await this.smtpService.deleteSettings(dto.workspace_id);
     return { success: true };
   }
 
   @Post('smtp.test')
+  @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Send test email' })
   @ApiResponse({ status: 200, description: 'Test email sent' })
   async test(@Body() dto: TestSmtpDto): Promise<{ success: boolean; message: string }> {

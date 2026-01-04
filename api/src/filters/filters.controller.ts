@@ -14,7 +14,6 @@ import {
   ApiQuery,
   ApiResponse,
 } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { FiltersService } from './filters.service';
 import { FilterBackfillService } from './backfill/backfill.service';
 import { FilterDefinition } from './entities/filter.entity';
@@ -24,10 +23,10 @@ import { ReorderFiltersDto } from './dto/reorder-filters.dto';
 import { StartBackfillDto } from './backfill/dto/start-backfill.dto';
 import { BackfillTaskProgress } from './backfill/backfill-task.entity';
 import { BackfillSummary } from './backfill/backfill.service';
+import { WorkspaceAuthGuard } from '../common/guards/workspace.guard';
 
 @ApiTags('filters')
 @ApiSecurity('jwt-auth')
-@UseGuards(JwtAuthGuard)
 @Controller('api')
 export class FiltersController {
   constructor(
@@ -36,6 +35,7 @@ export class FiltersController {
   ) {}
 
   @Get('filters.list')
+  @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'List filters for workspace' })
   @ApiQuery({ name: 'workspace_id', type: String, required: true })
   @ApiQuery({
@@ -54,6 +54,7 @@ export class FiltersController {
   }
 
   @Get('filters.get')
+  @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Get filter by ID' })
   @ApiQuery({ name: 'workspace_id', type: String, required: true })
   @ApiQuery({ name: 'id', type: String, required: true })
@@ -66,6 +67,7 @@ export class FiltersController {
   }
 
   @Post('filters.create')
+  @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Create filter' })
   @ApiResponse({ status: 201, description: 'Created filter' })
   async create(@Body() dto: CreateFilterDto): Promise<FilterDefinition> {
@@ -73,6 +75,7 @@ export class FiltersController {
   }
 
   @Post('filters.update')
+  @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Update filter' })
   @ApiResponse({ status: 200, description: 'Updated filter' })
   async update(@Body() dto: UpdateFilterDto): Promise<FilterDefinition> {
@@ -80,6 +83,7 @@ export class FiltersController {
   }
 
   @Post('filters.delete')
+  @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Delete filter' })
   @ApiQuery({ name: 'workspace_id', type: String, required: true })
   @ApiQuery({ name: 'id', type: String, required: true })
@@ -93,6 +97,7 @@ export class FiltersController {
   }
 
   @Post('filters.reorder')
+  @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Reorder filters' })
   @ApiResponse({ status: 200, description: 'Filters reordered' })
   async reorder(@Body() dto: ReorderFiltersDto): Promise<{ success: boolean }> {
@@ -101,6 +106,7 @@ export class FiltersController {
   }
 
   @Get('filters.listTags')
+  @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'List unique tags across all filters' })
   @ApiQuery({ name: 'workspace_id', type: String, required: true })
   @ApiResponse({ status: 200, description: 'List of unique tags' })
@@ -111,6 +117,7 @@ export class FiltersController {
   }
 
   @Post('filters.backfillStart')
+  @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Start background backfill for all filters' })
   @ApiResponse({ status: 201, description: 'Task created' })
   async backfillStart(
@@ -143,28 +150,24 @@ export class FiltersController {
   }
 
   @Get('filters.backfillList')
+  @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'List backfill tasks for workspace' })
   @ApiQuery({ name: 'workspace_id', type: String, required: true })
   @ApiResponse({ status: 200, description: 'List of tasks' })
   async backfillList(
     @Query('workspace_id') workspaceId: string,
   ): Promise<BackfillTaskProgress[]> {
-    if (!workspaceId) {
-      throw new BadRequestException('workspace_id is required');
-    }
     return this.backfillService.listTasks(workspaceId);
   }
 
   @Get('filters.backfillSummary')
+  @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Get backfill status summary for workspace' })
   @ApiQuery({ name: 'workspace_id', type: String, required: true })
   @ApiResponse({ status: 200, description: 'Backfill summary' })
   async backfillSummary(
     @Query('workspace_id') workspaceId: string,
   ): Promise<BackfillSummary> {
-    if (!workspaceId) {
-      throw new BadRequestException('workspace_id is required');
-    }
     return this.backfillService.getBackfillSummary(workspaceId);
   }
 }

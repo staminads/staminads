@@ -6,6 +6,7 @@ import {
   Post,
   Query,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -20,6 +21,8 @@ import { CreateApiKeyDto } from './dto/create-api-key.dto';
 import { ListApiKeysDto } from './dto/list-api-keys.dto';
 import { RevokeApiKeyDto } from './dto/revoke-api-key.dto';
 import { CreateApiKeyResponseDto } from './dto/create-api-key-response.dto';
+import { WorkspaceAuthGuard } from '../common/guards/workspace.guard';
+import { RequirePermission } from '../common/decorators/require-permission.decorator';
 
 @ApiTags('api-keys')
 @ApiSecurity('jwt-auth')
@@ -28,6 +31,8 @@ export class ApiKeysController {
   constructor(private readonly apiKeysService: ApiKeysService) {}
 
   @Post('apiKeys.create')
+  @UseGuards(WorkspaceAuthGuard)
+  @RequirePermission('apiKeys.manage')
   @ApiOperation({ summary: 'Create a new API key' })
   @ApiResponse({
     status: 201,

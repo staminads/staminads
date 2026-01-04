@@ -6,6 +6,7 @@ import {
   Post,
   Query,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -17,6 +18,8 @@ import {
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { WorkspacesService } from './workspaces.service';
+import { WorkspaceAuthGuard } from '../common/guards/workspace.guard';
+import { RequirePermission } from '../common/decorators/require-permission.decorator';
 
 @ApiTags('workspaces')
 @ApiSecurity('jwt-auth')
@@ -31,6 +34,7 @@ export class WorkspacesController {
   }
 
   @Get('workspaces.get')
+  @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Get workspace by ID' })
   @ApiQuery({ name: 'id', type: String, required: true })
   get(@Query('id') id: string) {
@@ -44,6 +48,8 @@ export class WorkspacesController {
   }
 
   @Post('workspaces.update')
+  @UseGuards(WorkspaceAuthGuard)
+  @RequirePermission('workspace.settings')
   @ApiOperation({ summary: 'Update an existing workspace' })
   update(@Body() dto: UpdateWorkspaceDto) {
     return this.workspacesService.update(dto);
@@ -51,6 +57,8 @@ export class WorkspacesController {
 
   @Post('workspaces.delete')
   @HttpCode(200)
+  @UseGuards(WorkspaceAuthGuard)
+  @RequirePermission('workspace.delete')
   @ApiOperation({ summary: 'Delete a workspace' })
   @ApiBody({
     schema: {

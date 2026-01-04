@@ -17,6 +17,10 @@ export const PERMISSIONS = {
   'workspace.smtp': ['owner'],
   'workspace.delete': ['owner'],
 
+  // API Keys
+  'apiKeys.view': ['owner', 'admin'],
+  'apiKeys.manage': ['owner', 'admin'],
+
   // Team management
   'members.invite': ['owner', 'admin'],
   'members.manage': ['owner', 'admin'],

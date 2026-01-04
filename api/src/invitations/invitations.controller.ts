@@ -15,7 +15,6 @@ import {
   ApiQuery,
   ApiResponse,
 } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Public } from '../common/decorators/public.decorator';
 import { InvitationsService } from './invitations.service';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
@@ -25,6 +24,8 @@ import {
 } from './dto/accept-invitation.dto';
 import { InvitationIdDto } from './dto/invitation-id.dto';
 import { InvitationWithInviter } from '../common/entities';
+import { WorkspaceAuthGuard } from '../common/guards/workspace.guard';
+import { RequirePermission } from '../common/decorators/require-permission.decorator';
 
 @ApiTags('invitations')
 @Controller('api')
@@ -33,7 +34,7 @@ export class InvitationsController {
 
   @Get('invitations.list')
   @ApiSecurity('jwt-auth')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'List workspace invitations' })
   @ApiQuery({ name: 'workspaceId', type: String, required: true })
   @ApiResponse({ status: 200, description: 'List of pending invitations' })
@@ -45,7 +46,8 @@ export class InvitationsController {
 
   @Post('invitations.create')
   @ApiSecurity('jwt-auth')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(WorkspaceAuthGuard)
+  @RequirePermission('members.invite')
   @ApiOperation({ summary: 'Send invitation email' })
   @ApiResponse({
     status: 201,
@@ -58,13 +60,13 @@ export class InvitationsController {
   @Post('invitations.resend')
   @HttpCode(200)
   @ApiSecurity('jwt-auth')
-  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Resend invitation email' })
   @ApiResponse({ status: 200, description: 'Invitation email resent' })
   async resend(
     @Req() req: any,
     @Body() dto: InvitationIdDto,
   ): Promise<{ success: boolean }> {
+    // Service validates membership via invitation's workspace_id
     await this.invitationsService.resend(dto.id, req.user.id);
     return { success: true };
   }
@@ -72,13 +74,13 @@ export class InvitationsController {
   @Post('invitations.revoke')
   @HttpCode(200)
   @ApiSecurity('jwt-auth')
-  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Revoke pending invitation' })
   @ApiResponse({ status: 200, description: 'Invitation revoked' })
   async revoke(
     @Req() req: any,
     @Body() dto: InvitationIdDto,
   ): Promise<{ success: boolean }> {
+    // Service validates membership via invitation's workspace_id
     await this.invitationsService.revoke(dto.id, req.user.id);
     return { success: true };
   }

@@ -1,8 +1,9 @@
-import { Controller, Post, Get, Body, HttpCode } from '@nestjs/common';
+import { Controller, Post, Get, Body, HttpCode, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { AnalyticsService } from './analytics.service';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
 import { ExtremesQueryDto, ExtremesResponse } from './dto/extremes-query.dto';
+import { WorkspaceAuthGuard } from '../common/guards/workspace.guard';
 
 @ApiTags('analytics')
 @ApiSecurity('jwt-auth')
@@ -12,6 +13,7 @@ export class AnalyticsController {
 
   @Post('analytics.query')
   @HttpCode(200)
+  @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Execute an analytics query' })
   async query(@Body() dto: AnalyticsQueryDto) {
     return this.analyticsService.query(dto);
@@ -19,6 +21,7 @@ export class AnalyticsController {
 
   @Post('analytics.extremes')
   @HttpCode(200)
+  @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({
     summary: 'Get min/max extremes of a metric across grouped data',
   })

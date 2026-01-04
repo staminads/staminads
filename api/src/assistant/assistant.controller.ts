@@ -7,6 +7,7 @@ import {
   Res,
   HttpCode,
   Header,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -17,6 +18,7 @@ import {
 import type { Response } from 'express';
 import { AssistantService } from './assistant.service';
 import { ChatRequestDto, ChatJobResponse } from './dto/chat.dto';
+import { WorkspaceAuthGuard } from '../common/guards/workspace.guard';
 
 @ApiTags('assistant')
 @ApiSecurity('jwt-auth')
@@ -26,6 +28,7 @@ export class AssistantController {
 
   @Post('assistant.chat')
   @HttpCode(200)
+  @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({
     summary: 'Create an AI assistant chat job',
     description:

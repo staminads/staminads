@@ -3,33 +3,89 @@ import {
   CanActivate,
   ExecutionContext,
   ForbiddenException,
+  BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { ApiKeyPayload } from '../../auth/strategies/api-key.strategy';
+import { MembersService } from '../../members/members.service';
+import { hasPermission, Permission } from '../permissions';
+import { REQUIRED_PERMISSION_KEY } from '../decorators/require-permission.decorator';
 
 /**
- * Guard that validates the workspace_id in the request body
- * matches the workspace bound to the API key.
+ * Unified guard that validates workspace access for both API keys and JWT users.
+ *
+ * For API keys: validates the workspace_id in the request matches the API key's bound workspace.
+ * For JWT users: validates the user is a member of the workspace.
+ *
+ * Optionally checks permissions when @RequirePermission() decorator is present.
  */
 @Injectable()
-export class WorkspaceGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
-    const request = context.switchToHttp().getRequest();
-    const user = request.user as ApiKeyPayload;
-    const body = request.body;
+export class WorkspaceAuthGuard implements CanActivate {
+  constructor(
+    private reflector: Reflector,
+    @Inject(forwardRef(() => MembersService))
+    private membersService: MembersService,
+  ) {}
 
-    if (!user || user.type !== 'api-key') {
-      return true; // Let other guards handle non-API-key auth
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest();
+    const user = request.user;
+
+    // Extract workspace_id from various locations:
+    // - First check body (for POST/PUT/DELETE)
+    // - Then check query params (for GET, or POST with query params like filters.delete)
+    // - Also check for 'id' field in workspaces controller context
+    // - Support both snake_case (workspace_id) and camelCase (workspaceId)
+    const workspaceId =
+      request.body?.workspace_id ||
+      request.body?.workspaceId ||
+      request.body?.id ||
+      request.query?.workspace_id ||
+      request.query?.workspaceId ||
+      request.query?.id;
+
+    if (!workspaceId) {
+      throw new BadRequestException('workspace_id is required');
     }
 
-    // Check workspace_id in body matches API key's workspace
-    const workspaceId = body?.workspace_id;
+    // API Key auth: validate workspace binding
+    if (user?.type === 'api-key') {
+      const apiKeyUser = user as ApiKeyPayload;
+      if (workspaceId !== apiKeyUser.workspaceId) {
+        throw new ForbiddenException(
+          'API key not authorized for this workspace',
+        );
+      }
+      return true;
+    }
 
-    if (workspaceId && workspaceId !== user.workspaceId) {
-      throw new ForbiddenException(
-        'API key not authorized for this workspace',
-      );
+    // JWT auth: validate membership
+    const membership = await this.membersService.getMembership(
+      workspaceId,
+      user.id,
+    );
+    if (!membership) {
+      throw new ForbiddenException('Not a member of this workspace');
+    }
+
+    // Attach membership to request for use in controllers
+    request.membership = membership;
+
+    // Check permission if @RequirePermission() decorator is present
+    const requiredPermission = this.reflector.getAllAndOverride<Permission>(
+      REQUIRED_PERMISSION_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
+    if (requiredPermission && !hasPermission(membership.role, requiredPermission)) {
+      throw new ForbiddenException('Insufficient permissions');
     }
 
     return true;
   }
 }
+
+// Keep old name as alias for backwards compatibility with Events controller
+export { WorkspaceAuthGuard as WorkspaceGuard };
