@@ -61,6 +61,22 @@ export class WorkspaceAuthGuard implements CanActivate {
       return true;
     }
 
+    // Super admins can access any workspace
+    if (user.isSuperAdmin) {
+      // Create synthetic owner membership for permission checks
+      request.membership = {
+        id: 'super-admin',
+        workspace_id: workspaceId,
+        user_id: user.id,
+        role: 'owner',
+        invited_by: null,
+        joined_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      return true;
+    }
+
     // JWT auth: validate membership
     const membership = await this.membersService.getMembership(
       workspaceId,

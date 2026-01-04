@@ -24,6 +24,13 @@ describe('WorkspaceAuthGuard', () => {
   const mockJwtUser = {
     id: 'user-001',
     email: 'test@example.com',
+    isSuperAdmin: false,
+  };
+
+  const mockSuperAdminUser = {
+    id: 'admin-001',
+    email: 'admin@example.com',
+    isSuperAdmin: true,
   };
 
   const mockMembership: WorkspaceMembership = {
@@ -149,6 +156,54 @@ describe('WorkspaceAuthGuard', () => {
       await guard.canActivate(context);
 
       expect(mockRequest).toHaveProperty('membership', mockMembership);
+    });
+  });
+
+  describe('Super admin auth', () => {
+    it('allows super admin access to any workspace without membership', async () => {
+      const context = createMockContext(mockSuperAdminUser, {
+        workspace_id: 'ws-any',
+      });
+
+      const result = await guard.canActivate(context);
+
+      expect(result).toBe(true);
+      // Should NOT call getMembership for super admins
+      expect(mockMembersService.getMembership).not.toHaveBeenCalled();
+    });
+
+    it('attaches synthetic owner membership for super admin', async () => {
+      const mockRequest = {
+        user: mockSuperAdminUser,
+        body: { workspace_id: 'ws-001' },
+        query: {},
+        method: 'POST',
+      };
+      const context = {
+        switchToHttp: () => ({
+          getRequest: () => mockRequest,
+        }),
+        getHandler: () => ({}),
+        getClass: () => ({}),
+      } as unknown as ExecutionContext;
+
+      await guard.canActivate(context);
+
+      expect(mockRequest).toHaveProperty('membership');
+      expect((mockRequest as any).membership.role).toBe('owner');
+      expect((mockRequest as any).membership.workspace_id).toBe('ws-001');
+      expect((mockRequest as any).membership.user_id).toBe('admin-001');
+    });
+
+    it('super admin bypasses permission checks with owner role', async () => {
+      mockReflector.getAllAndOverride.mockReturnValue('workspace.delete'); // owner-only permission
+      const context = createMockContext(mockSuperAdminUser, {
+        workspace_id: 'ws-001',
+      });
+
+      const result = await guard.canActivate(context);
+
+      expect(result).toBe(true);
     });
   });
 

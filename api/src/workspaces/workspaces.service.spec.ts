@@ -79,31 +79,61 @@ describe('WorkspacesService', () => {
   });
 
   describe('list', () => {
-    it('returns all workspaces', async () => {
-      clickhouse.querySystem.mockResolvedValue([mockWorkspaceRow]);
+    describe('for super admin users', () => {
+      it('returns all workspaces without filtering', async () => {
+        clickhouse.querySystem.mockResolvedValue([mockWorkspaceRow]);
 
-      const result = await service.list();
+        const result = await service.list(mockSuperAdminUser);
 
-      expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('ws-test-001');
-      expect(result[0].name).toBe('Test Workspace');
+        expect(result).toHaveLength(1);
+        expect(result[0].id).toBe('ws-test-001');
+        expect(result[0].name).toBe('Test Workspace');
+        // Should NOT include membership filter
+        expect(clickhouse.querySystem).toHaveBeenCalledWith(
+          expect.not.stringContaining('workspace_memberships'),
+        );
+      });
+
+      it('returns empty array when no workspaces', async () => {
+        clickhouse.querySystem.mockResolvedValue([]);
+
+        const result = await service.list(mockSuperAdminUser);
+
+        expect(result).toEqual([]);
+      });
+
+      it('parses settings JSON correctly', async () => {
+        clickhouse.querySystem.mockResolvedValue([mockWorkspaceRow]);
+
+        const result = await service.list(mockSuperAdminUser);
+
+        expect(result[0].settings).toEqual(mockWorkspace.settings);
+        expect(result[0].settings.timescore_reference).toBe(60);
+      });
     });
 
-    it('returns empty array when no workspaces', async () => {
-      clickhouse.querySystem.mockResolvedValue([]);
+    describe('for regular users', () => {
+      it('returns only workspaces where user is a member', async () => {
+        clickhouse.querySystem.mockResolvedValue([mockWorkspaceRow]);
 
-      const result = await service.list();
+        const result = await service.list(mockRegularUser);
 
-      expect(result).toEqual([]);
-    });
+        expect(result).toHaveLength(1);
+        expect(result[0].id).toBe('ws-test-001');
+        // Should include membership filter with user ID
+        expect(clickhouse.querySystem).toHaveBeenCalledWith(
+          expect.stringContaining('workspace_memberships'),
+          { userId: mockRegularUser.id },
+        );
+      });
 
-    it('parses settings JSON correctly', async () => {
-      clickhouse.querySystem.mockResolvedValue([mockWorkspaceRow]);
+      it('returns empty array when user has no memberships', async () => {
+        clickhouse.querySystem.mockResolvedValue([]);
 
-      const result = await service.list();
+        const result = await service.list(mockRegularUser);
 
-      expect(result[0].settings).toEqual(mockWorkspace.settings);
-      expect(result[0].settings.timescore_reference).toBe(60);
+        expect(result).toEqual([]);
+      });
     });
   });
 

@@ -169,6 +169,7 @@ describe('AuthService', () => {
             id: 'user-123',
             email: 'test@example.com',
             name: 'Test User',
+            is_super_admin: false,
           },
         });
       });
