@@ -28,7 +28,12 @@ const GRANULARITY_COLUMNS: Record<string, string> = {
 };
 
 export interface AnalyticsResponse {
-  data: Record<string, unknown>[] | { current: Record<string, unknown>[]; previous: Record<string, unknown>[] };
+  data:
+    | Record<string, unknown>[]
+    | {
+        current: Record<string, unknown>[];
+        previous: Record<string, unknown>[];
+      };
   meta: {
     metrics: string[];
     dimensions: string[];
@@ -312,11 +317,9 @@ export class AnalyticsService {
     const { sql, params } = buildExtremesQuery(queryDto, metricContext);
 
     // Execute query - result includes dimension columns for max row
-    const result = await this.clickhouse.queryWorkspace<Record<string, unknown>>(
-      dto.workspace_id,
-      sql,
-      params,
-    );
+    const result = await this.clickhouse.queryWorkspace<
+      Record<string, unknown>
+    >(dto.workspace_id, sql, params);
 
     const row = result[0] || {};
 
@@ -333,7 +336,9 @@ export class AnalyticsService {
       min: (row.min as number) ?? null,
       max: (row.max as number) ?? null,
       maxDimensionValues:
-        Object.keys(maxDimensionValues).length > 0 ? maxDimensionValues : undefined,
+        Object.keys(maxDimensionValues).length > 0
+          ? maxDimensionValues
+          : undefined,
       meta: {
         metric: dto.metric,
         groupBy: dto.groupBy,

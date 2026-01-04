@@ -7,7 +7,10 @@ describe('EventBufferService', () => {
   let service: EventBufferService;
   let clickhouse: jest.Mocked<ClickHouseService>;
 
-  const createEvent = (workspaceId: string, sessionId: string): TrackingEvent => ({
+  const createEvent = (
+    workspaceId: string,
+    sessionId: string,
+  ): TrackingEvent => ({
     workspace_id: workspaceId,
     session_id: sessionId,
     name: 'screen_view',

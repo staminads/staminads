@@ -27,7 +27,9 @@ describe('DemoSecretGuard', () => {
     const context = createMockExecutionContext('some-secret');
 
     expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
-    expect(() => guard.canActivate(context)).toThrow('Demo endpoint not configured');
+    expect(() => guard.canActivate(context)).toThrow(
+      'Demo endpoint not configured',
+    );
   });
 
   it('throws UnauthorizedException when secret parameter missing', () => {
@@ -35,7 +37,9 @@ describe('DemoSecretGuard', () => {
     const context = createMockExecutionContext(undefined);
 
     expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
-    expect(() => guard.canActivate(context)).toThrow('Missing secret parameter');
+    expect(() => guard.canActivate(context)).toThrow(
+      'Missing secret parameter',
+    );
   });
 
   it('throws UnauthorizedException when secret is invalid', () => {

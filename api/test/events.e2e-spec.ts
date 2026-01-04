@@ -4,6 +4,7 @@ import { createClient, ClickHouseClient } from '@clickhouse/client';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { EventBufferService } from '../src/events/event-buffer.service';
+import { generateApiKeyToken } from '../src/common/crypto';
 
 const TEST_SYSTEM_DATABASE = 'staminads_test_system';
 // Workspace ID used in tests - must match what's passed to createTestWorkspace
@@ -21,6 +22,7 @@ describe('Events Integration', () => {
   let workspaceClient: ClickHouseClient;
   let authToken: string;
   let eventBuffer: EventBufferService;
+  let apiKey: string; // Raw API key token
 
   beforeAll(async () => {
     process.env.CLICKHOUSE_SYSTEM_DATABASE = TEST_SYSTEM_DATABASE;
@@ -74,12 +76,15 @@ describe('Events Integration', () => {
   beforeEach(async () => {
     // Clean tables before each test
     await systemClient.command({ query: 'TRUNCATE TABLE workspaces' });
+    await systemClient.command({ query: 'TRUNCATE TABLE api_keys' });
     await workspaceClient.command({ query: 'TRUNCATE TABLE events' });
     await workspaceClient.command({ query: 'TRUNCATE TABLE sessions' });
     await new Promise((resolve) => setTimeout(resolve, 100));
   });
 
-  async function createTestWorkspace(id: string = testWorkspaceId): Promise<string> {
+  async function createTestWorkspace(
+    id: string = testWorkspaceId,
+  ): Promise<string> {
     const workspace = {
       id,
       name: 'Test Workspace',
@@ -100,14 +105,56 @@ describe('Events Integration', () => {
     return id;
   }
 
-  describe('POST /api/track', () => {
-    it('accepts event and stores in ClickHouse', async () => {
-      const workspaceId = await createTestWorkspace();
+  async function createTestApiKey(
+    workspaceId: string,
+    scopes: string[] = ['events.track'],
+  ): Promise<string> {
+    const { key, hash, prefix } = generateApiKeyToken();
+    const now = toClickHouseDateTime();
 
+    await systemClient.insert({
+      table: 'api_keys',
+      values: [
+        {
+          id: `key-${Date.now()}`,
+          key_hash: hash,
+          key_prefix: prefix,
+          user_id: 'test-user',
+          workspace_id: workspaceId,
+          name: 'Test API Key',
+          description: '',
+          scopes: JSON.stringify(scopes),
+          status: 'active',
+          expires_at: null,
+          last_used_at: null,
+          failed_attempts_count: 0,
+          last_failed_attempt_at: null,
+          created_by: 'test-user',
+          revoked_by: null,
+          revoked_at: null,
+          created_at: now,
+          updated_at: now,
+        },
+      ],
+      format: 'JSONEachRow',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    return key;
+  }
+
+  describe('POST /api/track', () => {
+    beforeEach(async () => {
+      const workspaceId = await createTestWorkspace();
+      apiKey = await createTestApiKey(workspaceId);
+    });
+
+    it('accepts event and stores in ClickHouse', async () => {
       const response = await request(app.getHttpServer())
         .post('/api/track')
+        .set('Authorization', `Bearer ${apiKey}`)
         .send({
-          workspace_id: workspaceId,
+          workspace_id: testWorkspaceId,
           session_id: 'session-1',
           name: 'screen_view',
           path: '/test-page',
@@ -130,10 +177,10 @@ describe('Events Integration', () => {
         query_params: { session_id: 'session-1' },
         format: 'JSONEachRow',
       });
-      const events = (await result.json()) as Array<Record<string, unknown>>;
+      const events = (await result.json()) as Record<string, unknown>[];
 
       expect(events).toHaveLength(1);
-      expect(events[0].workspace_id).toBe(workspaceId);
+      expect(events[0].workspace_id).toBe(testWorkspaceId);
       expect(events[0].name).toBe('screen_view');
       expect(events[0].path).toBe('/test-page');
     });
@@ -141,6 +188,7 @@ describe('Events Integration', () => {
     it('rejects invalid workspace_id', async () => {
       await request(app.getHttpServer())
         .post('/api/track')
+        .set('Authorization', `Bearer ${apiKey}`)
         .send({
           workspace_id: 'non-existent',
           session_id: 'test',
@@ -150,36 +198,145 @@ describe('Events Integration', () => {
           created_at: Date.now(),
           updated_at: Date.now(),
         })
-        .expect(400);
+        .expect(403); // Forbidden - API key not authorized for this workspace
     });
 
-    it('is public (no auth required)', async () => {
-      const workspaceId = await createTestWorkspace();
-
+    it('requires API key authentication', async () => {
       // Note: No Authorization header
       const response = await request(app.getHttpServer())
         .post('/api/track')
         .send({
-          workspace_id: workspaceId,
-          session_id: 'session-public',
+          workspace_id: testWorkspaceId,
+          session_id: 'session-no-auth',
           name: 'screen_view',
-          path: '/public-test',
-          landing_page: 'https://test.com/public-test',
+          path: '/no-auth-test',
+          landing_page: 'https://test.com/no-auth-test',
           created_at: Date.now(),
           updated_at: Date.now(),
         })
-        .expect(200);
+        .expect(401);
 
-      expect(response.body.success).toBe(true);
+      expect(response.body.message).toBe('Unauthorized');
     });
 
-    it('rejects missing required fields', async () => {
-      const workspaceId = await createTestWorkspace();
+    it('rejects invalid API key format', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/track')
+        .set('Authorization', 'Bearer invalid_token_format')
+        .send({
+          workspace_id: testWorkspaceId,
+          session_id: 'session-invalid',
+          name: 'screen_view',
+          path: '/invalid-test',
+          landing_page: 'https://test.com/invalid-test',
+          created_at: Date.now(),
+          updated_at: Date.now(),
+        })
+        .expect(401);
+
+      expect(response.body.message).toBe('Invalid API key format');
+    });
+
+    it('rejects API key for different workspace', async () => {
+      // Create another workspace
+      await createTestWorkspace('other_ws');
+      const otherApiKey = await createTestApiKey('other_ws');
 
       await request(app.getHttpServer())
         .post('/api/track')
+        .set('Authorization', `Bearer ${otherApiKey}`)
         .send({
-          workspace_id: workspaceId,
+          workspace_id: testWorkspaceId, // Trying to use API key from other_ws
+          session_id: 'session-wrong-ws',
+          name: 'screen_view',
+          path: '/wrong-ws-test',
+          landing_page: 'https://test.com/wrong-ws-test',
+          created_at: Date.now(),
+          updated_at: Date.now(),
+        })
+        .expect(403);
+    });
+
+    it('rejects API key without events.track scope', async () => {
+      const readOnlyKey = await createTestApiKey(testWorkspaceId, [
+        'analytics.view',
+      ]);
+
+      const response = await request(app.getHttpServer())
+        .post('/api/track')
+        .set('Authorization', `Bearer ${readOnlyKey}`)
+        .send({
+          workspace_id: testWorkspaceId,
+          session_id: 'session-no-scope',
+          name: 'screen_view',
+          path: '/no-scope-test',
+          landing_page: 'https://test.com/no-scope-test',
+          created_at: Date.now(),
+          updated_at: Date.now(),
+        })
+        .expect(403);
+
+      expect(response.body.message).toBe(
+        'Missing required scope: events.track',
+      );
+    });
+
+    it('rejects revoked API key', async () => {
+      // Create and revoke an API key
+      const { key, hash, prefix } = generateApiKeyToken();
+      const now = toClickHouseDateTime();
+
+      await systemClient.insert({
+        table: 'api_keys',
+        values: [
+          {
+            id: 'revoked-key',
+            key_hash: hash,
+            key_prefix: prefix,
+            user_id: 'test-user',
+            workspace_id: testWorkspaceId,
+            name: 'Revoked API Key',
+            description: '',
+            scopes: JSON.stringify(['events.track']),
+            status: 'revoked',
+            expires_at: null,
+            last_used_at: null,
+            failed_attempts_count: 0,
+            last_failed_attempt_at: null,
+            created_by: 'test-user',
+            revoked_by: 'admin',
+            revoked_at: now,
+            created_at: now,
+            updated_at: now,
+          },
+        ],
+        format: 'JSONEachRow',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const response = await request(app.getHttpServer())
+        .post('/api/track')
+        .set('Authorization', `Bearer ${key}`)
+        .send({
+          workspace_id: testWorkspaceId,
+          session_id: 'session-revoked',
+          name: 'screen_view',
+          path: '/revoked-test',
+          landing_page: 'https://test.com/revoked-test',
+          created_at: Date.now(),
+          updated_at: Date.now(),
+        })
+        .expect(401);
+
+      expect(response.body.message).toBe('API key is revoked');
+    });
+
+    it('rejects missing required fields', async () => {
+      await request(app.getHttpServer())
+        .post('/api/track')
+        .set('Authorization', `Bearer ${apiKey}`)
+        .send({
+          workspace_id: testWorkspaceId,
           // missing session_id, name, path, landing_page
         })
         .expect(400);
@@ -187,15 +344,19 @@ describe('Events Integration', () => {
   });
 
   describe('POST /api/track.batch', () => {
-    it('accepts batch of events', async () => {
+    beforeEach(async () => {
       const workspaceId = await createTestWorkspace();
+      apiKey = await createTestApiKey(workspaceId);
+    });
 
+    it('accepts batch of events', async () => {
       const response = await request(app.getHttpServer())
         .post('/api/track.batch')
+        .set('Authorization', `Bearer ${apiKey}`)
         .send({
           events: [
             {
-              workspace_id: workspaceId,
+              workspace_id: testWorkspaceId,
               session_id: 'batch-session-1',
               name: 'screen_view',
               path: '/page-1',
@@ -204,7 +365,7 @@ describe('Events Integration', () => {
               updated_at: Date.now(),
             },
             {
-              workspace_id: workspaceId,
+              workspace_id: testWorkspaceId,
               session_id: 'batch-session-1',
               name: 'scroll',
               path: '/page-1',
@@ -231,21 +392,21 @@ describe('Events Integration', () => {
         query_params: { session_id: 'batch-session-1' },
         format: 'JSONEachRow',
       });
-      const events = (await result.json()) as Array<Record<string, unknown>>;
+      const events = (await result.json()) as Record<string, unknown>[];
 
       expect(events).toHaveLength(2);
     });
 
     it('rejects mixed workspace_ids in batch', async () => {
-      const workspaceId = await createTestWorkspace('ws-1');
       await createTestWorkspace('ws-2');
 
       await request(app.getHttpServer())
         .post('/api/track.batch')
+        .set('Authorization', `Bearer ${apiKey}`)
         .send({
           events: [
             {
-              workspace_id: workspaceId,
+              workspace_id: testWorkspaceId,
               session_id: 'session-1',
               name: 'screen_view',
               path: '/page-1',
@@ -270,24 +431,48 @@ describe('Events Integration', () => {
     it('handles empty batch', async () => {
       const response = await request(app.getHttpServer())
         .post('/api/track.batch')
+        .set('Authorization', `Bearer ${apiKey}`)
         .send({ events: [] })
         .expect(200);
 
       expect(response.body.success).toBe(true);
       expect(response.body.count).toBe(0);
     });
+
+    it('requires API key authentication', async () => {
+      await request(app.getHttpServer())
+        .post('/api/track.batch')
+        .send({
+          events: [
+            {
+              workspace_id: testWorkspaceId,
+              session_id: 'batch-no-auth',
+              name: 'screen_view',
+              path: '/page-1',
+              landing_page: 'https://test.com/page-1',
+              created_at: Date.now(),
+              updated_at: Date.now(),
+            },
+          ],
+        })
+        .expect(401);
+    });
   });
 
   describe('Materialized View', () => {
-    it('populates sessions table from events', async () => {
+    beforeEach(async () => {
       const workspaceId = await createTestWorkspace();
+      apiKey = await createTestApiKey(workspaceId);
+    });
+
+    it('populates sessions table from events', async () => {
       const sessionId = 'mv-test-session';
 
       // Insert multiple events for same session
       const now = Date.now();
       const events = [
         {
-          workspace_id: workspaceId,
+          workspace_id: testWorkspaceId,
           session_id: sessionId,
           name: 'screen_view',
           path: '/entry-page',
@@ -296,7 +481,7 @@ describe('Events Integration', () => {
           updated_at: now,
         },
         {
-          workspace_id: workspaceId,
+          workspace_id: testWorkspaceId,
           session_id: sessionId,
           name: 'scroll',
           path: '/entry-page',
@@ -306,7 +491,7 @@ describe('Events Integration', () => {
           updated_at: now + 100,
         },
         {
-          workspace_id: workspaceId,
+          workspace_id: testWorkspaceId,
           session_id: sessionId,
           name: 'screen_view',
           path: '/exit-page',
@@ -319,6 +504,7 @@ describe('Events Integration', () => {
       for (const event of events) {
         await request(app.getHttpServer())
           .post('/api/track')
+          .set('Authorization', `Bearer ${apiKey}`)
           .send(event)
           .expect(200);
         // Small delay to ensure different timestamps
@@ -332,17 +518,16 @@ describe('Events Integration', () => {
 
       // Query sessions table in workspace database (with FINAL to deduplicate)
       const result = await workspaceClient.query({
-        query:
-          'SELECT * FROM sessions FINAL WHERE id = {id:String} LIMIT 1',
+        query: 'SELECT * FROM sessions FINAL WHERE id = {id:String} LIMIT 1',
         query_params: { id: sessionId },
         format: 'JSONEachRow',
       });
-      const sessions = (await result.json()) as Array<Record<string, unknown>>;
+      const sessions = (await result.json()) as Record<string, unknown>[];
 
       expect(sessions).toHaveLength(1);
       const session = sessions[0];
 
-      expect(session.workspace_id).toBe(workspaceId);
+      expect(session.workspace_id).toBe(testWorkspaceId);
       expect(session.landing_path).toBe('/entry-page');
       expect(session.exit_path).toBe('/exit-page');
       expect(session.max_scroll).toBe(75);

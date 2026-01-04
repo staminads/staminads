@@ -35,6 +35,14 @@ async function generateOpenApiSpec() {
       },
       'demo-secret',
     )
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        description: 'API key in format: sk_live_...',
+      },
+      'api-key',
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

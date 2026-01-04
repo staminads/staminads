@@ -1,4 +1,12 @@
-import { Body, Controller, Get, HttpCode, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Post,
+  Query,
+  Req,
+} from '@nestjs/common';
 import {
   ApiBody,
   ApiOperation,
@@ -31,8 +39,8 @@ export class WorkspacesController {
 
   @Post('workspaces.create')
   @ApiOperation({ summary: 'Create a new workspace' })
-  create(@Body() dto: CreateWorkspaceDto) {
-    return this.workspacesService.create(dto);
+  create(@Req() req: any, @Body() dto: CreateWorkspaceDto) {
+    return this.workspacesService.create(dto, req.user);
   }
 
   @Post('workspaces.update')

@@ -23,7 +23,11 @@ export class ToolsController {
   @Post('tools.websiteMeta')
   @HttpCode(200)
   @ApiOperation({ summary: 'Fetch website title and logo' })
-  @ApiResponse({ status: 200, description: 'Website metadata', type: WebsiteMetaResponse })
+  @ApiResponse({
+    status: 200,
+    description: 'Website metadata',
+    type: WebsiteMetaResponse,
+  })
   @ApiResponse({ status: 400, description: 'Failed to fetch metadata' })
   async websiteMeta(@Body() dto: WebsiteMetaDto): Promise<WebsiteMetaResponse> {
     try {
@@ -38,7 +42,12 @@ export class ToolsController {
   @Public()
   @Get('tools.favicon')
   @ApiOperation({ summary: 'Fetch and proxy website favicon' })
-  @ApiQuery({ name: 'url', type: String, required: true, description: 'Website URL to fetch favicon for' })
+  @ApiQuery({
+    name: 'url',
+    type: String,
+    required: true,
+    description: 'Website URL to fetch favicon for',
+  })
   @ApiResponse({ status: 200, description: 'Favicon image binary' })
   async favicon(
     @Query('url') url: string,

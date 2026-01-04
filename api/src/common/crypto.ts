@@ -1,9 +1,13 @@
 import {
   createCipheriv,
   createDecipheriv,
+  createHash,
   randomBytes,
+  randomUUID,
   pbkdf2Sync,
+  timingSafeEqual,
 } from 'crypto';
+import * as bcrypt from 'bcrypt';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
@@ -16,7 +20,13 @@ const KEY_LENGTH = 32;
  * Uses PBKDF2 with SHA-256 to derive a unique key per workspace.
  */
 export function deriveKey(masterKey: string, workspaceId: string): Buffer {
-  return pbkdf2Sync(masterKey, workspaceId, PBKDF2_ITERATIONS, KEY_LENGTH, 'sha256');
+  return pbkdf2Sync(
+    masterKey,
+    workspaceId,
+    PBKDF2_ITERATIONS,
+    KEY_LENGTH,
+    'sha256',
+  );
 }
 
 /**
@@ -87,4 +97,110 @@ export function decryptApiKey(
 ): string {
   const derivedKey = deriveKey(masterKey, workspaceId);
   return decrypt(encryptedApiKey, derivedKey);
+}
+
+/**
+ * Encrypt a password for workspace SMTP settings.
+ * Uses workspace ID as context for key derivation.
+ */
+export function encryptPassword(
+  password: string,
+  masterKey: string,
+  workspaceId: string,
+): string {
+  const derivedKey = deriveKey(masterKey, workspaceId);
+  return encrypt(password, derivedKey);
+}
+
+/**
+ * Decrypt a password from workspace SMTP settings.
+ * Uses workspace ID as context for key derivation.
+ */
+export function decryptPassword(
+  encryptedPassword: string,
+  masterKey: string,
+  workspaceId: string,
+): string {
+  const derivedKey = deriveKey(masterKey, workspaceId);
+  return decrypt(encryptedPassword, derivedKey);
+}
+
+// =============================================================================
+// Token and Password Utilities (for user invitation system)
+// =============================================================================
+
+const BCRYPT_ROUNDS = 12;
+
+/**
+ * Generate a UUID v4
+ */
+export function generateId(): string {
+  return randomUUID();
+}
+
+/**
+ * Generate a secure random token with its SHA-256 hash.
+ * Used for invitations, password resets, session tokens.
+ * Returns 64-char hex token (256 bits of entropy).
+ */
+export function generateToken(): { token: string; hash: string } {
+  const token = randomBytes(32).toString('hex');
+  const hash = createHash('sha256').update(token).digest('hex');
+  return { token, hash };
+}
+
+/**
+ * Generate an API key with prefix.
+ * Format: sk_live_<64 hex chars>
+ */
+export function generateApiKeyToken(): {
+  key: string;
+  hash: string;
+  prefix: string;
+} {
+  const randomPart = randomBytes(32).toString('hex');
+  const key = `sk_live_${randomPart}`;
+  const hash = createHash('sha256').update(key).digest('hex');
+  const prefix = key.substring(0, 15); // "sk_live_" + 7 chars
+  return { key, hash, prefix };
+}
+
+/**
+ * Hash a token using SHA-256.
+ */
+export function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+/**
+ * Verify a token against a stored hash using constant-time comparison.
+ * Prevents timing attacks.
+ */
+export function verifyTokenHash(token: string, storedHash: string): boolean {
+  const computedHash = createHash('sha256').update(token).digest('hex');
+  try {
+    return timingSafeEqual(
+      Buffer.from(computedHash, 'hex'),
+      Buffer.from(storedHash, 'hex'),
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Hash a password using bcrypt.
+ */
+export async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, BCRYPT_ROUNDS);
+}
+
+/**
+ * Verify a password against a bcrypt hash.
+ */
+export async function verifyPassword(
+  password: string,
+  hash: string,
+): Promise<boolean> {
+  return bcrypt.compare(password, hash);
 }

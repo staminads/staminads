@@ -205,10 +205,8 @@ export const UTM_CAMPAIGNS_TOTAL_WEIGHT = UTM_CAMPAIGNS.reduce(
 export const IPHONE_LAUNCH_CAMPAIGNS = UTM_CAMPAIGNS.filter(
   (c) => c.campaign === 'iphone-launch-2024',
 );
-export const IPHONE_LAUNCH_CAMPAIGNS_TOTAL_WEIGHT = IPHONE_LAUNCH_CAMPAIGNS.reduce(
-  (sum, c) => sum + c.weight,
-  0,
-);
+export const IPHONE_LAUNCH_CAMPAIGNS_TOTAL_WEIGHT =
+  IPHONE_LAUNCH_CAMPAIGNS.reduce((sum, c) => sum + c.weight, 0);
 
 // No UTM placeholder (organic/direct traffic - majority)
 export const NO_UTM_WEIGHT = 60; // 60% of traffic has no UTM

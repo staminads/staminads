@@ -2,7 +2,10 @@ import { BadRequestException } from '@nestjs/common';
 import { AnalyticsService } from '../../analytics/analytics.service';
 import { DIMENSIONS } from '../../analytics/constants/dimensions';
 import { METRICS } from '../../analytics/constants/metrics';
-import { DATE_PRESETS, DatePreset } from '../../analytics/dto/analytics-query.dto';
+import {
+  DATE_PRESETS,
+  DatePreset,
+} from '../../analytics/dto/analytics-query.dto';
 import { ExploreConfigOutput } from '../dto/explore-config.dto';
 import { ToolName } from './tool-definitions';
 
@@ -227,9 +230,7 @@ export class ToolExecutor {
 
     // Validate period is provided
     if (!input.period) {
-      throw new BadRequestException(
-        'Period is required for preview query.',
-      );
+      throw new BadRequestException('Period is required for preview query.');
     }
 
     // Validate period is valid
@@ -316,9 +317,7 @@ export class ToolExecutor {
 
     // Coerce minSessions to number (AI may return string)
     const minSessions =
-      input.minSessions !== undefined
-        ? Number(input.minSessions)
-        : undefined;
+      input.minSessions !== undefined ? Number(input.minSessions) : undefined;
 
     // Build config
     const config: ExploreConfigOutput = {

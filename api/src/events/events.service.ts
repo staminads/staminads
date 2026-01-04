@@ -158,9 +158,9 @@ export class EventsService {
     const baseEvent: TrackingEvent = {
       session_id: dto.session_id,
       workspace_id: dto.workspace_id,
-      received_at: now,  // Server timestamp
-      created_at: toClickHouseDateTime(new Date(dto.created_at)),  // SDK session start
-      updated_at: toClickHouseDateTime(new Date(dto.updated_at)),  // SDK last interaction
+      received_at: now, // Server timestamp
+      created_at: toClickHouseDateTime(new Date(dto.created_at)), // SDK session start
+      updated_at: toClickHouseDateTime(new Date(dto.updated_at)), // SDK last interaction
       name: dto.name,
       path: dto.path,
       duration: dto.duration ?? 0,
@@ -239,7 +239,9 @@ export class EventsService {
 
     if (filters.length > 0) {
       // Use filters system (priority-based)
-      const fieldValues = extractFieldValues(baseEvent as unknown as Record<string, unknown>);
+      const fieldValues = extractFieldValues(
+        baseEvent as unknown as Record<string, unknown>,
+      );
       const { customDimensions: cdValues, modifiedFields } = applyFilterResults(
         filters,
         fieldValues,

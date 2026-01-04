@@ -68,8 +68,8 @@ function InstallSDK() {
     setSkipping(true)
     try {
       await api.workspaces.update({ id: workspaceId, status: 'active' })
-      queryClient.invalidateQueries({ queryKey: ['workspaces', workspaceId] })
-      queryClient.invalidateQueries({ queryKey: ['workspaces'] })
+      await queryClient.refetchQueries({ queryKey: ['workspaces', workspaceId] })
+      await queryClient.refetchQueries({ queryKey: ['workspaces'] })
       await navigate({ to: '/workspaces/$workspaceId', params: { workspaceId } })
     } finally {
       setSkipping(false)

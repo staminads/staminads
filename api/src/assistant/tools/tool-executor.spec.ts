@@ -16,12 +16,12 @@ describe('ToolExecutor', () => {
 
   describe('execute', () => {
     it('throws BadRequestException for unknown tool', async () => {
-      await expect(executor.execute('unknown_tool' as never, {})).rejects.toThrow(
-        BadRequestException,
-      );
-      await expect(executor.execute('unknown_tool' as never, {})).rejects.toThrow(
-        /Unknown tool/,
-      );
+      await expect(
+        executor.execute('unknown_tool' as never, {}),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        executor.execute('unknown_tool' as never, {}),
+      ).rejects.toThrow(/Unknown tool/);
     });
   });
 
@@ -69,10 +69,14 @@ describe('ToolExecutor', () => {
   describe('get_dimension_values', () => {
     it('throws BadRequestException for unknown dimension', async () => {
       await expect(
-        executor.execute('get_dimension_values', { dimension: 'invalid_dimension' }),
+        executor.execute('get_dimension_values', {
+          dimension: 'invalid_dimension',
+        }),
       ).rejects.toThrow(BadRequestException);
       await expect(
-        executor.execute('get_dimension_values', { dimension: 'invalid_dimension' }),
+        executor.execute('get_dimension_values', {
+          dimension: 'invalid_dimension',
+        }),
       ).rejects.toThrow(/Unknown dimension/);
     });
 
@@ -97,7 +101,12 @@ describe('ToolExecutor', () => {
           { device: 'mobile', sessions: 100 },
           { device: 'desktop', sessions: 50 },
         ],
-        meta: { total_rows: 2, metrics: ['sessions'], dimensions: ['device'], dateRange: { start: '2025-01-01', end: '2025-01-07' } },
+        meta: {
+          total_rows: 2,
+          metrics: ['sessions'],
+          dimensions: ['device'],
+          dateRange: { start: '2025-01-01', end: '2025-01-07' },
+        },
         query: { sql: 'SELECT ...', params: {} },
       });
 
@@ -105,7 +114,11 @@ describe('ToolExecutor', () => {
         dimension: 'device',
         period: 'last_7_days',
         limit: 10,
-      })) as { dimension: string; values: Array<{ value: string; sessions: number }>; total_unique: number };
+      })) as {
+        dimension: string;
+        values: Array<{ value: string; sessions: number }>;
+        total_unique: number;
+      };
 
       expect(analyticsService.query).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -128,7 +141,12 @@ describe('ToolExecutor', () => {
           { browser: 'Chrome Desktop', sessions: 50 },
           { browser: 'Firefox', sessions: 30 },
         ],
-        meta: { total_rows: 3, metrics: ['sessions'], dimensions: ['browser'], dateRange: { start: '2025-01-01', end: '2025-01-07' } },
+        meta: {
+          total_rows: 3,
+          metrics: ['sessions'],
+          dimensions: ['browser'],
+          dateRange: { start: '2025-01-01', end: '2025-01-07' },
+        },
         query: { sql: 'SELECT ...', params: {} },
       });
 
@@ -138,9 +156,9 @@ describe('ToolExecutor', () => {
       })) as { values: Array<{ value: string }> };
 
       expect(result.values).toHaveLength(2);
-      expect(result.values.every((v) => v.value?.toLowerCase().includes('chrome'))).toBe(
-        true,
-      );
+      expect(
+        result.values.every((v) => v.value?.toLowerCase().includes('chrome')),
+      ).toBe(true);
     });
 
     it('limits results to specified limit (max 100)', async () => {
@@ -149,7 +167,12 @@ describe('ToolExecutor', () => {
           browser: `Browser ${i}`,
           sessions: 200 - i,
         })),
-        meta: { total_rows: 200, metrics: ['sessions'], dimensions: ['browser'], dateRange: { start: '2025-01-01', end: '2025-01-07' } },
+        meta: {
+          total_rows: 200,
+          metrics: ['sessions'],
+          dimensions: ['browser'],
+          dateRange: { start: '2025-01-01', end: '2025-01-07' },
+        },
         query: { sql: 'SELECT ...', params: {} },
       });
 
@@ -238,14 +261,23 @@ describe('ToolExecutor', () => {
           { device: 'mobile', sessions: 100, median_duration: 45 },
           { device: 'desktop', sessions: 50, median_duration: 30 },
         ],
-        meta: { total_rows: 10, metrics: ['sessions', 'median_duration'], dimensions: ['device'], dateRange: { start: '2025-01-01', end: '2025-01-07' } },
+        meta: {
+          total_rows: 10,
+          metrics: ['sessions', 'median_duration'],
+          dimensions: ['device'],
+          dateRange: { start: '2025-01-01', end: '2025-01-07' },
+        },
         query: { sql: 'SELECT ...', params: {} },
       });
 
       const result = (await executor.execute('preview_query', {
         dimensions: ['device'],
         period: 'last_7_days',
-      })) as { row_count: number; sample_data: unknown[]; dimensions_used: string[] };
+      })) as {
+        row_count: number;
+        sample_data: unknown[];
+        dimensions_used: string[];
+      };
 
       expect(result.row_count).toBe(10);
       expect(result.sample_data).toHaveLength(2);
@@ -258,7 +290,12 @@ describe('ToolExecutor', () => {
           device: `Device ${i}`,
           sessions: 100 - i,
         })),
-        meta: { total_rows: 20, metrics: ['sessions'], dimensions: ['device'], dateRange: { start: '2025-01-01', end: '2025-01-07' } },
+        meta: {
+          total_rows: 20,
+          metrics: ['sessions'],
+          dimensions: ['device'],
+          dateRange: { start: '2025-01-01', end: '2025-01-07' },
+        },
         query: { sql: 'SELECT ...', params: {} },
       });
 
@@ -303,12 +340,26 @@ describe('ToolExecutor', () => {
     it('throws BadRequestException for more than 5 dimensions', async () => {
       await expect(
         executor.execute('configure_explore', {
-          dimensions: ['device', 'browser', 'os', 'utm_source', 'utm_medium', 'utm_campaign'],
+          dimensions: [
+            'device',
+            'browser',
+            'os',
+            'utm_source',
+            'utm_medium',
+            'utm_campaign',
+          ],
         }),
       ).rejects.toThrow(BadRequestException);
       await expect(
         executor.execute('configure_explore', {
-          dimensions: ['device', 'browser', 'os', 'utm_source', 'utm_medium', 'utm_campaign'],
+          dimensions: [
+            'device',
+            'browser',
+            'os',
+            'utm_source',
+            'utm_medium',
+            'utm_campaign',
+          ],
         }),
       ).rejects.toThrow(/Maximum 5 dimensions/);
     });

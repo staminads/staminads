@@ -87,7 +87,10 @@ export class EventBufferService implements OnModuleDestroy {
 
     const timer = setTimeout(() => {
       this.flush(workspaceId).catch((err) => {
-        this.logger.error(`Flush timer error for workspace ${workspaceId}:`, err);
+        this.logger.error(
+          `Flush timer error for workspace ${workspaceId}:`,
+          err,
+        );
       });
     }, FLUSH_INTERVAL_MS);
 
@@ -106,7 +109,11 @@ export class EventBufferService implements OnModuleDestroy {
     this.stopFlushTimer(workspaceId); // Clear timer on flush
 
     const buffer = this.buffers.get(workspaceId);
-    if (!buffer || buffer.length === 0 || this.flushingWorkspaces.has(workspaceId)) {
+    if (
+      !buffer ||
+      buffer.length === 0 ||
+      this.flushingWorkspaces.has(workspaceId)
+    ) {
       return;
     }
 
@@ -116,7 +123,11 @@ export class EventBufferService implements OnModuleDestroy {
 
     try {
       // Insert to workspace-specific database
-      await this.clickhouse.insertWorkspace(workspaceId, 'events', eventsToFlush);
+      await this.clickhouse.insertWorkspace(
+        workspaceId,
+        'events',
+        eventsToFlush,
+      );
       this.logger.debug(
         `Flushed ${eventsToFlush.length} events to workspace ${workspaceId}`,
       );
@@ -124,7 +135,10 @@ export class EventBufferService implements OnModuleDestroy {
       // Re-add failed events to buffer (at front for retry)
       const currentBuffer = this.buffers.get(workspaceId) || [];
       this.buffers.set(workspaceId, [...eventsToFlush, ...currentBuffer]);
-      this.logger.error(`Failed to flush events for workspace ${workspaceId}:`, error);
+      this.logger.error(
+        `Failed to flush events for workspace ${workspaceId}:`,
+        error,
+      );
       throw error;
     } finally {
       this.flushingWorkspaces.delete(workspaceId);

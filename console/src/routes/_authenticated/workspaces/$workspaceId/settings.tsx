@@ -6,13 +6,15 @@ import { SearchOutlined, EditOutlined, LoadingOutlined } from '@ant-design/icons
 import { api } from '../../../../lib/api'
 import { workspaceQueryOptions } from '../../../../lib/queries'
 import { IntegrationsSettings } from '../../../../components/settings/IntegrationsSettings'
-import { AnnotationsSettings } from '../../../../components/settings/AnnotationsSettings'
 import { TimeScoreDistribution } from '../../../../components/settings/TimeScoreDistribution'
+import { TeamSettings } from '../../../../components/settings/TeamSettings'
 import { CodeSnippet } from '../../../../components/setup/CodeSnippet'
+import { SmtpPage } from '../../../../pages/settings/smtp'
+import { ApiKeysPage } from '../../../../pages/settings/api-keys'
 import { z } from 'zod'
 
 const settingsSearchSchema = z.object({
-  section: z.enum(['workspace', 'dimensions', 'integrations', 'annotations', 'sdk']).optional().default('workspace'),
+  section: z.enum(['workspace', 'dimensions', 'team', 'integrations', 'smtp', 'api-keys', 'sdk']).optional().default('workspace'),
 })
 
 export const Route = createFileRoute('/_authenticated/workspaces/$workspaceId/settings')({
@@ -53,13 +55,15 @@ const currencyOptions = [
   { value: 'BRL', label: 'BRL - Brazilian Real' },
 ]
 
-type SettingsSection = 'workspace' | 'dimensions' | 'integrations' | 'annotations' | 'sdk'
+type SettingsSection = 'workspace' | 'dimensions' | 'team' | 'integrations' | 'smtp' | 'api-keys' | 'sdk'
 
 const menuItems: { key: SettingsSection; label: string }[] = [
   { key: 'workspace', label: 'Workspace' },
   { key: 'dimensions', label: 'Custom Dimensions' },
+  { key: 'team', label: 'Team' },
   { key: 'integrations', label: 'Integrations' },
-  { key: 'annotations', label: 'Annotations' },
+  { key: 'smtp', label: 'Email (SMTP)' },
+  { key: 'api-keys', label: 'API Keys' },
   { key: 'sdk', label: 'Install SDK' },
 ]
 
@@ -80,6 +84,23 @@ function Settings() {
     },
     staleTime: Infinity
   })
+
+  // Fetch current user
+  const { data: currentUser } = useQuery({
+    queryKey: ['user'],
+    queryFn: api.auth.me,
+  })
+
+  // Fetch members to get current user's role
+  const { data: members = [] } = useQuery({
+    queryKey: ['members', workspaceId],
+    queryFn: () => api.members.list(workspaceId),
+    enabled: section === 'team', // Only fetch when on team section
+  })
+
+  // Get current user's role
+  const currentMember = members.find(m => m.user_id === currentUser?.id)
+  const userRole = currentMember?.role || 'viewer'
 
   // Check if workspace has sessions
   const { data: sessionCount } = useQuery({
@@ -469,8 +490,10 @@ function Settings() {
         <div className="flex-1 min-w-0">
           {section === 'workspace' && workspaceContent}
           {section === 'dimensions' && dimensionsContent}
+          {section === 'team' && <TeamSettings workspaceId={workspaceId} userRole={userRole} />}
           {section === 'integrations' && <IntegrationsSettings workspace={workspace} />}
-          {section === 'annotations' && <AnnotationsSettings workspace={workspace} />}
+          {section === 'smtp' && <SmtpPage workspaceId={workspaceId} />}
+          {section === 'api-keys' && <ApiKeysPage workspaceId={workspaceId} />}
           {section === 'sdk' && sdkContent}
         </div>
       </div>

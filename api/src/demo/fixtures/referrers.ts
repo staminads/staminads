@@ -1,7 +1,14 @@
 export interface Referrer {
   domain: string | null;
   path?: string;
-  category: 'search' | 'social' | 'tech-news' | 'retailer' | 'direct' | 'internal' | 'other';
+  category:
+    | 'search'
+    | 'social'
+    | 'tech-news'
+    | 'retailer'
+    | 'direct'
+    | 'internal'
+    | 'other';
   channelGroup: string;
   durationMultiplier: number;
   weight: number;
@@ -239,8 +246,16 @@ export const REFERRERS: Referrer[] = [
 ];
 
 // Pre-compute total weight
-export const REFERRERS_TOTAL_WEIGHT = REFERRERS.reduce((sum, ref) => sum + ref.weight, 0);
+export const REFERRERS_TOTAL_WEIGHT = REFERRERS.reduce(
+  (sum, ref) => sum + ref.weight,
+  0,
+);
 
 // Tech news referrers for iPhone launch spike
-export const TECH_NEWS_REFERRERS = REFERRERS.filter((ref) => ref.category === 'tech-news');
-export const TECH_NEWS_TOTAL_WEIGHT = TECH_NEWS_REFERRERS.reduce((sum, ref) => sum + ref.weight, 0);
+export const TECH_NEWS_REFERRERS = REFERRERS.filter(
+  (ref) => ref.category === 'tech-news',
+);
+export const TECH_NEWS_TOTAL_WEIGHT = TECH_NEWS_REFERRERS.reduce(
+  (sum, ref) => sum + ref.weight,
+  0,
+);

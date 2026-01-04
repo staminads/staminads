@@ -71,7 +71,9 @@ describe('DemoService', () => {
 
       await service.generate();
 
-      expect(clickhouse.dropWorkspaceDatabase).toHaveBeenCalledWith('demo-apple');
+      expect(clickhouse.dropWorkspaceDatabase).toHaveBeenCalledWith(
+        'demo-apple',
+      );
       expect(clickhouse.commandSystem).toHaveBeenCalledWith(
         expect.stringContaining('DELETE'),
       );
@@ -86,7 +88,9 @@ describe('DemoService', () => {
 
       await service.generate();
 
-      expect(clickhouse.createWorkspaceDatabase).toHaveBeenCalledWith('demo-apple');
+      expect(clickhouse.createWorkspaceDatabase).toHaveBeenCalledWith(
+        'demo-apple',
+      );
       expect(clickhouse.insertSystem).toHaveBeenCalledWith(
         'workspaces',
         expect.arrayContaining([
@@ -166,7 +170,10 @@ describe('DemoService', () => {
       clickhouse.insertSystem.mockResolvedValue(undefined);
       clickhouse.insertWorkspace.mockResolvedValue(undefined);
 
-      const mockEvents = Array(10).fill({ session_id: 'test', name: 'screen_view' });
+      const mockEvents = Array(10).fill({
+        session_id: 'test',
+        name: 'screen_view',
+      });
 
       (generators.generateEventsByDay as jest.Mock).mockReturnValue([
         { date: '2025-01-01', events: mockEvents, sessionCount: 5 },
@@ -193,7 +200,9 @@ describe('DemoService', () => {
 
       expect(result.success).toBe(true);
       expect(result.message).toBe('Demo workspace and database deleted');
-      expect(clickhouse.dropWorkspaceDatabase).toHaveBeenCalledWith('demo-apple');
+      expect(clickhouse.dropWorkspaceDatabase).toHaveBeenCalledWith(
+        'demo-apple',
+      );
     });
 
     it('returns success with message when no demo workspace exists', async () => {
@@ -226,7 +235,9 @@ describe('DemoService', () => {
       await service.delete();
 
       expect(clickhouse.commandSystem).toHaveBeenCalledWith(
-        expect.stringContaining("backfill_tasks DELETE WHERE workspace_id = 'demo-apple'"),
+        expect.stringContaining(
+          "backfill_tasks DELETE WHERE workspace_id = 'demo-apple'",
+        ),
       );
     });
   });
@@ -238,7 +249,10 @@ describe('DemoService', () => {
       clickhouse.insertSystem.mockResolvedValue(undefined);
       clickhouse.insertWorkspace.mockResolvedValue(undefined);
 
-      const mockEvents = Array(10).fill({ session_id: 'test', name: 'screen_view' });
+      const mockEvents = Array(10).fill({
+        session_id: 'test',
+        name: 'screen_view',
+      });
 
       (generators.generateEventsByDay as jest.Mock).mockReturnValue([
         { date: '2025-01-01', events: mockEvents, sessionCount: 5 },

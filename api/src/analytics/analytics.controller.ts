@@ -19,7 +19,9 @@ export class AnalyticsController {
 
   @Post('analytics.extremes')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Get min/max extremes of a metric across grouped data' })
+  @ApiOperation({
+    summary: 'Get min/max extremes of a metric across grouped data',
+  })
   async extremes(@Body() dto: ExtremesQueryDto): Promise<ExtremesResponse> {
     return this.analyticsService.extremes(dto);
   }

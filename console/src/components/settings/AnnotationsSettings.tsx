@@ -193,11 +193,11 @@ export function AnnotationsSettings({ workspace }: AnnotationsSettingsProps) {
   ]
 
   return (
-    <div className="max-w-2xl">
-      <div className="flex justify-between items-center mb-4">
+    <div>
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h3 className="text-lg font-medium">Annotations</h3>
-          <p className="text-gray-500 text-sm">
+          <h1 className="text-2xl font-semibold text-gray-900">Annotations</h1>
+          <p className="text-gray-500 mt-1">
             Mark significant dates on your dashboard charts, like product launches or campaigns.
           </p>
         </div>

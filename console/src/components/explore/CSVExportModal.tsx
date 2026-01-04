@@ -45,12 +45,12 @@ function mergeComparisonDataForCSV(
     const sessions = Number(row.sessions) || 0
     const medianDuration = Number(row.median_duration) || 0
     const bounceRate = Number(row.bounce_rate) || 0
-    const maxScroll = Number(row.max_scroll) || 0
+    const medianScroll = Number(row.median_scroll) || 0
 
     const sessionsPrev = prevRow ? Number(prevRow.sessions) || 0 : undefined
     const durationPrev = prevRow ? Number(prevRow.median_duration) || 0 : undefined
     const bouncePrev = prevRow ? Number(prevRow.bounce_rate) || 0 : undefined
-    const scrollPrev = prevRow ? Number(prevRow.max_scroll) || 0 : undefined
+    const scrollPrev = prevRow ? Number(prevRow.median_scroll) || 0 : undefined
 
     // Calculate change percentages
     const calcChange = (curr: number, prev: number | undefined): number | undefined => {
@@ -63,11 +63,11 @@ function mergeComparisonDataForCSV(
       sessions_prev: sessionsPrev,
       median_duration_prev: durationPrev,
       bounce_rate_prev: bouncePrev,
-      max_scroll_prev: scrollPrev,
+      median_scroll_prev: scrollPrev,
       sessions_change: calcChange(sessions, sessionsPrev),
       median_duration_change: calcChange(medianDuration, durationPrev),
       bounce_rate_change: calcChange(bounceRate, bouncePrev),
-      max_scroll_change: calcChange(maxScroll, scrollPrev),
+      median_scroll_change: calcChange(medianScroll, scrollPrev),
     }
   })
 }
@@ -92,7 +92,7 @@ export function CSVExportModal({
       // Fetch fresh data with all dimensions flattened
       const response = await api.analytics.query({
         workspace_id: workspaceId,
-        metrics: ['sessions', 'median_duration', 'bounce_rate', 'max_scroll'],
+        metrics: ['sessions', 'median_duration', 'bounce_rate', 'median_scroll'],
         dimensions,
         filters,
         dateRange,

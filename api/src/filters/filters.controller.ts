@@ -38,7 +38,12 @@ export class FiltersController {
   @Get('filters.list')
   @ApiOperation({ summary: 'List filters for workspace' })
   @ApiQuery({ name: 'workspace_id', type: String, required: true })
-  @ApiQuery({ name: 'tags', type: [String], required: false, description: 'Filter by tags' })
+  @ApiQuery({
+    name: 'tags',
+    type: [String],
+    required: false,
+    description: 'Filter by tags',
+  })
   @ApiResponse({ status: 200, description: 'List of filters' })
   async list(
     @Query('workspace_id') workspaceId: string,

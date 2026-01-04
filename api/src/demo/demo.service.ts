@@ -1,11 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { ClickHouseService } from '../database/clickhouse.service';
-import { generateEventsByDay, getCachedFilters, clearFilterCache } from './fixtures/generators';
+import { generateId } from '../common/crypto';
+import {
+  generateEventsByDay,
+  getCachedFilters,
+  clearFilterCache,
+} from './fixtures/generators';
 import { TrackingEvent } from '../events/entities/event.entity';
 import { DEMO_CUSTOM_DIMENSION_LABELS } from './fixtures/demo-filters';
 import { BackfillTask } from '../filters/backfill/backfill-task.entity';
-import { Annotation, WorkspaceSettings, DEFAULT_WORKSPACE_SETTINGS } from '../workspaces/entities/workspace.entity';
+import {
+  Annotation,
+  WorkspaceSettings,
+  DEFAULT_WORKSPACE_SETTINGS,
+} from '../workspaces/entities/workspace.entity';
 
 const DEMO_WORKSPACE_ID = 'demo-apple';
 const DEMO_WORKSPACE_NAME = 'Apple Demo';
@@ -74,7 +83,9 @@ export class DemoService {
     const workspace = await this.createWorkspace(DEMO_WORKSPACE_ID, endDate);
 
     this.logger.log(`Created workspace: ${DEMO_WORKSPACE_ID}`);
-    this.logger.log(`Generating ${SESSION_COUNT.toLocaleString()} sessions over ${DAYS_RANGE} days...`);
+    this.logger.log(
+      `Generating ${SESSION_COUNT.toLocaleString()} sessions over ${DAYS_RANGE} days...`,
+    );
 
     const generator = generateEventsByDay({
       workspaceId: DEMO_WORKSPACE_ID,
@@ -101,7 +112,7 @@ export class DemoService {
         const rate = Math.round(totalSessions / parseFloat(elapsed));
         this.logger.log(
           `Day ${dayCount}/${DAYS_RANGE}: ${totalSessions.toLocaleString()} sessions, ` +
-          `${totalEvents.toLocaleString()} events (${rate} sessions/s)`,
+            `${totalEvents.toLocaleString()} events (${rate} sessions/s)`,
         );
       }
     }
@@ -110,7 +121,11 @@ export class DemoService {
     this.logger.log(`Demo generation completed in ${duration}s`);
 
     // Create a completed backfill task to mark filters as synced
-    await this.createCompletedBackfillTask(DEMO_WORKSPACE_ID, totalSessions, totalEvents);
+    await this.createCompletedBackfillTask(
+      DEMO_WORKSPACE_ID,
+      totalSessions,
+      totalEvents,
+    );
 
     // Calculate date range
     const startDate = new Date(endDate);
@@ -174,7 +189,10 @@ export class DemoService {
     return true;
   }
 
-  private async createWorkspace(workspaceId: string, endDate: Date): Promise<WorkspaceRow> {
+  private async createWorkspace(
+    workspaceId: string,
+    endDate: Date,
+  ): Promise<WorkspaceRow> {
     const now = toClickHouseDateTime();
 
     // Build settings with demo-specific values
@@ -193,7 +211,8 @@ export class DemoService {
       website: DEMO_WEBSITE,
       timezone: 'America/New_York',
       currency: 'USD',
-      logo_url: 'https://www.apple.com/ac/structured-data/images/knowledge_graph_logo.png',
+      logo_url:
+        'https://www.apple.com/ac/structured-data/images/knowledge_graph_logo.png',
       settings: JSON.stringify(settings),
       status: 'active',
       created_at: now,
@@ -206,7 +225,48 @@ export class DemoService {
     // Insert workspace row into system database
     await this.clickhouse.insertSystem('workspaces', [workspace]);
 
+    // Add super_admin user as owner to workspace_memberships
+    await this.addSuperAdminAsOwner(workspaceId, now);
+
     return workspace;
+  }
+
+  /**
+   * Find the super_admin user and add them as owner of the workspace.
+   * This ensures demo workspaces are accessible via Team settings.
+   */
+  private async addSuperAdminAsOwner(
+    workspaceId: string,
+    now: string,
+  ): Promise<void> {
+    // Find super_admin user
+    const superAdmins = await this.clickhouse.querySystem<{ id: string }>(
+      `SELECT id FROM users FINAL WHERE is_super_admin = 1 AND status = 'active' LIMIT 1`,
+    );
+
+    if (superAdmins.length === 0) {
+      this.logger.warn(
+        'No super_admin user found - demo workspace will have no owner',
+      );
+      return;
+    }
+
+    const superAdminId = superAdmins[0].id;
+
+    await this.clickhouse.insertSystem('workspace_memberships', [
+      {
+        id: generateId(),
+        workspace_id: workspaceId,
+        user_id: superAdminId,
+        role: 'owner',
+        invited_by: null,
+        joined_at: now,
+        created_at: now,
+        updated_at: now,
+      },
+    ]);
+
+    this.logger.log(`Added super_admin ${superAdminId} as owner of ${workspaceId}`);
   }
 
   private async insertEventsBatched(

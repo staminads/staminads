@@ -90,7 +90,9 @@ describe('GeoService', () => {
 
   describe('lookupWithSettings', () => {
     it('returns EMPTY_GEO when geo_enabled is false', () => {
-      const result = service.lookupWithSettings('8.8.8.8', { geo_enabled: false });
+      const result = service.lookupWithSettings('8.8.8.8', {
+        geo_enabled: false,
+      });
       expect(result).toEqual(EMPTY_GEO);
     });
 

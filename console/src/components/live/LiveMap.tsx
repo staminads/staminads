@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import ReactECharts from 'echarts-for-react'
 import * as echarts from 'echarts'
-import { Spin, Empty } from 'antd'
+import { Spin } from 'antd'
 import worldGeoJson from '../../lib/world-geo.json'
 
 // Register map once on module load (same as CountriesMapWidget)
@@ -94,17 +94,7 @@ export function LiveMap({ data, loading }: LiveMapProps) {
     )
   }
 
-  if (data.length === 0 || scatterData.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-[400px]">
-        <Empty
-          description="No live sessions in the last 30 minutes"
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-        />
-      </div>
-    )
-  }
-
+  // Always render the map, even with no sessions (scatterData can be empty)
   return (
     <div className="overflow-hidden">
       <ReactECharts

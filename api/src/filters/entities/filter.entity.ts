@@ -1,4 +1,11 @@
-export type FilterOperator = 'equals' | 'not_equals' | 'contains' | 'not_contains' | 'is_empty' | 'is_not_empty' | 'regex';
+export type FilterOperator =
+  | 'equals'
+  | 'not_equals'
+  | 'contains'
+  | 'not_contains'
+  | 'is_empty'
+  | 'is_not_empty'
+  | 'regex';
 export type FilterAction = 'set_value' | 'unset_value' | 'set_default_value';
 
 export interface FilterCondition {
@@ -26,7 +33,6 @@ export interface FilterDefinition {
   createdAt: string;
   updatedAt: string;
 }
-
 
 // Dimensions that filters can write to
 export const WRITABLE_DIMENSIONS = [

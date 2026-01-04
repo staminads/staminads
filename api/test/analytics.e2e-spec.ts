@@ -119,8 +119,14 @@ describe('Analytics E2E', () => {
         utm_content: null,
         utm_id: null,
         utm_id_from: null,
-        channel: i % 3 === 0 ? 'Paid Search' : i % 3 === 1 ? 'Social' : 'Direct',
-        channel_group: i % 3 === 0 ? 'search-paid' : i % 3 === 1 ? 'social-organic' : 'direct',
+        channel:
+          i % 3 === 0 ? 'Paid Search' : i % 3 === 1 ? 'Social' : 'Direct',
+        channel_group:
+          i % 3 === 0
+            ? 'search-paid'
+            : i % 3 === 1
+              ? 'social-organic'
+              : 'direct',
         screen_width: 1920,
         screen_height: 1080,
         viewport_width: 1920,
@@ -202,7 +208,9 @@ describe('Analytics E2E', () => {
       expect(response.body.data[0]).toHaveProperty('device');
 
       // Verify both device types are present
-      const devices = response.body.data.map((d: { device: string }) => d.device);
+      const devices = response.body.data.map(
+        (d: { device: string }) => d.device,
+      );
       expect(devices).toContain('desktop');
       expect(devices).toContain('mobile');
     });
@@ -442,9 +450,15 @@ describe('Analytics E2E', () => {
         .expect(200);
 
       expect(Array.isArray(response.body)).toBe(true);
-      expect(response.body.find((m: { name: string }) => m.name === 'sessions')).toBeDefined();
-      expect(response.body.find((m: { name: string }) => m.name === 'avg_duration')).toBeDefined();
-      expect(response.body.find((m: { name: string }) => m.name === 'bounce_rate')).toBeDefined();
+      expect(
+        response.body.find((m: { name: string }) => m.name === 'sessions'),
+      ).toBeDefined();
+      expect(
+        response.body.find((m: { name: string }) => m.name === 'avg_duration'),
+      ).toBeDefined();
+      expect(
+        response.body.find((m: { name: string }) => m.name === 'bounce_rate'),
+      ).toBeDefined();
     });
   });
 
@@ -511,7 +525,9 @@ describe('Analytics E2E', () => {
           workspace_id: workspaceId,
           metric: 'sessions',
           groupBy: ['utm_campaign'],
-          filters: [{ dimension: 'device', operator: 'equals', values: ['mobile'] }],
+          filters: [
+            { dimension: 'device', operator: 'equals', values: ['mobile'] },
+          ],
           dateRange: { start: '2025-12-01', end: '2025-12-31' },
         })
         .expect(200);

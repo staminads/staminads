@@ -32,7 +32,11 @@ describe('buildFilters', () => {
 
   it('handles in operator with array', () => {
     const result = buildFilters([
-      { dimension: 'utm_source', operator: 'in', values: ['google', 'facebook'] },
+      {
+        dimension: 'utm_source',
+        operator: 'in',
+        values: ['google', 'facebook'],
+      },
     ]);
     expect(result.sql).toBe('utm_source IN {f0:Array(String)}');
     expect(result.params.f0).toEqual(['google', 'facebook']);
@@ -56,7 +60,11 @@ describe('buildFilters', () => {
 
   it('handles notContains with NOT LIKE', () => {
     const result = buildFilters([
-      { dimension: 'utm_campaign', operator: 'notContains', values: ['summer'] },
+      {
+        dimension: 'utm_campaign',
+        operator: 'notContains',
+        values: ['summer'],
+      },
     ]);
     expect(result.sql).toBe('utm_campaign NOT LIKE {f0:String}');
     expect(result.params.f0).toBe('%summer%');
@@ -140,7 +148,9 @@ describe('buildFilters', () => {
       { dimension: 'device', operator: 'equals', values: ['mobile'] },
       { dimension: 'utm_source', operator: 'equals', values: ['google'] },
     ]);
-    expect(result.sql).toBe('device = {f0:String} AND utm_source = {f1:String}');
+    expect(result.sql).toBe(
+      'device = {f0:String} AND utm_source = {f1:String}',
+    );
     expect(result.params.f0).toBe('mobile');
     expect(result.params.f1).toBe('google');
   });

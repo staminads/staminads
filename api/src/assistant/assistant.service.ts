@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
@@ -33,7 +38,10 @@ import {
   errorEvent,
   doneEvent,
 } from './lib/sse-formatter';
-import { calculateCost, supportsStructuredOutputs } from './constants/model-pricing';
+import {
+  calculateCost,
+  supportsStructuredOutputs,
+} from './constants/model-pricing';
 
 /**
  * Maximum streaming time (2 minutes).
@@ -229,7 +237,7 @@ export class AssistantService implements OnModuleInit, OnModuleDestroy {
     // Build initial messages
     const messages: Anthropic.MessageParam[] = [
       ...job.messages.map((m) => ({
-        role: m.role as 'user' | 'assistant',
+        role: m.role,
         content: m.content,
       })),
       { role: 'user' as const, content: job.prompt },
@@ -257,7 +265,9 @@ export class AssistantService implements OnModuleInit, OnModuleDestroy {
           max_tokens: integration.settings.max_tokens,
           system: systemPrompt,
           messages,
-          tools: useStructuredOutputs ? STRICT_ASSISTANT_TOOLS : ASSISTANT_TOOLS,
+          tools: useStructuredOutputs
+            ? STRICT_ASSISTANT_TOOLS
+            : ASSISTANT_TOOLS,
         });
       } catch (streamError) {
         console.error('Failed to create Anthropic stream:', streamError);
@@ -366,7 +376,9 @@ export class AssistantService implements OnModuleInit, OnModuleDestroy {
       totalInputTokens,
       totalOutputTokens,
     );
-    res.write(formatSSE(usageEvent(totalInputTokens, totalOutputTokens, costUsd)));
+    res.write(
+      formatSSE(usageEvent(totalInputTokens, totalOutputTokens, costUsd)),
+    );
 
     // Update in-memory usage tracking
     updateUsage(job.workspace_id, integration.id, totalTokens);

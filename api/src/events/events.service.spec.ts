@@ -52,7 +52,11 @@ describe('EventsService', () => {
             { field: 'referrer_domain', operator: 'contains', value: 'google' },
           ],
           operations: [
-            { dimension: 'channel', action: 'set_value', value: 'Organic Search' },
+            {
+              dimension: 'channel',
+              action: 'set_value',
+              value: 'Organic Search',
+            },
           ],
           enabled: true,
           version: 'v1',
@@ -63,13 +67,15 @@ describe('EventsService', () => {
     },
   };
 
-  const createTrackEventDto = (overrides: Partial<TrackEventDto> = {}): TrackEventDto => ({
+  const createTrackEventDto = (
+    overrides: Partial<TrackEventDto> = {},
+  ): TrackEventDto => ({
     workspace_id: 'ws-1',
     session_id: 'session-123',
     name: 'screen_view',
     path: '/test-page',
     landing_page: 'https://example.com/landing',
-    created_at: 1704067200000,  // 2024-01-01T00:00:00.000Z
+    created_at: 1704067200000, // 2024-01-01T00:00:00.000Z
     updated_at: 1704067200000,
     ...overrides,
   });
@@ -148,7 +154,10 @@ describe('EventsService', () => {
       const dto = createTrackEventDto();
       await service.track(dto, null);
 
-      expect(geoService.lookupWithSettings).toHaveBeenCalledWith(null, expect.any(Object));
+      expect(geoService.lookupWithSettings).toHaveBeenCalledWith(
+        null,
+        expect.any(Object),
+      );
     });
 
     it('parses referrer URL to extract domain and path', async () => {
@@ -233,7 +242,9 @@ describe('EventsService', () => {
       });
       await service.track(dto, null);
 
-      expect(bufferService.add.mock.calls[0][0].referrer_domain).toBe('custom-domain.com');
+      expect(bufferService.add.mock.calls[0][0].referrer_domain).toBe(
+        'custom-domain.com',
+      );
     });
 
     it('throws BadRequestException for invalid workspace_id', async () => {
@@ -241,8 +252,12 @@ describe('EventsService', () => {
 
       const dto = createTrackEventDto({ workspace_id: 'invalid-ws' });
 
-      await expect(service.track(dto, null)).rejects.toThrow(BadRequestException);
-      await expect(service.track(dto, null)).rejects.toThrow('Invalid workspace_id');
+      await expect(service.track(dto, null)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.track(dto, null)).rejects.toThrow(
+        'Invalid workspace_id',
+      );
     });
 
     it('applies filters from workspace', async () => {
@@ -327,7 +342,9 @@ describe('EventsService', () => {
         createTrackEventDto({ workspace_id: 'ws-2' }), // Different workspace
       ];
 
-      await expect(service.trackBatch(dtos, null)).rejects.toThrow(BadRequestException);
+      await expect(service.trackBatch(dtos, null)).rejects.toThrow(
+        BadRequestException,
+      );
       await expect(service.trackBatch(dtos, null)).rejects.toThrow(
         'All events in batch must have the same workspace_id',
       );

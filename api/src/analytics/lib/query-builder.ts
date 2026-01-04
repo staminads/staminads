@@ -32,9 +32,7 @@ const GRANULARITY_SQL: Record<
   },
   month: {
     expr: (tz) =>
-      tz
-        ? `toStartOfMonth(created_at, '${tz}')`
-        : 'toStartOfMonth(created_at)',
+      tz ? `toStartOfMonth(created_at, '${tz}')` : 'toStartOfMonth(created_at)',
     column: 'date_month',
   },
   year: {
@@ -53,7 +51,9 @@ export function buildAnalyticsQuery(
   const metricsSql = query.metrics.map((m) => {
     const metric = METRICS[m];
     if (!metric) throw new Error(`Unknown metric: ${m}`);
-    const sql = metricContext ? getMetricSql(metric, metricContext) : metric.sql;
+    const sql = metricContext
+      ? getMetricSql(metric, metricContext)
+      : metric.sql;
     return `${sql} as ${m}`;
   });
 

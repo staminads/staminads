@@ -1,12 +1,26 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { WorkspacesService } from './workspaces.service';
 import { ClickHouseService } from '../database/clickhouse.service';
 import {
   Workspace,
   DEFAULT_WORKSPACE_SETTINGS,
 } from './entities/workspace.entity';
+
+const mockSuperAdminUser = {
+  id: 'user-admin-001',
+  email: 'admin@test.com',
+  name: 'Admin User',
+  isSuperAdmin: true,
+};
+
+const mockRegularUser = {
+  id: 'user-regular-001',
+  email: 'regular@test.com',
+  name: 'Regular User',
+  isSuperAdmin: false,
+};
 
 describe('WorkspacesService', () => {
   let service: WorkspacesService;
@@ -121,13 +135,16 @@ describe('WorkspacesService', () => {
       clickhouse.createWorkspaceDatabase.mockResolvedValue(undefined);
       clickhouse.insertSystem.mockResolvedValue(undefined);
 
-      const result = await service.create({
-        id: 'ws-new-001',
-        name: 'New Workspace',
-        website: 'https://new.example.com',
-        timezone: 'America/New_York',
-        currency: 'EUR',
-      });
+      const result = await service.create(
+        {
+          id: 'ws-new-001',
+          name: 'New Workspace',
+          website: 'https://new.example.com',
+          timezone: 'America/New_York',
+          currency: 'EUR',
+        },
+        mockSuperAdminUser,
+      );
 
       expect(result.id).toBe('ws-new-001');
       expect(result.name).toBe('New Workspace');
@@ -140,22 +157,23 @@ describe('WorkspacesService', () => {
       clickhouse.createWorkspaceDatabase.mockResolvedValue(undefined);
       clickhouse.insertSystem.mockResolvedValue(undefined);
 
-      await service.create({
-        id: 'ws-new-001',
-        name: 'New Workspace',
-        website: 'https://new.example.com',
-        timezone: 'UTC',
-        currency: 'USD',
-      });
+      await service.create(
+        {
+          id: 'ws-new-001',
+          name: 'New Workspace',
+          website: 'https://new.example.com',
+          timezone: 'UTC',
+          currency: 'USD',
+        },
+        mockSuperAdminUser,
+      );
 
       expect(clickhouse.createWorkspaceDatabase).toHaveBeenCalledWith(
         'ws-new-001',
       );
       expect(clickhouse.insertSystem).toHaveBeenCalledWith(
         'workspaces',
-        expect.arrayContaining([
-          expect.objectContaining({ id: 'ws-new-001' }),
-        ]),
+        expect.arrayContaining([expect.objectContaining({ id: 'ws-new-001' })]),
       );
     });
 
@@ -163,20 +181,71 @@ describe('WorkspacesService', () => {
       clickhouse.createWorkspaceDatabase.mockResolvedValue(undefined);
       clickhouse.insertSystem.mockResolvedValue(undefined);
 
-      const result = await service.create({
-        id: 'ws-new-001',
-        name: 'New Workspace',
-        website: 'https://new.example.com',
-        timezone: 'UTC',
-        currency: 'USD',
-        settings: {
-          timescore_reference: 120,
-          bounce_threshold: 5,
+      const result = await service.create(
+        {
+          id: 'ws-new-001',
+          name: 'New Workspace',
+          website: 'https://new.example.com',
+          timezone: 'UTC',
+          currency: 'USD',
+          settings: {
+            timescore_reference: 120,
+            bounce_threshold: 5,
+          },
         },
-      });
+        mockSuperAdminUser,
+      );
 
       expect(result.settings.timescore_reference).toBe(120);
       expect(result.settings.bounce_threshold).toBe(5);
+    });
+
+    it('throws ForbiddenException for non-super_admin user', async () => {
+      await expect(
+        service.create(
+          {
+            id: 'ws-new-001',
+            name: 'New Workspace',
+            website: 'https://new.example.com',
+            timezone: 'UTC',
+            currency: 'USD',
+          },
+          mockRegularUser,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+
+      // Ensure no database operations were performed
+      expect(clickhouse.createWorkspaceDatabase).not.toHaveBeenCalled();
+      expect(clickhouse.insertSystem).not.toHaveBeenCalled();
+    });
+
+    it('adds creator as owner to workspace_memberships', async () => {
+      clickhouse.createWorkspaceDatabase.mockResolvedValue(undefined);
+      clickhouse.insertSystem.mockResolvedValue(undefined);
+
+      await service.create(
+        {
+          id: 'ws-new-001',
+          name: 'New Workspace',
+          website: 'https://new.example.com',
+          timezone: 'UTC',
+          currency: 'USD',
+        },
+        mockSuperAdminUser,
+      );
+
+      // Should insert into workspace_memberships
+      expect(clickhouse.insertSystem).toHaveBeenCalledWith(
+        'workspace_memberships',
+        expect.arrayContaining([
+          expect.objectContaining({
+            workspace_id: 'ws-new-001',
+            user_id: mockSuperAdminUser.id,
+            role: 'owner',
+            invited_by: null,
+          }),
+        ]),
+      );
     });
   });
 

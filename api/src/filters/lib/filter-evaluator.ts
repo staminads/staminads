@@ -1,8 +1,5 @@
 import * as crypto from 'crypto';
-import {
-  FilterCondition,
-  FilterDefinition,
-} from '../entities/filter.entity';
+import { FilterCondition, FilterDefinition } from '../entities/filter.entity';
 
 /**
  * Compute a version hash from all filter configurations.
@@ -253,7 +250,10 @@ export function applyFilterResults(
   filters: FilterDefinition[],
   fieldValues: Record<string, string | null | undefined>,
   baseEvent: Record<string, unknown>,
-): { customDimensions: CustomDimensionValues; modifiedFields: Record<string, string | null> } {
+): {
+  customDimensions: CustomDimensionValues;
+  modifiedFields: Record<string, string | null>;
+} {
   const filterResult = evaluateFilters(filters, fieldValues);
 
   // Initialize custom dimension values

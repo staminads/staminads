@@ -107,7 +107,9 @@ describe('validateDimension', () => {
       /Invalid dimension: invalid_dimension/,
     );
     expect(() => validateDimension('')).toThrow(/Invalid dimension:/);
-    expect(() => validateDimension('stm_11')).toThrow(/Invalid dimension: stm_11/);
+    expect(() => validateDimension('stm_11')).toThrow(
+      /Invalid dimension: stm_11/,
+    );
   });
 
   it('throws for SQL injection attempts', () => {
@@ -409,7 +411,11 @@ describe('compileFiltersToSQL', () => {
           ],
           operations: [
             // Operations target channel/channel_group, NOT utm_medium
-            { dimension: 'channel_group', action: 'set_value', value: 'search-paid' },
+            {
+              dimension: 'channel_group',
+              action: 'set_value',
+              value: 'search-paid',
+            },
             { dimension: 'channel', action: 'set_value', value: 'google-ads' },
           ],
         }),
@@ -476,7 +482,11 @@ describe('compileFiltersToSQL', () => {
             { field: 'utm_medium', operator: 'not_equals', value: 'cpc' },
           ],
           operations: [
-            { dimension: 'channel', action: 'set_value', value: 'google-organic' },
+            {
+              dimension: 'channel',
+              action: 'set_value',
+              value: 'google-organic',
+            },
           ],
         }),
       ];
@@ -501,7 +511,11 @@ describe('compileFiltersToSQL', () => {
           priority: 1,
           conditions: [],
           operations: [
-            { dimension: 'channel', action: 'set_default_value', value: 'direct' },
+            {
+              dimension: 'channel',
+              action: 'set_default_value',
+              value: 'direct',
+            },
           ],
         }),
       ];
@@ -510,7 +524,9 @@ describe('compileFiltersToSQL', () => {
 
       // In backfill, set_default_value works like set_value
       // (CASE WHEN ordering handles priority, not DB value check)
-      expect(result.setClause).not.toContain("AND (channel = '' OR channel IS NULL)");
+      expect(result.setClause).not.toContain(
+        "AND (channel = '' OR channel IS NULL)",
+      );
     });
   });
 
@@ -544,7 +560,11 @@ describe('compileFiltersToSQL', () => {
         priority: 100,
         conditions: [],
         operations: [
-          { dimension: 'channel', action: 'set_value', value: 'Should Not Appear' },
+          {
+            dimension: 'channel',
+            action: 'set_value',
+            value: 'Should Not Appear',
+          },
         ],
       }),
     ];
@@ -571,7 +591,9 @@ describe('compileFiltersToSQL', () => {
         name: 'High Priority',
         enabled: true,
         priority: 100,
-        conditions: [{ field: 'utm_source', operator: 'equals', value: 'high' }],
+        conditions: [
+          { field: 'utm_source', operator: 'equals', value: 'high' },
+        ],
         operations: [
           { dimension: 'channel', action: 'set_value', value: 'High' },
         ],

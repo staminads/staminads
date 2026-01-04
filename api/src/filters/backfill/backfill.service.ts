@@ -82,7 +82,10 @@ export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
           }
         })
         .catch((error) => {
-          console.warn(`Failed to get task ${taskId} for mutation cleanup:`, error);
+          console.warn(
+            `Failed to get task ${taskId} for mutation cleanup:`,
+            error,
+          );
         });
     }
 
@@ -100,7 +103,11 @@ export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
           { id: taskId },
         );
         if (tasks.length > 0 && tasks[0].status === 'running') {
-          await this.updateTaskStatus(tasks[0], 'cancelled', 'Service shutdown');
+          await this.updateTaskStatus(
+            tasks[0],
+            'cancelled',
+            'Service shutdown',
+          );
         }
       } catch (error) {
         console.warn(`Failed to cancel task ${taskId} on shutdown:`, error);
@@ -207,7 +214,8 @@ export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
           finalStatus = 'cancelled';
         }
       } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        const errorMsg =
+          error instanceof Error ? error.message : 'Unknown error';
         console.error(`Backfill task ${task.id} failed:`, errorMsg);
         // Only strip control chars, keep useful chars like @, ., /
         const sanitizedError =
@@ -260,7 +268,10 @@ export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
       ...task,
       status,
       updated_at: now,
-      completed_at: status === 'completed' || status === 'failed' || status === 'cancelled' ? now : task.completed_at,
+      completed_at:
+        status === 'completed' || status === 'failed' || status === 'cancelled'
+          ? now
+          : task.completed_at,
       error_message: errorMessage ?? task.error_message,
     };
     await this.clickhouse.insertSystem('backfill_tasks', [updatedTask]);
@@ -289,7 +300,9 @@ export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
         );
         if (attempt < maxRetries) {
           // Exponential backoff: 1s, 2s, 4s, 8s, 16s
-          await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+          await new Promise((r) =>
+            setTimeout(r, 1000 * Math.pow(2, attempt - 1)),
+          );
         }
       }
     }
@@ -305,7 +318,18 @@ export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
    */
   async updateTaskProgress(
     task: BackfillTask,
-    updates: Partial<Pick<BackfillTask, 'total_sessions' | 'processed_sessions' | 'total_events' | 'processed_events' | 'current_date_chunk' | 'started_at' | 'status'>>,
+    updates: Partial<
+      Pick<
+        BackfillTask,
+        | 'total_sessions'
+        | 'processed_sessions'
+        | 'total_events'
+        | 'processed_events'
+        | 'current_date_chunk'
+        | 'started_at'
+        | 'status'
+      >
+    >,
   ): Promise<void> {
     const now = toClickHouseDateTime();
     const updatedTask: BackfillTask = {
@@ -396,7 +420,9 @@ export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
   async getBackfillSummary(workspaceId: string): Promise<BackfillSummary> {
     // Get current filter version from workspace
     const workspace = await this.workspacesService.get(workspaceId);
-    const currentVersion = computeFilterVersion(workspace.settings.filters ?? []);
+    const currentVersion = computeFilterVersion(
+      workspace.settings.filters ?? [],
+    );
 
     // Get all tasks for workspace, ordered by created_at DESC (use FINAL for ReplacingMergeTree)
     const tasks = await this.clickhouse.querySystem<BackfillTask>(
@@ -468,7 +494,9 @@ export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
       const elapsedSeconds = elapsedMs / 1000;
       const sessionsPerSecond = task.processed_sessions / elapsedSeconds;
       const remainingSessions = task.total_sessions - task.processed_sessions;
-      estimatedRemainingSeconds = Math.round(remainingSessions / sessionsPerSecond);
+      estimatedRemainingSeconds = Math.round(
+        remainingSessions / sessionsPerSecond,
+      );
     }
 
     // Compute filter version from snapshot

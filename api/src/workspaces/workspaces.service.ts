@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClickHouseService } from '../database/clickhouse.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
@@ -8,8 +12,18 @@ import {
   WorkspaceSettings,
   DEFAULT_WORKSPACE_SETTINGS,
 } from './entities/workspace.entity';
-import { Integration, AnthropicIntegration } from './entities/integration.entity';
-import { encryptApiKey } from '../common/crypto';
+import {
+  Integration,
+  AnthropicIntegration,
+} from './entities/integration.entity';
+import { encryptApiKey, generateId } from '../common/crypto';
+
+interface CurrentUser {
+  id: string;
+  email: string;
+  name: string;
+  isSuperAdmin: boolean;
+}
 
 function toClickHouseDateTime(date: Date = new Date()): string {
   return date.toISOString().replace('T', ' ').replace('Z', '');
@@ -91,7 +105,14 @@ export class WorkspacesService {
     return parseWorkspace(rows[0]);
   }
 
-  async create(dto: CreateWorkspaceDto): Promise<Workspace> {
+  async create(dto: CreateWorkspaceDto, user: CurrentUser): Promise<Workspace> {
+    // Only super admins can create workspaces
+    if (!user.isSuperAdmin) {
+      throw new ForbiddenException(
+        'Only super admins can create new workspaces',
+      );
+    }
+
     const now = toClickHouseDateTime();
 
     // Build settings from dto.settings with defaults
@@ -120,6 +141,20 @@ export class WorkspacesService {
     // 2. Insert workspace row into system database
     await this.clickhouse.insertSystem('workspaces', [
       serializeWorkspace(workspace),
+    ]);
+
+    // 3. Add creator as owner to workspace_memberships
+    await this.clickhouse.insertSystem('workspace_memberships', [
+      {
+        id: generateId(),
+        workspace_id: dto.id,
+        user_id: user.id,
+        role: 'owner',
+        invited_by: null,
+        joined_at: now,
+        created_at: now,
+        updated_at: now,
+      },
     ]);
 
     // Status remains 'initializing' until first event is received
@@ -184,7 +219,7 @@ export class WorkspacesService {
 
     return integrations.map((integration) => {
       if (integration.type === 'anthropic') {
-        const anthropic = integration as AnthropicIntegration;
+        const anthropic = integration;
         const apiKey = anthropic.settings.api_key_encrypted;
         // Only encrypt if it's a new key (not already encrypted)
         // Encrypted format is iv:authTag:data, so it contains ':'

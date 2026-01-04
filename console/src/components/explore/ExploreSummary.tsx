@@ -208,14 +208,14 @@ export function ExploreSummary({
         <Divider type="vertical" style={{ height: 40 }} />
 
         <Statistic
-          title={<span className="pr-[70px]">Avg. Scroll</span>}
-          value={totals.max_scroll.toFixed(1)}
+          title={<span className="pr-[70px]">Median Scroll Depth</span>}
+          value={totals.median_scroll.toFixed(1)}
           valueStyle={valueStyle}
           suffix={
             <>
               %
               <ChangeIndicator
-                value={totals.max_scroll_change}
+                value={totals.median_scroll_change}
                 showComparison={showComparison}
               />
             </>

@@ -103,7 +103,7 @@ export class ClickHouseService implements OnModuleInit, OnModuleDestroy {
       query_params: params,
       format: 'JSONEachRow',
     });
-    return result.json() as Promise<T[]>;
+    return result.json();
   }
 
   /**
@@ -119,7 +119,7 @@ export class ClickHouseService implements OnModuleInit, OnModuleDestroy {
       query_params: params,
       format: 'JSONEachRow',
     });
-    return result.json() as Promise<T[]>;
+    return result.json();
   }
 
   /**
@@ -148,7 +148,7 @@ export class ClickHouseService implements OnModuleInit, OnModuleDestroy {
       query_params: params,
       format: 'JSONEachRow',
     });
-    return result.json() as Promise<T[]>;
+    return result.json();
   }
 
   /**
@@ -160,12 +160,14 @@ export class ClickHouseService implements OnModuleInit, OnModuleDestroy {
     // Replace INTO table with INTO database.table
     // Handle common patterns: FROM, INTO, UPDATE (at start), ALTER TABLE
     // Note: Don't replace UPDATE after ALTER TABLE (e.g., ALTER TABLE x UPDATE col = ...)
-    return sql
-      .replace(/\bFROM\s+(\w+)\b/gi, `FROM ${database}.$1`)
-      .replace(/\bINTO\s+(\w+)\b/gi, `INTO ${database}.$1`)
-      // Only match UPDATE at the start of the statement (standalone UPDATE table SET...)
-      .replace(/^(\s*)UPDATE\s+(\w+)\b/gi, `$1UPDATE ${database}.$2`)
-      .replace(/\bALTER\s+TABLE\s+(\w+)\b/gi, `ALTER TABLE ${database}.$1`);
+    return (
+      sql
+        .replace(/\bFROM\s+(\w+)\b/gi, `FROM ${database}.$1`)
+        .replace(/\bINTO\s+(\w+)\b/gi, `INTO ${database}.$1`)
+        // Only match UPDATE at the start of the statement (standalone UPDATE table SET...)
+        .replace(/^(\s*)UPDATE\s+(\w+)\b/gi, `$1UPDATE ${database}.$2`)
+        .replace(/\bALTER\s+TABLE\s+(\w+)\b/gi, `ALTER TABLE ${database}.$1`)
+    );
   }
 
   /**
@@ -246,10 +248,7 @@ export class ClickHouseService implements OnModuleInit, OnModuleDestroy {
   /**
    * @deprecated Use querySystem or queryWorkspace instead
    */
-  async query<T>(
-    sql: string,
-    params?: Record<string, unknown>,
-  ): Promise<T[]> {
+  async query<T>(sql: string, params?: Record<string, unknown>): Promise<T[]> {
     return this.querySystem<T>(sql, params);
   }
 

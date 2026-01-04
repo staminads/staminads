@@ -30,7 +30,7 @@ export function generateCSVHeaders(
     'TimeScore',
     'TimeScore (seconds)',
     'Bounce Rate (%)',
-    'Avg. Scroll (%)',
+    'Median Scroll Depth (%)',
   ]
 
   if (showComparison) {
@@ -41,8 +41,8 @@ export function generateCSVHeaders(
       'TimeScore (Change %)',
       'Bounce Rate (Previous)',
       'Bounce Rate (Change %)',
-      'Avg. Scroll (Previous)',
-      'Avg. Scroll (Change %)'
+      'Median Scroll Depth (Previous)',
+      'Median Scroll Depth (Change %)'
     )
   }
 
@@ -61,7 +61,7 @@ export function rowToCSVValues(
   const sessions = Number(row.sessions) || 0
   const medianDuration = Number(row.median_duration) || 0
   const bounceRate = Number(row.bounce_rate) || 0
-  const maxScroll = Number(row.max_scroll) || 0
+  const medianScroll = Number(row.median_scroll) || 0
 
   const sessionPercent = totalSessions > 0
     ? ((sessions / totalSessions) * 100).toFixed(2)
@@ -77,14 +77,14 @@ export function rowToCSVValues(
     formatDuration(medianDuration),
     medianDuration.toFixed(2),
     bounceRate.toFixed(2),
-    maxScroll.toFixed(2),
+    medianScroll.toFixed(2),
   ]
 
   if (showComparison) {
     const sessionsPrev = row.sessions_prev !== undefined ? Number(row.sessions_prev) : null
     const durationPrev = row.median_duration_prev !== undefined ? Number(row.median_duration_prev) : null
     const bouncePrev = row.bounce_rate_prev !== undefined ? Number(row.bounce_rate_prev) : null
-    const scrollPrev = row.max_scroll_prev !== undefined ? Number(row.max_scroll_prev) : null
+    const scrollPrev = row.median_scroll_prev !== undefined ? Number(row.median_scroll_prev) : null
 
     values.push(
       sessionsPrev !== null ? String(sessionsPrev) : '',
@@ -94,7 +94,7 @@ export function rowToCSVValues(
       bouncePrev !== null ? bouncePrev.toFixed(2) : '',
       row.bounce_rate_change !== undefined ? Number(row.bounce_rate_change).toFixed(2) : '',
       scrollPrev !== null ? scrollPrev.toFixed(2) : '',
-      row.max_scroll_change !== undefined ? Number(row.max_scroll_change).toFixed(2) : ''
+      row.median_scroll_change !== undefined ? Number(row.median_scroll_change).toFixed(2) : ''
     )
   }
 

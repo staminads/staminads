@@ -39,21 +39,29 @@ describe('filter-evaluator', () => {
     it('returns different hash when filter conditions change', () => {
       const filters1 = [
         createFilter('f1', {
-          conditions: [{ field: 'utm_source', operator: 'equals', value: 'google' }],
+          conditions: [
+            { field: 'utm_source', operator: 'equals', value: 'google' },
+          ],
         }),
       ];
       const filters2 = [
         createFilter('f1', {
-          conditions: [{ field: 'utm_source', operator: 'equals', value: 'facebook' }],
+          conditions: [
+            { field: 'utm_source', operator: 'equals', value: 'facebook' },
+          ],
         }),
       ];
-      expect(computeFilterVersion(filters1)).not.toBe(computeFilterVersion(filters2));
+      expect(computeFilterVersion(filters1)).not.toBe(
+        computeFilterVersion(filters2),
+      );
     });
 
     it('returns different hash when filter enabled status changes', () => {
       const filters1 = [createFilter('f1', { enabled: true })];
       const filters2 = [createFilter('f1', { enabled: false })];
-      expect(computeFilterVersion(filters1)).not.toBe(computeFilterVersion(filters2));
+      expect(computeFilterVersion(filters1)).not.toBe(
+        computeFilterVersion(filters2),
+      );
     });
 
     it('is order-independent (sorts by id)', () => {
@@ -96,9 +104,15 @@ describe('filter-evaluator', () => {
           operator: 'equals',
           value: 'google',
         };
-        expect(evaluateCondition(condition, { utm_source: 'google' })).toBe(true);
-        expect(evaluateCondition(condition, { utm_source: 'Google' })).toBe(false);
-        expect(evaluateCondition(condition, { utm_source: 'facebook' })).toBe(false);
+        expect(evaluateCondition(condition, { utm_source: 'google' })).toBe(
+          true,
+        );
+        expect(evaluateCondition(condition, { utm_source: 'Google' })).toBe(
+          false,
+        );
+        expect(evaluateCondition(condition, { utm_source: 'facebook' })).toBe(
+          false,
+        );
       });
     });
 
@@ -110,7 +124,9 @@ describe('filter-evaluator', () => {
           value: 'google',
         };
         expect(
-          evaluateCondition(condition, { referrer: 'https://www.google.com/search' }),
+          evaluateCondition(condition, {
+            referrer: 'https://www.google.com/search',
+          }),
         ).toBe(true);
         expect(
           evaluateCondition(condition, { referrer: 'https://facebook.com' }),
@@ -125,9 +141,15 @@ describe('filter-evaluator', () => {
           operator: 'regex',
           value: '^summer_\\d{4}$',
         };
-        expect(evaluateCondition(condition, { utm_campaign: 'summer_2025' })).toBe(true);
-        expect(evaluateCondition(condition, { utm_campaign: 'winter_2025' })).toBe(false);
-        expect(evaluateCondition(condition, { utm_campaign: 'summer_sale' })).toBe(false);
+        expect(
+          evaluateCondition(condition, { utm_campaign: 'summer_2025' }),
+        ).toBe(true);
+        expect(
+          evaluateCondition(condition, { utm_campaign: 'winter_2025' }),
+        ).toBe(false);
+        expect(
+          evaluateCondition(condition, { utm_campaign: 'summer_sale' }),
+        ).toBe(false);
       });
 
       it('returns false for invalid regex', () => {
@@ -136,7 +158,9 @@ describe('filter-evaluator', () => {
           operator: 'regex',
           value: '[invalid regex',
         };
-        expect(evaluateCondition(condition, { utm_source: 'anything' })).toBe(false);
+        expect(evaluateCondition(condition, { utm_source: 'anything' })).toBe(
+          false,
+        );
       });
     });
 
@@ -147,8 +171,12 @@ describe('filter-evaluator', () => {
           operator: 'not_equals',
           value: 'google',
         };
-        expect(evaluateCondition(condition, { utm_source: 'facebook' })).toBe(true);
-        expect(evaluateCondition(condition, { utm_source: 'google' })).toBe(false);
+        expect(evaluateCondition(condition, { utm_source: 'facebook' })).toBe(
+          true,
+        );
+        expect(evaluateCondition(condition, { utm_source: 'google' })).toBe(
+          false,
+        );
       });
 
       it('returns false for null/empty field', () => {
@@ -169,8 +197,12 @@ describe('filter-evaluator', () => {
           operator: 'not_contains',
           value: 'google',
         };
-        expect(evaluateCondition(condition, { referrer: 'https://facebook.com' })).toBe(true);
-        expect(evaluateCondition(condition, { referrer: 'https://google.com' })).toBe(false);
+        expect(
+          evaluateCondition(condition, { referrer: 'https://facebook.com' }),
+        ).toBe(true);
+        expect(
+          evaluateCondition(condition, { referrer: 'https://google.com' }),
+        ).toBe(false);
       });
 
       it('returns false for null/empty field', () => {
@@ -193,7 +225,9 @@ describe('filter-evaluator', () => {
         expect(evaluateCondition(condition, { utm_source: null })).toBe(true);
         expect(evaluateCondition(condition, {})).toBe(true);
         expect(evaluateCondition(condition, { utm_source: '' })).toBe(true);
-        expect(evaluateCondition(condition, { utm_source: 'google' })).toBe(false);
+        expect(evaluateCondition(condition, { utm_source: 'google' })).toBe(
+          false,
+        );
       });
     });
 
@@ -203,7 +237,9 @@ describe('filter-evaluator', () => {
           field: 'utm_source',
           operator: 'is_not_empty',
         };
-        expect(evaluateCondition(condition, { utm_source: 'google' })).toBe(true);
+        expect(evaluateCondition(condition, { utm_source: 'google' })).toBe(
+          true,
+        );
         expect(evaluateCondition(condition, { utm_source: null })).toBe(false);
         expect(evaluateCondition(condition, { utm_source: '' })).toBe(false);
         expect(evaluateCondition(condition, {})).toBe(false);
@@ -216,7 +252,9 @@ describe('filter-evaluator', () => {
         operator: 'unknown' as never,
         value: 'google',
       };
-      expect(evaluateCondition(condition, { utm_source: 'google' })).toBe(false);
+      expect(evaluateCondition(condition, { utm_source: 'google' })).toBe(
+        false,
+      );
     });
   });
 
@@ -231,13 +269,22 @@ describe('filter-evaluator', () => {
         { field: 'utm_medium', operator: 'equals', value: 'cpc' },
       ];
       expect(
-        evaluateConditions(conditions, { utm_source: 'google', utm_medium: 'cpc' }),
+        evaluateConditions(conditions, {
+          utm_source: 'google',
+          utm_medium: 'cpc',
+        }),
       ).toBe(true);
       expect(
-        evaluateConditions(conditions, { utm_source: 'google', utm_medium: 'organic' }),
+        evaluateConditions(conditions, {
+          utm_source: 'google',
+          utm_medium: 'organic',
+        }),
       ).toBe(false);
       expect(
-        evaluateConditions(conditions, { utm_source: 'facebook', utm_medium: 'cpc' }),
+        evaluateConditions(conditions, {
+          utm_source: 'facebook',
+          utm_medium: 'cpc',
+        }),
       ).toBe(false);
     });
   });
@@ -265,8 +312,12 @@ describe('filter-evaluator', () => {
     it('returns empty result when no filters match', () => {
       const filters = [
         createFilter('f1', 100, {
-          conditions: [{ field: 'utm_source', operator: 'equals', value: 'google' }],
-          operations: [{ dimension: 'channel', action: 'set_value', value: 'Paid' }],
+          conditions: [
+            { field: 'utm_source', operator: 'equals', value: 'google' },
+          ],
+          operations: [
+            { dimension: 'channel', action: 'set_value', value: 'Paid' },
+          ],
         }),
       ];
       const result = evaluateFilters(filters, { utm_source: 'facebook' });
@@ -276,8 +327,12 @@ describe('filter-evaluator', () => {
     it('executes operations when conditions match', () => {
       const filters = [
         createFilter('f1', 100, {
-          conditions: [{ field: 'utm_source', operator: 'equals', value: 'google' }],
-          operations: [{ dimension: 'channel', action: 'set_value', value: 'Paid Search' }],
+          conditions: [
+            { field: 'utm_source', operator: 'equals', value: 'google' },
+          ],
+          operations: [
+            { dimension: 'channel', action: 'set_value', value: 'Paid Search' },
+          ],
         }),
       ];
       const result = evaluateFilters(filters, { utm_source: 'google' });
@@ -288,8 +343,12 @@ describe('filter-evaluator', () => {
       const filters = [
         createFilter('f1', 100, {
           enabled: false,
-          conditions: [{ field: 'utm_source', operator: 'equals', value: 'google' }],
-          operations: [{ dimension: 'channel', action: 'set_value', value: 'Paid' }],
+          conditions: [
+            { field: 'utm_source', operator: 'equals', value: 'google' },
+          ],
+          operations: [
+            { dimension: 'channel', action: 'set_value', value: 'Paid' },
+          ],
         }),
       ];
       const result = evaluateFilters(filters, { utm_source: 'google' });
@@ -300,11 +359,23 @@ describe('filter-evaluator', () => {
       const filters = [
         createFilter('low', 50, {
           conditions: [],
-          operations: [{ dimension: 'channel', action: 'set_value', value: 'Low Priority' }],
+          operations: [
+            {
+              dimension: 'channel',
+              action: 'set_value',
+              value: 'Low Priority',
+            },
+          ],
         }),
         createFilter('high', 100, {
           conditions: [],
-          operations: [{ dimension: 'channel', action: 'set_value', value: 'High Priority' }],
+          operations: [
+            {
+              dimension: 'channel',
+              action: 'set_value',
+              value: 'High Priority',
+            },
+          ],
         }),
       ];
       const result = evaluateFilters(filters, {});
@@ -326,11 +397,21 @@ describe('filter-evaluator', () => {
       const filters = [
         createFilter('default', 50, {
           conditions: [],
-          operations: [{ dimension: 'channel', action: 'set_default_value', value: 'Default' }],
+          operations: [
+            {
+              dimension: 'channel',
+              action: 'set_default_value',
+              value: 'Default',
+            },
+          ],
         }),
         createFilter('specific', 100, {
-          conditions: [{ field: 'utm_source', operator: 'equals', value: 'google' }],
-          operations: [{ dimension: 'channel', action: 'set_value', value: 'Google' }],
+          conditions: [
+            { field: 'utm_source', operator: 'equals', value: 'google' },
+          ],
+          operations: [
+            { dimension: 'channel', action: 'set_value', value: 'Google' },
+          ],
         }),
       ];
 
@@ -346,12 +427,20 @@ describe('filter-evaluator', () => {
     it('set_default_value fills in null from unset_value', () => {
       const filters = [
         createFilter('unset', 100, {
-          conditions: [{ field: 'is_direct', operator: 'equals', value: 'true' }],
+          conditions: [
+            { field: 'is_direct', operator: 'equals', value: 'true' },
+          ],
           operations: [{ dimension: 'channel', action: 'unset_value' }],
         }),
         createFilter('default', 50, {
           conditions: [],
-          operations: [{ dimension: 'channel', action: 'set_default_value', value: 'Direct' }],
+          operations: [
+            {
+              dimension: 'channel',
+              action: 'set_default_value',
+              value: 'Direct',
+            },
+          ],
         }),
       ];
       const result = evaluateFilters(filters, { is_direct: 'true' });
@@ -467,10 +556,14 @@ describe('filter-evaluator', () => {
 
     it('sets custom dimension slots', () => {
       const filters = [
-        createFilter('f1', [], [
-          { dimension: 'stm_1', action: 'set_value', value: 'Value 1' },
-          { dimension: 'stm_5', action: 'set_value', value: 'Value 5' },
-        ]),
+        createFilter(
+          'f1',
+          [],
+          [
+            { dimension: 'stm_1', action: 'set_value', value: 'Value 1' },
+            { dimension: 'stm_5', action: 'set_value', value: 'Value 5' },
+          ],
+        ),
       ];
       const { customDimensions } = applyFilterResults(filters, {}, {});
       expect(customDimensions.stm_1).toBe('Value 1');
@@ -479,9 +572,17 @@ describe('filter-evaluator', () => {
 
     it('tracks modified standard fields', () => {
       const filters = [
-        createFilter('f1', [], [
-          { dimension: 'utm_source', action: 'set_value', value: 'modified_source' },
-        ]),
+        createFilter(
+          'f1',
+          [],
+          [
+            {
+              dimension: 'utm_source',
+              action: 'set_value',
+              value: 'modified_source',
+            },
+          ],
+        ),
       ];
       const { modifiedFields } = applyFilterResults(filters, {}, {});
       expect(modifiedFields.utm_source).toBe('modified_source');
@@ -489,9 +590,17 @@ describe('filter-evaluator', () => {
 
     it('handles channel_group dimension', () => {
       const filters = [
-        createFilter('f1', [], [
-          { dimension: 'channel_group', action: 'set_value', value: 'Marketing' },
-        ]),
+        createFilter(
+          'f1',
+          [],
+          [
+            {
+              dimension: 'channel_group',
+              action: 'set_value',
+              value: 'Marketing',
+            },
+          ],
+        ),
       ];
       const { customDimensions } = applyFilterResults(filters, {}, {});
       expect(customDimensions.channel_group).toBe('Marketing');

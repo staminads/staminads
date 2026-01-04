@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, redirect } from '@tanstack/react-router'
+import { createFileRoute, useNavigate, redirect, Link } from '@tanstack/react-router'
 import { Form, Input, Button, message } from 'antd'
 import { useAuth } from '../lib/useAuth'
 
@@ -53,6 +53,15 @@ function LoginPage() {
               Sign in
             </Button>
           </Form.Item>
+
+          <div className="text-center mt-4">
+            <Link
+              to="/forgot-password"
+              className="text-sm text-purple-600 hover:text-purple-700"
+            >
+              Forgot your password?
+            </Link>
+          </div>
         </Form>
       </div>
 

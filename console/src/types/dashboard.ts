@@ -1,6 +1,72 @@
-import type { DatePreset, Granularity, AnalyticsResponse } from './analytics'
+import type { ReactNode } from 'react'
+import type { DatePreset, DateRange, Filter, Granularity, AnalyticsResponse } from './analytics'
 
 export type ComparisonMode = 'previous_period' | 'previous_year' | 'none'
+
+// ============================================
+// Dimension Table Widget Types
+// ============================================
+
+/** Tab configuration for DimensionTableWidget - defines what data to fetch */
+export interface DimensionTabConfig {
+  /** Unique key for the tab */
+  key: string
+  /** Tab button label (e.g., "Devices", "Browsers") */
+  label: string
+  /** Column header for dimension column (e.g., "Device", "Page") */
+  dimensionLabel: string
+  /** API dimension field to query (e.g., "device", "landing_path") */
+  dimension: string
+  /** Response field name if different from dimension (e.g., "referrer_domain") */
+  dimensionField?: string
+  /** Metrics to fetch (default: ['sessions', 'median_duration']) */
+  metrics?: string[]
+  /** Widget-specific filters (combined with global filters) */
+  filters?: Filter[]
+  /** Sort order (default: { sessions: 'desc' }) */
+  order?: Record<string, 'asc' | 'desc'>
+  /** Max rows to fetch (default: 10) */
+  limit?: number
+  /** Tab render type: 'table' (default) or 'country_map' for map visualization */
+  type?: 'table' | 'country_map'
+}
+
+/** Dashboard context value passed to widgets via React Context */
+export interface DashboardContextValue {
+  workspaceId: string
+  dateRange: DateRange
+  compareDateRange?: DateRange
+  timezone: string
+  /** Global filters applied to all widgets */
+  globalFilters: Filter[]
+  showComparison: boolean
+  timescoreReference: number
+}
+
+/** Standard data shape for all dimension widgets */
+export interface DimensionData {
+  dimension_value: string
+  sessions: number
+  median_duration: number
+  prev_sessions?: number
+  prev_median_duration?: number
+}
+
+/** Props for DimensionTableWidget */
+export interface DimensionTableWidgetProps {
+  /** Widget title */
+  title: string
+  /** Optional info tooltip next to title */
+  infoTooltip?: string
+  /** Tab configurations (at least one required) */
+  tabs: DimensionTabConfig[]
+  /** Optional icon renderer for dimension values */
+  iconPrefix?: (value: string, tabKey: string) => ReactNode
+  /** Optional row click handler */
+  onRowClick?: (row: DimensionData, tabKey: string) => void
+  /** Empty state message (default: "No data available") */
+  emptyText?: string
+}
 
 export interface WorkspaceSearch {
   // Shared params (dashboard + explore)
@@ -15,7 +81,7 @@ export interface WorkspaceSearch {
   minSessions?: string // Stored as string in URL, parsed to number
 }
 
-export type MetricKey = 'sessions' | 'median_duration' | 'bounce_rate' | 'max_scroll'
+export type MetricKey = 'sessions' | 'median_duration' | 'bounce_rate' | 'median_scroll'
 
 export interface MetricConfig {
   key: MetricKey
@@ -72,8 +138,8 @@ export const METRICS: MetricConfig[] = [
     invertTrend: true, // Lower bounce rate is better
   },
   {
-    key: 'max_scroll',
-    label: 'Avg. Scroll Depth',
+    key: 'median_scroll',
+    label: 'Median Scroll Depth',
     format: 'percentage',
     color: '#3b82f6',
     previousColor: '#9ca3af',
@@ -136,7 +202,7 @@ export function extractDashboardData(
     const previousTotal = previousData.reduce((sum, d) => sum + d.value, 0)
 
     // For avg metrics, calculate average instead of sum
-    const isAvgMetric = ['median_duration', 'bounce_rate', 'max_scroll'].includes(metric.key)
+    const isAvgMetric = ['median_duration', 'bounce_rate', 'median_scroll'].includes(metric.key)
     const finalCurrentTotal = isAvgMetric && currentData.length > 0
       ? currentTotal / currentData.length
       : currentTotal

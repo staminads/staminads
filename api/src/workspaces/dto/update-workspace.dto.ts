@@ -2,6 +2,7 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  IsEmail,
   IsArray,
   IsObject,
   IsNumber,
@@ -42,6 +43,37 @@ export class AnnotationDto {
   @IsString()
   @Matches(/^#[0-9A-Fa-f]{6}$/)
   color?: string;
+}
+
+export class SmtpSettingsUpdateDto {
+  @IsBoolean()
+  enabled: boolean;
+
+  @IsString()
+  @MaxLength(255)
+  host: string;
+
+  @IsNumber()
+  @Min(1)
+  @Max(65535)
+  port: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  username?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  password_encrypted?: string;
+
+  @IsString()
+  @MaxLength(100)
+  from_name: string;
+
+  @IsEmail()
+  from_email: string;
 }
 
 export class UpdateWorkspaceSettingsDto {
@@ -90,6 +122,12 @@ export class UpdateWorkspaceSettingsDto {
   @ValidateNested({ each: true })
   @Type(() => AnnotationDto)
   annotations?: AnnotationDto[];
+
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => SmtpSettingsUpdateDto)
+  smtp?: SmtpSettingsUpdateDto;
 }
 
 export class UpdateWorkspaceDto {

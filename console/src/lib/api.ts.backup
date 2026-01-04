@@ -1,0 +1,340 @@
+import type { Workspace, CreateWorkspaceInput, UpdateWorkspaceInput } from '../types/workspace'
+import type {
+  AnalyticsQuery,
+  AnalyticsResponse,
+  MetricDefinition,
+  DimensionDefinition,
+  ExtremesQuery,
+  ExtremesResponse,
+} from '../types/analytics'
+import type {
+  FilterDefinition,
+  FilterWithStaleness,
+  CreateFilterInput,
+  UpdateFilterInput,
+  ReorderFiltersInput,
+  BackfillSummary,
+  BackfillTaskProgress,
+  StartBackfillInput,
+} from '../types/filters'
+import type { AssistantChatRequest } from '../types/assistant'
+import type {
+  LoginResponse,
+  RegisterRequest,
+  ForgotPasswordRequest,
+  ResetPasswordRequest,
+  Session,
+  User,
+} from '../types/auth'
+import type {
+  SmtpStatus,
+  SmtpSettings,
+  UpdateSmtpInput,
+  DeleteSmtpInput,
+  TestSmtpInput,
+  TestSmtpResponse
+} from '../types/smtp'
+import type {
+  PublicApiKey,
+  CreateApiKeyInput,
+  CreateApiKeyResponse,
+  RevokeApiKeyInput,
+} from '../types/api-keys'
+
+export interface WebsiteMetaResponse {
+  title?: string
+  logo_url?: string
+}
+
+async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const token = localStorage.getItem('token')
+  const res = await fetch(`/api/${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+      ...options?.headers,
+    },
+  })
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}))
+    throw new Error(errorData.message || 'Request failed')
+  }
+  return res.json()
+}
+
+export const api = {
+  workspaces: {
+    list: () => request<Workspace[]>('workspaces.list'),
+    get: (id: string) => request<Workspace>(`workspaces.get?id=${id}`),
+    create: (data: CreateWorkspaceInput) =>
+      request<Workspace>('workspaces.create', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (data: UpdateWorkspaceInput) =>
+      request<Workspace>('workspaces.update', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      request<{ success: boolean }>('workspaces.delete', {
+        method: 'POST',
+        body: JSON.stringify({ id }),
+      }),
+  },
+  analytics: {
+    query: (data: AnalyticsQuery) =>
+      request<AnalyticsResponse>('analytics.query', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    extremes: (data: ExtremesQuery) =>
+      request<ExtremesResponse>('analytics.extremes', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    metrics: () => request<Record<string, MetricDefinition>>('analytics.metrics'),
+    dimensions: () => request<Record<string, DimensionDefinition>>('analytics.dimensions'),
+  },
+  tools: {
+    websiteMeta: (url: string) =>
+      request<WebsiteMetaResponse>('tools.websiteMeta', {
+        method: 'POST',
+        body: JSON.stringify({ url }),
+      }),
+  },
+  filters: {
+    list: (workspaceId: string, tags?: string[]) => {
+      const params = new URLSearchParams({ workspace_id: workspaceId })
+      if (tags?.length) {
+        tags.forEach(tag => params.append('tags', tag))
+      }
+      return request<FilterWithStaleness[]>(`filters.list?${params}`)
+    },
+    get: (workspaceId: string, id: string) =>
+      request<FilterWithStaleness>(`filters.get?workspace_id=${workspaceId}&id=${id}`),
+    create: (data: CreateFilterInput) =>
+      request<FilterDefinition>('filters.create', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (data: UpdateFilterInput) =>
+      request<FilterDefinition>('filters.update', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    delete: (workspaceId: string, id: string) =>
+      request<{ success: boolean }>(`filters.delete?workspace_id=${workspaceId}&id=${id}`, {
+        method: 'POST',
+      }),
+    reorder: (data: ReorderFiltersInput) =>
+      request<{ success: boolean }>('filters.reorder', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    listTags: (workspaceId: string) =>
+      request<string[]>(`filters.listTags?workspace_id=${workspaceId}`),
+    backfillSummary: (workspaceId: string) =>
+      request<BackfillSummary>(`filters.backfillSummary?workspace_id=${workspaceId}`),
+    backfillStart: (data: StartBackfillInput) =>
+      request<{ task_id: string }>('filters.backfillStart', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    backfillStatus: (taskId: string) =>
+      request<BackfillTaskProgress>(`filters.backfillStatus?task_id=${taskId}`),
+    backfillCancel: (taskId: string) =>
+      request<{ success: boolean }>(`filters.backfillCancel?task_id=${taskId}`, {
+        method: 'POST',
+      }),
+  },
+  assistant: {
+    chat: (data: AssistantChatRequest) =>
+      request<{ job_id: string }>('assistant.chat', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+  },
+  auth: {
+    login: async (email: string, password: string): Promise<LoginResponse> => {
+      const res = await fetch('/api/auth.login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.message || 'Login failed')
+      }
+      return res.json()
+    },
+
+    register: async (data: RegisterRequest): Promise<LoginResponse> => {
+      const res = await fetch('/api/auth.register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.message || 'Registration failed')
+      }
+      return res.json()
+    },
+
+    me: async (): Promise<User> => {
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/auth.me', {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      })
+      if (!res.ok) throw new Error('Failed to get user profile')
+      return res.json()
+    },
+
+    updateProfile: async (data: { name?: string; email?: string }): Promise<User> => {
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/auth.updateProfile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) throw new Error('Failed to update profile')
+      return res.json()
+    },
+
+    changePassword: async (currentPassword: string, newPassword: string): Promise<void> => {
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/auth.changePassword', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      })
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.message || 'Failed to change password')
+      }
+    },
+
+    forgotPassword: async (email: string): Promise<void> => {
+      const res = await fetch('/api/auth.forgotPassword', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      if (!res.ok) throw new Error('Request failed')
+    },
+
+    resetPassword: async (token: string, newPassword: string): Promise<void> => {
+      const res = await fetch('/api/auth.resetPassword', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, newPassword }),
+      })
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.message || 'Password reset failed')
+      }
+    },
+
+    sessions: async (): Promise<Session[]> => {
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/auth.sessions', {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      })
+      if (!res.ok) throw new Error('Failed to get sessions')
+      return res.json()
+    },
+
+    revokeSession: async (sessionId: string): Promise<void> => {
+      const token = localStorage.getItem('token')
+      const res = await fetch(`/api/auth.revokeSession?sessionId=${sessionId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      })
+      if (!res.ok) throw new Error('Failed to revoke session')
+    },
+
+    revokeAllSessions: async (): Promise<void> => {
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/auth.revokeAllSessions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      })
+      if (!res.ok) throw new Error('Failed to revoke sessions')
+    },
+  },
+  smtp: {
+    status: (workspaceId: string) =>
+      request<SmtpStatus>(`smtp.status?workspace_id=${workspaceId}`),
+
+    get: async (workspaceId: string): Promise<SmtpSettings | null> => {
+      const token = localStorage.getItem('token')
+      const res = await fetch(`/api/smtp.get?workspace_id=${workspaceId}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      })
+      if (!res.ok) {
+        if (res.status === 404) return null
+        throw new Error('Failed to get SMTP settings')
+      }
+      return res.json()
+    },
+
+    update: (data: UpdateSmtpInput) =>
+      request<SmtpSettings>('smtp.update', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    delete: (data: DeleteSmtpInput) =>
+      request<{ success: boolean }>('smtp.delete', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    test: (data: TestSmtpInput) =>
+      request<TestSmtpResponse>('smtp.test', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+  },
+  apiKeys: {
+    list: (workspaceId: string) => {
+      const params = new URLSearchParams({ workspace_id: workspaceId })
+      return request<PublicApiKey[]>(`apiKeys.list?${params}`)
+    },
+
+    create: (data: CreateApiKeyInput) =>
+      request<CreateApiKeyResponse>('apiKeys.create', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    revoke: (data: RevokeApiKeyInput) =>
+      request<{ success: boolean }>('apiKeys.revoke', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+  },
+}

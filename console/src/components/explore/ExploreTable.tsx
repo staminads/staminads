@@ -206,17 +206,17 @@ export function ExploreTable({
         width: 120
       },
       {
-        title: 'Avg. Scroll',
-        dataIndex: 'max_scroll',
-        key: 'max_scroll',
+        title: 'Median Scroll Depth',
+        dataIndex: 'median_scroll',
+        key: 'median_scroll',
         align: 'right',
         render: (value, record) => (
           <div className="flex items-center justify-end">
             <span>{formatPercentage(value)}</span>
-            {showComparison && <ChangeIndicator value={record.max_scroll_change} />}
+            {showComparison && <ChangeIndicator value={record.median_scroll_change} />}
           </div>
         ),
-        sorter: (a, b) => a.max_scroll - b.max_scroll,
+        sorter: (a, b) => a.median_scroll - b.median_scroll,
         width: 120
       }
     ]

@@ -3,9 +3,9 @@ export type EventName = 'screen_view' | 'scroll' | 'click' | 'ping';
 export interface TrackingEvent {
   session_id: string;
   workspace_id: string;
-  received_at: string;   // Server timestamp
-  created_at: string;    // SDK session start
-  updated_at: string;    // SDK last interaction
+  received_at: string; // Server timestamp
+  created_at: string; // SDK session start
+  updated_at: string; // SDK last interaction
   name: EventName | string;
   path: string;
   duration: number;

@@ -25,18 +25,29 @@ describe('ToolsService', () => {
       contentType?: string;
     } = {},
   ) => {
-    const { ok = true, status = 200, headers = {}, contentType = 'text/html' } = options;
+    const {
+      ok = true,
+      status = 200,
+      headers = {},
+      contentType = 'text/html',
+    } = options;
     const allHeaders = { 'content-type': contentType, ...headers };
 
     return Promise.resolve({
       ok,
       status,
       headers: {
-        get: (name: string) => (allHeaders as Record<string, string>)[name.toLowerCase()] || null,
+        get: (name: string) =>
+          (allHeaders as Record<string, string>)[name.toLowerCase()] || null,
       },
-      text: () => Promise.resolve(typeof body === 'string' ? body : body.toString()),
-      json: () => Promise.resolve(JSON.parse(typeof body === 'string' ? body : body.toString())),
-      arrayBuffer: () => Promise.resolve(Buffer.isBuffer(body) ? body : Buffer.from(body)),
+      text: () =>
+        Promise.resolve(typeof body === 'string' ? body : body.toString()),
+      json: () =>
+        Promise.resolve(
+          JSON.parse(typeof body === 'string' ? body : body.toString()),
+        ),
+      arrayBuffer: () =>
+        Promise.resolve(Buffer.isBuffer(body) ? body : Buffer.from(body)),
     });
   };
 
@@ -106,7 +117,9 @@ describe('ToolsService', () => {
         createMockResponse(icoData, { contentType: 'image/x-icon' }),
       );
 
-      const result = await service.getFavicon('https://example.com/favicon.ico');
+      const result = await service.getFavicon(
+        'https://example.com/favicon.ico',
+      );
 
       expect(result.contentType).toBe('image/x-icon');
       expect(result.buffer.length).toBe(100);
@@ -126,7 +139,9 @@ describe('ToolsService', () => {
     it('returns fallback for fetch error', async () => {
       mockFetch.mockRejectedValue(new Error('Network error'));
 
-      const result = await service.getFavicon('https://example.com/favicon.png');
+      const result = await service.getFavicon(
+        'https://example.com/favicon.png',
+      );
 
       expect(result.contentType).toBe('image/png');
       expect(result.buffer.length).toBe(FALLBACK_PNG_SIZE);
@@ -137,7 +152,9 @@ describe('ToolsService', () => {
         createMockResponse('Not Found', { ok: false, status: 404 }),
       );
 
-      const result = await service.getFavicon('https://example.com/favicon.png');
+      const result = await service.getFavicon(
+        'https://example.com/favicon.png',
+      );
 
       expect(result.contentType).toBe('image/png');
       expect(result.buffer.length).toBe(FALLBACK_PNG_SIZE);
@@ -151,7 +168,9 @@ describe('ToolsService', () => {
         }),
       );
 
-      const result = await service.getFavicon('https://example.com/favicon.png');
+      const result = await service.getFavicon(
+        'https://example.com/favicon.png',
+      );
 
       expect(result.contentType).toBe('image/png');
       expect(result.buffer.length).toBe(FALLBACK_PNG_SIZE);
@@ -170,8 +189,12 @@ describe('ToolsService', () => {
       const iconData = Buffer.alloc(100);
 
       mockFetch
-        .mockResolvedValueOnce(createMockResponse(html, { contentType: 'text/html' }))
-        .mockResolvedValueOnce(createMockResponse(iconData, { contentType: 'image/png' }));
+        .mockResolvedValueOnce(
+          createMockResponse(html, { contentType: 'text/html' }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse(iconData, { contentType: 'image/png' }),
+        );
 
       const result = await service.getFavicon('https://example.com');
 
@@ -191,8 +214,12 @@ describe('ToolsService', () => {
       const iconData = Buffer.alloc(100);
 
       mockFetch
-        .mockResolvedValueOnce(createMockResponse(html, { contentType: 'text/html' }))
-        .mockResolvedValueOnce(createMockResponse(iconData, { contentType: 'image/png' }));
+        .mockResolvedValueOnce(
+          createMockResponse(html, { contentType: 'text/html' }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse(iconData, { contentType: 'image/png' }),
+        );
 
       const result = await service.getFavicon('https://example.com');
 
@@ -214,8 +241,12 @@ describe('ToolsService', () => {
       const iconData = Buffer.alloc(100);
 
       mockFetch
-        .mockResolvedValueOnce(createMockResponse(html, { contentType: 'text/html' }))
-        .mockResolvedValueOnce(createMockResponse(iconData, { contentType: 'image/x-icon' }));
+        .mockResolvedValueOnce(
+          createMockResponse(html, { contentType: 'text/html' }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse(iconData, { contentType: 'image/x-icon' }),
+        );
 
       const result = await service.getFavicon('https://example.com');
 
@@ -233,8 +264,12 @@ describe('ToolsService', () => {
       const iconData = Buffer.alloc(100);
 
       mockFetch
-        .mockResolvedValueOnce(createMockResponse(html, { contentType: 'text/html' }))
-        .mockResolvedValueOnce(createMockResponse(iconData, { contentType: 'image/x-icon' }));
+        .mockResolvedValueOnce(
+          createMockResponse(html, { contentType: 'text/html' }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse(iconData, { contentType: 'image/x-icon' }),
+        );
 
       const result = await service.getFavicon('https://example.com');
 
@@ -258,9 +293,15 @@ describe('ToolsService', () => {
       const iconData = Buffer.alloc(100);
 
       mockFetch
-        .mockResolvedValueOnce(createMockResponse(html, { contentType: 'text/html' }))
-        .mockResolvedValueOnce(createMockResponse(manifest, { contentType: 'application/json' }))
-        .mockResolvedValueOnce(createMockResponse(iconData, { contentType: 'image/png' }));
+        .mockResolvedValueOnce(
+          createMockResponse(html, { contentType: 'text/html' }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse(manifest, { contentType: 'application/json' }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse(iconData, { contentType: 'image/png' }),
+        );
 
       const result = await service.getFavicon('https://example.com');
 
@@ -282,12 +323,20 @@ describe('ToolsService', () => {
       const manifest = JSON.stringify({});
 
       mockFetch
-        .mockResolvedValueOnce(createMockResponse(html, { contentType: 'text/html' }))
-        .mockResolvedValueOnce(createMockResponse(manifest, { contentType: 'application/json' }))
+        .mockResolvedValueOnce(
+          createMockResponse(html, { contentType: 'text/html' }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse(manifest, { contentType: 'application/json' }),
+        )
         // Fallback to /favicon.ico HEAD request
-        .mockResolvedValueOnce(createMockResponse('', { ok: false, status: 404 }))
+        .mockResolvedValueOnce(
+          createMockResponse('', { ok: false, status: 404 }),
+        )
         // Final fallback to Google favicon service
-        .mockResolvedValueOnce(createMockResponse(Buffer.alloc(100), { contentType: 'image/png' }));
+        .mockResolvedValueOnce(
+          createMockResponse(Buffer.alloc(100), { contentType: 'image/png' }),
+        );
 
       const result = await service.getFavicon('https://example.com');
 
@@ -304,11 +353,19 @@ describe('ToolsService', () => {
       `;
 
       mockFetch
-        .mockResolvedValueOnce(createMockResponse(html, { contentType: 'text/html' }))
-        .mockResolvedValueOnce(createMockResponse('', { ok: false, status: 404 }))
+        .mockResolvedValueOnce(
+          createMockResponse(html, { contentType: 'text/html' }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse('', { ok: false, status: 404 }),
+        )
         // Fallback to /favicon.ico
         .mockResolvedValueOnce(createMockResponse('', { ok: true }))
-        .mockResolvedValueOnce(createMockResponse(Buffer.alloc(100), { contentType: 'image/x-icon' }));
+        .mockResolvedValueOnce(
+          createMockResponse(Buffer.alloc(100), {
+            contentType: 'image/x-icon',
+          }),
+        );
 
       const result = await service.getFavicon('https://example.com');
 
@@ -320,11 +377,15 @@ describe('ToolsService', () => {
       const iconData = Buffer.alloc(100);
 
       mockFetch
-        .mockResolvedValueOnce(createMockResponse(html, { contentType: 'text/html' }))
+        .mockResolvedValueOnce(
+          createMockResponse(html, { contentType: 'text/html' }),
+        )
         // HEAD request to /favicon.ico
         .mockResolvedValueOnce(createMockResponse('', { ok: true }))
         // Fetch the favicon.ico
-        .mockResolvedValueOnce(createMockResponse(iconData, { contentType: 'image/x-icon' }));
+        .mockResolvedValueOnce(
+          createMockResponse(iconData, { contentType: 'image/x-icon' }),
+        );
 
       const result = await service.getFavicon('https://example.com');
 
@@ -336,11 +397,17 @@ describe('ToolsService', () => {
       const googleFavicon = Buffer.alloc(100);
 
       mockFetch
-        .mockResolvedValueOnce(createMockResponse(html, { contentType: 'text/html' }))
+        .mockResolvedValueOnce(
+          createMockResponse(html, { contentType: 'text/html' }),
+        )
         // HEAD request to /favicon.ico fails
-        .mockResolvedValueOnce(createMockResponse('', { ok: false, status: 404 }))
+        .mockResolvedValueOnce(
+          createMockResponse('', { ok: false, status: 404 }),
+        )
         // Google favicon service
-        .mockResolvedValueOnce(createMockResponse(googleFavicon, { contentType: 'image/png' }));
+        .mockResolvedValueOnce(
+          createMockResponse(googleFavicon, { contentType: 'image/png' }),
+        );
 
       const result = await service.getFavicon('https://example.com');
 
@@ -376,8 +443,12 @@ describe('ToolsService', () => {
       const iconData = Buffer.alloc(100);
 
       mockFetch
-        .mockResolvedValueOnce(createMockResponse(html, { contentType: 'text/html' }))
-        .mockResolvedValueOnce(createMockResponse(iconData, { contentType: 'image/png' }));
+        .mockResolvedValueOnce(
+          createMockResponse(html, { contentType: 'text/html' }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse(iconData, { contentType: 'image/png' }),
+        );
 
       await service.getFavicon('https://example.com');
 
@@ -398,8 +469,12 @@ describe('ToolsService', () => {
       const iconData = Buffer.alloc(100);
 
       mockFetch
-        .mockResolvedValueOnce(createMockResponse(html, { contentType: 'text/html' }))
-        .mockResolvedValueOnce(createMockResponse(iconData, { contentType: 'image/png' }));
+        .mockResolvedValueOnce(
+          createMockResponse(html, { contentType: 'text/html' }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse(iconData, { contentType: 'image/png' }),
+        );
 
       await service.getFavicon('https://example.com');
 
@@ -414,7 +489,9 @@ describe('ToolsService', () => {
         createMockResponse(Buffer.alloc(0), { contentType: 'image/png' }),
       );
 
-      const result = await service.getFavicon('https://example.com/favicon.png');
+      const result = await service.getFavicon(
+        'https://example.com/favicon.png',
+      );
 
       expect(result.contentType).toBe('image/png');
       expect(result.buffer.length).toBe(FALLBACK_PNG_SIZE);
@@ -467,9 +544,9 @@ describe('ToolsService', () => {
         createMockResponse('Not Found', { ok: false, status: 404 }),
       );
 
-      await expect(service.getWebsiteMeta('https://example.com')).rejects.toThrow(
-        'Failed to fetch URL: 404',
-      );
+      await expect(
+        service.getWebsiteMeta('https://example.com'),
+      ).rejects.toThrow('Failed to fetch URL: 404');
     });
 
     it('extracts logo from apple-touch-icon', async () => {
@@ -518,7 +595,9 @@ describe('ToolsService', () => {
 
       mockFetch
         .mockResolvedValueOnce(createMockResponse(html))
-        .mockResolvedValueOnce(createMockResponse(manifest, { contentType: 'application/json' }));
+        .mockResolvedValueOnce(
+          createMockResponse(manifest, { contentType: 'application/json' }),
+        );
 
       const result = await service.getWebsiteMeta('https://example.com');
 
@@ -544,7 +623,9 @@ describe('ToolsService', () => {
       mockFetch
         .mockResolvedValueOnce(createMockResponse(html))
         // HEAD request to /favicon.ico fails
-        .mockResolvedValueOnce(createMockResponse('', { ok: false, status: 404 }));
+        .mockResolvedValueOnce(
+          createMockResponse('', { ok: false, status: 404 }),
+        );
 
       const result = await service.getWebsiteMeta('https://example.com');
 

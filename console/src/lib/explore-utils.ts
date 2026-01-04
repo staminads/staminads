@@ -165,7 +165,7 @@ export function transformApiRowsToExploreRows(
       sessions: (row.sessions as number) ?? 0,
       median_duration: (row.median_duration as number) ?? 0,
       bounce_rate: (row.bounce_rate as number) ?? 0,
-      max_scroll: (row.max_scroll as number) ?? 0,
+      median_scroll: (row.median_scroll as number) ?? 0,
     }
 
     // Add previous period metrics if available
@@ -173,7 +173,7 @@ export function transformApiRowsToExploreRows(
       exploreRow.sessions_prev = row.sessions_prev as number | undefined
       exploreRow.median_duration_prev = row.median_duration_prev as number | undefined
       exploreRow.bounce_rate_prev = row.bounce_rate_prev as number | undefined
-      exploreRow.max_scroll_prev = row.max_scroll_prev as number | undefined
+      exploreRow.median_scroll_prev = row.median_scroll_prev as number | undefined
 
       // Calculate change percentages
       if (exploreRow.sessions_prev !== undefined && exploreRow.sessions_prev > 0) {
@@ -185,8 +185,8 @@ export function transformApiRowsToExploreRows(
       if (exploreRow.bounce_rate_prev !== undefined && exploreRow.bounce_rate_prev > 0) {
         exploreRow.bounce_rate_change = ((exploreRow.bounce_rate - exploreRow.bounce_rate_prev) / exploreRow.bounce_rate_prev) * 100
       }
-      if (exploreRow.max_scroll_prev !== undefined && exploreRow.max_scroll_prev > 0) {
-        exploreRow.max_scroll_change = ((exploreRow.max_scroll - exploreRow.max_scroll_prev) / exploreRow.max_scroll_prev) * 100
+      if (exploreRow.median_scroll_prev !== undefined && exploreRow.median_scroll_prev > 0) {
+        exploreRow.median_scroll_change = ((exploreRow.median_scroll - exploreRow.median_scroll_prev) / exploreRow.median_scroll_prev) * 100
       }
     }
 
@@ -210,7 +210,7 @@ export function mergeComparisonData(
       sessions_prev: prevRow?.sessions,
       median_duration_prev: prevRow?.median_duration,
       bounce_rate_prev: prevRow?.bounce_rate,
-      max_scroll_prev: prevRow?.max_scroll,
+      median_scroll_prev: prevRow?.median_scroll,
     }
   })
 }

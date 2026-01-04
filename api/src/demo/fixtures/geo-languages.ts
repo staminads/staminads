@@ -115,7 +115,7 @@ export const GEO_PROFILES: GeoProfile[] = [
     region: 'Community of Madrid',
     city: 'Madrid',
     latitude: 40.42,
-    longitude: -3.70,
+    longitude: -3.7,
     timezone: 'Europe/Madrid',
     language: 'es-ES',
     durationMultiplier: 1.1,

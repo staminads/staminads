@@ -33,14 +33,16 @@ async function waitForBackfillsToComplete(
               WHERE status IN ('pending', 'running')`,
       format: 'JSONEachRow',
     });
-    const rows = (await result.json()) as Array<{ count: string }>;
-    if (parseInt(rows[0]?.count ?? '0', 10) === 0) {
+    const rows = (await result.json()) as Record<string, unknown>[];
+    if (parseInt(String(rows[0]?.count ?? '0'), 10) === 0) {
       return;
     }
     await new Promise((r) => setTimeout(r, 100));
   }
   // Don't throw - just log and continue, allowing truncate to clean up
-  console.warn('Timeout waiting for backfills to complete, proceeding with cleanup');
+  console.warn(
+    'Timeout waiting for backfills to complete, proceeding with cleanup',
+  );
 }
 
 describe('Backfill Integration', () => {
@@ -118,10 +120,16 @@ describe('Backfill Integration', () => {
         tags: ['marketing'],
         enabled: true,
         priority: 100,
-        conditions: [{ field: 'utm_source', operator: 'equals', value: 'google' }],
+        conditions: [
+          { field: 'utm_source', operator: 'equals', value: 'google' },
+        ],
         operations: [
           { dimension: 'channel', action: 'set_value', value: 'Google' },
-          { dimension: 'channel_group', action: 'set_value', value: 'Paid Search' },
+          {
+            dimension: 'channel_group',
+            action: 'set_value',
+            value: 'Paid Search',
+          },
         ],
         created_at: toClickHouseDateTime(),
         updated_at: toClickHouseDateTime(),
@@ -132,10 +140,16 @@ describe('Backfill Integration', () => {
         tags: ['marketing'],
         enabled: true,
         priority: 90,
-        conditions: [{ field: 'utm_source', operator: 'equals', value: 'facebook' }],
+        conditions: [
+          { field: 'utm_source', operator: 'equals', value: 'facebook' },
+        ],
         operations: [
           { dimension: 'channel', action: 'set_value', value: 'Facebook' },
-          { dimension: 'channel_group', action: 'set_value', value: 'Paid Social' },
+          {
+            dimension: 'channel_group',
+            action: 'set_value',
+            value: 'Paid Social',
+          },
         ],
         created_at: toClickHouseDateTime(),
         updated_at: toClickHouseDateTime(),
@@ -189,7 +203,7 @@ describe('Backfill Integration', () => {
         query_params: { id: response.body.task_id },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Array<Record<string, unknown>>;
+      const rows = (await result.json()) as Record<string, unknown>[];
 
       expect(rows).toHaveLength(1);
       expect(rows[0].workspace_id).toBe(testWorkspaceId);
@@ -210,14 +224,15 @@ describe('Backfill Integration', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
       const result = await systemClient.query({
-        query: 'SELECT filters_snapshot FROM backfill_tasks FINAL WHERE id = {id:String}',
+        query:
+          'SELECT filters_snapshot FROM backfill_tasks FINAL WHERE id = {id:String}',
         query_params: { id: response.body.task_id },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Array<{ filters_snapshot: string }>;
+      const rows = (await result.json()) as Record<string, unknown>[];
 
       expect(rows).toHaveLength(1);
-      const snapshot = JSON.parse(rows[0].filters_snapshot);
+      const snapshot = JSON.parse(rows[0].filters_snapshot as string);
       expect(snapshot).toHaveLength(2);
       expect(snapshot[0].name).toBe('Channel Mapping');
       expect(snapshot[1].name).toBe('Facebook Mapping');
@@ -294,11 +309,12 @@ describe('Backfill Integration', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
       const result = await systemClient.query({
-        query: 'SELECT chunk_size_days, batch_size FROM backfill_tasks FINAL WHERE id = {id:String}',
+        query:
+          'SELECT chunk_size_days, batch_size FROM backfill_tasks FINAL WHERE id = {id:String}',
         query_params: { id: response.body.task_id },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Array<Record<string, unknown>>;
+      const rows = (await result.json()) as Record<string, unknown>[];
 
       expect(rows[0].chunk_size_days).toBe(7);
       expect(rows[0].batch_size).toBe(1000);
@@ -405,12 +421,13 @@ describe('Backfill Integration', () => {
         for (let i = 0; i < 20; i++) {
           await new Promise((resolve) => setTimeout(resolve, 500));
           const result = await systemClient.query({
-            query: 'SELECT status FROM backfill_tasks FINAL WHERE id = {id:String}',
+            query:
+              'SELECT status FROM backfill_tasks FINAL WHERE id = {id:String}',
             query_params: { id: taskId },
             format: 'JSONEachRow',
           });
-          const rows = (await result.json()) as Array<{ status: string }>;
-          status = rows[0]?.status;
+          const rows = (await result.json()) as Record<string, unknown>[];
+          status = rows[0]?.status as string;
           if (['cancelled', 'completed', 'failed'].includes(status)) break;
         }
 
@@ -569,7 +586,9 @@ describe('Backfill Integration', () => {
 
       expect(response.body).toHaveProperty('needsBackfill', false);
       expect(response.body).toHaveProperty('lastCompletedFilterVersion');
-      expect(response.body.lastCompletedFilterVersion).toBe(response.body.currentFilterVersion);
+      expect(response.body.lastCompletedFilterVersion).toBe(
+        response.body.currentFilterVersion,
+      );
       expect(response.body).toHaveProperty('activeTask', null);
     });
 
@@ -602,8 +621,10 @@ describe('Backfill Integration', () => {
         query: 'DESCRIBE TABLE backfill_tasks',
         format: 'JSONEachRow',
       });
-      const columns = (await result.json()) as Array<{ name: string; type: string }>;
-      const columnMap = Object.fromEntries(columns.map((c) => [c.name, c.type]));
+      const columns = (await result.json()) as Record<string, unknown>[];
+      const columnMap = Object.fromEntries(
+        columns.map((c) => [c.name, c.type]),
+      );
 
       expect(columnMap['id']).toBe('String');
       expect(columnMap['workspace_id']).toBe('String');
@@ -704,11 +725,12 @@ describe('Backfill Integration', () => {
 
     it('verifies sessions exist before backfill', async () => {
       const result = await workspaceClient.query({
-        query: 'SELECT id, utm_source, channel, channel_group, stm_1 FROM sessions FINAL WHERE workspace_id = {ws:String}',
+        query:
+          'SELECT id, utm_source, channel, channel_group, stm_1 FROM sessions FINAL WHERE workspace_id = {ws:String}',
         query_params: { ws: testWorkspaceId },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Array<Record<string, unknown>>;
+      const rows = (await result.json()) as Record<string, unknown>[];
 
       expect(rows).toHaveLength(3);
       // All channel and stm_1 values should be empty before backfill (non-nullable schema)
@@ -777,7 +799,7 @@ describe('Backfill Integration', () => {
         query_params: { ws: testWorkspaceId },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Array<Record<string, unknown>>;
+      const rows = (await result.json()) as Record<string, unknown>[];
 
       expect(rows).toHaveLength(3);
 
@@ -817,7 +839,9 @@ describe('Backfill Integration', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
-      expect(['pending', 'running', 'completed']).toContain(initialStatus.body.status);
+      expect(['pending', 'running', 'completed']).toContain(
+        initialStatus.body.status,
+      );
 
       // Wait for completion
       let taskStatus = 'pending';
@@ -850,14 +874,12 @@ describe('Backfill Integration', () => {
 
       // Check task in database has error_message field
       const result = await systemClient.query({
-        query: 'SELECT status, error_message FROM backfill_tasks FINAL WHERE id = {id:String}',
+        query:
+          'SELECT status, error_message FROM backfill_tasks FINAL WHERE id = {id:String}',
         query_params: { id: response.body.task_id },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Array<{
-        status: string;
-        error_message: string;
-      }>;
+      const rows = (await result.json()) as Record<string, unknown>[];
 
       expect(rows).toHaveLength(1);
       expect(rows[0].status).toBe('completed');
@@ -911,15 +933,12 @@ describe('Backfill Integration', () => {
         query_params: { id: staleTaskId },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Array<{
-        status: string;
-        updated_at: string;
-      }>;
+      const rows = (await result.json()) as Record<string, unknown>[];
 
       expect(rows).toHaveLength(1);
       expect(rows[0].status).toBe('running');
       // Verify the task is indeed stale (updated_at is old)
-      const updatedAt = new Date(rows[0].updated_at.replace(' ', 'T') + 'Z');
+      const updatedAt = new Date((rows[0].updated_at as string).replace(' ', 'T') + 'Z');
       const ageMinutes = (Date.now() - updatedAt.getTime()) / 60000;
       expect(ageMinutes).toBeGreaterThan(5); // Older than default stale threshold
     });
@@ -956,9 +975,7 @@ describe('Backfill Integration', () => {
         query_params: { id: response.body.task_id },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Array<{
-        completed_at: string | null;
-      }>;
+      const rows = (await result.json()) as Record<string, unknown>[];
 
       expect(rows).toHaveLength(1);
       expect(rows[0].completed_at).toBeTruthy();
@@ -986,10 +1003,7 @@ describe('Backfill Integration', () => {
         query_params: { id: response.body.task_id },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Array<{
-        status: string;
-        completed_at: string | null;
-      }>;
+      const rows = (await result.json()) as Record<string, unknown>[];
 
       expect(rows).toHaveLength(1);
       expect(rows[0].status).toBe('completed');

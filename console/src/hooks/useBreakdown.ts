@@ -83,7 +83,7 @@ export function useBreakdown({
         queryKey: ['breakdown', workspaceId, dim, parentFilters, dateRange, minSessions],
         queryFn: () => api.analytics.query({
           workspace_id: workspaceId,
-          metrics: ['sessions', 'median_duration', 'bounce_rate', 'max_scroll'],
+          metrics: ['sessions', 'median_duration', 'bounce_rate', 'median_scroll'],
           dimensions: [dim],
           filters: parentFilters,
           dateRange,

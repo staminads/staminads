@@ -1,5 +1,26 @@
 // System schemas - stored in staminads_system database
 export const SYSTEM_SCHEMAS: Record<string, string> = {
+  users: `
+    CREATE TABLE IF NOT EXISTS {database}.users (
+      id String,
+      email String,
+      password_hash Nullable(String),
+      name String,
+      type Enum8('user' = 1, 'service_account' = 2),
+      status Enum8('pending' = 1, 'active' = 2, 'disabled' = 3),
+      is_super_admin UInt8 DEFAULT 0,
+      last_login_at Nullable(DateTime64(3)),
+      failed_login_attempts UInt8 DEFAULT 0,
+      locked_until Nullable(DateTime64(3)),
+      password_changed_at Nullable(DateTime64(3)),
+      deleted_at Nullable(DateTime64(3)),
+      deleted_by Nullable(String),
+      created_at DateTime64(3) DEFAULT now64(3),
+      updated_at DateTime64(3) DEFAULT now64(3)
+    ) ENGINE = ReplacingMergeTree(updated_at)
+    ORDER BY id
+  `,
+
   workspaces: `
     CREATE TABLE IF NOT EXISTS {database}.workspaces (
       id String,
@@ -37,6 +58,108 @@ export const SYSTEM_SCHEMAS: Record<string, string> = {
       retry_count UInt8 DEFAULT 0,
       dimensions_snapshot String DEFAULT '[]',
       filters_snapshot String DEFAULT '[]'
+    ) ENGINE = ReplacingMergeTree(updated_at)
+    ORDER BY id
+  `,
+
+  audit_logs: `
+    CREATE TABLE IF NOT EXISTS {database}.audit_logs (
+      id String,
+      user_id String,
+      workspace_id Nullable(String),
+      action LowCardinality(String),
+      target_type LowCardinality(String),
+      target_id String,
+      metadata String DEFAULT '{}',
+      ip_address Nullable(String),
+      user_agent Nullable(String),
+      created_at DateTime64(3) DEFAULT now64(3)
+    ) ENGINE = MergeTree()
+    PARTITION BY toYYYYMM(created_at)
+    ORDER BY (created_at, user_id, id)
+  `,
+
+  workspace_memberships: `
+    CREATE TABLE IF NOT EXISTS {database}.workspace_memberships (
+      id String,
+      workspace_id String,
+      user_id String,
+      role Enum8('owner' = 1, 'admin' = 2, 'editor' = 3, 'viewer' = 4),
+      invited_by Nullable(String),
+      joined_at DateTime64(3) DEFAULT now64(3),
+      created_at DateTime64(3) DEFAULT now64(3),
+      updated_at DateTime64(3) DEFAULT now64(3)
+    ) ENGINE = ReplacingMergeTree(updated_at)
+    ORDER BY (workspace_id, user_id)
+  `,
+
+  sessions: `
+    CREATE TABLE IF NOT EXISTS {database}.sessions (
+      id String,
+      user_id String,
+      token_hash String,
+      ip_address Nullable(String),
+      user_agent Nullable(String),
+      expires_at DateTime64(3),
+      revoked_at Nullable(DateTime64(3)),
+      created_at DateTime64(3) DEFAULT now64(3),
+      updated_at DateTime64(3) DEFAULT now64(3)
+    ) ENGINE = ReplacingMergeTree(updated_at)
+    ORDER BY (user_id, id)
+  `,
+
+  invitations: `
+    CREATE TABLE IF NOT EXISTS {database}.invitations (
+      id String,
+      workspace_id String,
+      email String,
+      role Enum8('admin' = 2, 'editor' = 3, 'viewer' = 4),
+      token_hash String,
+      invited_by String,
+      status Enum8('pending' = 1, 'accepted' = 2, 'expired' = 3, 'revoked' = 4),
+      expires_at DateTime64(3),
+      accepted_at Nullable(DateTime64(3)),
+      revoked_at Nullable(DateTime64(3)),
+      revoked_by Nullable(String),
+      created_at DateTime64(3) DEFAULT now64(3),
+      updated_at DateTime64(3) DEFAULT now64(3)
+    ) ENGINE = ReplacingMergeTree(updated_at)
+    ORDER BY id
+  `,
+
+  password_reset_tokens: `
+    CREATE TABLE IF NOT EXISTS {database}.password_reset_tokens (
+      id String,
+      user_id String,
+      token_hash String,
+      status Enum8('pending' = 1, 'used' = 2, 'expired' = 3),
+      expires_at DateTime64(3),
+      created_at DateTime64(3) DEFAULT now64(3),
+      updated_at DateTime64(3) DEFAULT now64(3)
+    ) ENGINE = ReplacingMergeTree(updated_at)
+    ORDER BY id
+  `,
+
+  api_keys: `
+    CREATE TABLE IF NOT EXISTS {database}.api_keys (
+      id String,
+      key_hash String,
+      key_prefix String,
+      user_id String,
+      workspace_id Nullable(String),
+      name String,
+      description String DEFAULT '',
+      scopes String,
+      status Enum8('active' = 1, 'revoked' = 2, 'expired' = 3) DEFAULT 'active',
+      expires_at Nullable(DateTime64(3)),
+      last_used_at Nullable(DateTime64(3)),
+      failed_attempts_count UInt8 DEFAULT 0,
+      last_failed_attempt_at Nullable(DateTime64(3)),
+      created_by String,
+      revoked_by Nullable(String),
+      revoked_at Nullable(DateTime64(3)),
+      created_at DateTime64(3) DEFAULT now64(3),
+      updated_at DateTime64(3) DEFAULT now64(3)
     ) ENGINE = ReplacingMergeTree(updated_at)
     ORDER BY id
   `,

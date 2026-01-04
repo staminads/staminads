@@ -106,8 +106,12 @@ describe('generators', () => {
       for (const event of events) {
         const eventDate = new Date(event.created_at.replace(' ', 'T') + 'Z');
         // Add 1-day buffer on each side for timezone handling
-        expect(eventDate.getTime()).toBeGreaterThanOrEqual(startDate.getTime() - 86400000);
-        expect(eventDate.getTime()).toBeLessThanOrEqual(endDate.getTime() + 86400000);
+        expect(eventDate.getTime()).toBeGreaterThanOrEqual(
+          startDate.getTime() - 86400000,
+        );
+        expect(eventDate.getTime()).toBeLessThanOrEqual(
+          endDate.getTime() + 86400000,
+        );
       }
     });
 
@@ -266,7 +270,9 @@ describe('generators', () => {
 
       if (launchDayBatch && normalDayBatch) {
         // Launch day should have significantly more sessions (3x multiplier)
-        expect(launchDayBatch.sessionCount).toBeGreaterThan(normalDayBatch.sessionCount);
+        expect(launchDayBatch.sessionCount).toBeGreaterThan(
+          normalDayBatch.sessionCount,
+        );
       }
     });
   });
@@ -292,7 +298,9 @@ describe('generators', () => {
       // Check first event of each session
       for (const [, sessionEventList] of sessionEvents) {
         // Sort by created_at
-        sessionEventList.sort((a, b) => a.created_at.localeCompare(b.created_at));
+        sessionEventList.sort((a, b) =>
+          a.created_at.localeCompare(b.created_at),
+        );
         expect(sessionEventList[0].name).toBe('screen_view');
       }
     });

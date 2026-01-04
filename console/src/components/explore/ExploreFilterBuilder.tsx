@@ -370,13 +370,16 @@ export function ExploreFilterBuilder({ value, onChange, customDimensionLabels }:
 
       {/* Active filter tags */}
       {value.length > 0 && (
-        <Space size={[0, 4]} wrap>
+        <Space size={[8, 4]} wrap>
           {value.map((filter, index) => (
             <Tag
               key={index}
               color="orange"
               closable
-              onClose={() => handleRemoveFilter(index)}
+              onClose={(e) => {
+                e.preventDefault()
+                handleRemoveFilter(index)
+              }}
               className="mr-0"
             >
               <span className="font-medium">{getDimensionLabel(filter.dimension, customDimensionLabels)}</span>

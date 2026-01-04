@@ -25,7 +25,10 @@ async function getClient(): Promise<ClickHouseClient> {
   return client;
 }
 
-async function createWorkspaceDatabase(ch: ClickHouseClient, dbName: string): Promise<void> {
+async function createWorkspaceDatabase(
+  ch: ClickHouseClient,
+  dbName: string,
+): Promise<void> {
   await ch.command({ query: `CREATE DATABASE IF NOT EXISTS ${dbName}` });
   for (const schema of Object.values(WORKSPACE_SCHEMAS)) {
     const query = schema.replace(/{database}/g, dbName);
@@ -37,7 +40,9 @@ export async function setup(): Promise<void> {
   const ch = await getClient();
 
   // Create test system database
-  await ch.command({ query: `CREATE DATABASE IF NOT EXISTS ${TEST_SYSTEM_DATABASE}` });
+  await ch.command({
+    query: `CREATE DATABASE IF NOT EXISTS ${TEST_SYSTEM_DATABASE}`,
+  });
 
   // Create system tables
   for (const schema of Object.values(SYSTEM_SCHEMAS)) {
@@ -53,20 +58,34 @@ export async function setup(): Promise<void> {
     await createWorkspaceDatabase(ch, db);
   }
 
-  const allDatabases = [TEST_WORKSPACE_DATABASE, ...ADDITIONAL_WORKSPACE_DATABASES].join(', ');
-  console.log(`Test databases ${TEST_SYSTEM_DATABASE} and ${allDatabases} initialized`);
+  const allDatabases = [
+    TEST_WORKSPACE_DATABASE,
+    ...ADDITIONAL_WORKSPACE_DATABASES,
+  ].join(', ');
+  console.log(
+    `Test databases ${TEST_SYSTEM_DATABASE} and ${allDatabases} initialized`,
+  );
 }
 
 export async function teardown(): Promise<void> {
   const ch = await getClient();
-  await ch.command({ query: `DROP DATABASE IF EXISTS ${TEST_SYSTEM_DATABASE}` });
-  await ch.command({ query: `DROP DATABASE IF EXISTS ${TEST_WORKSPACE_DATABASE}` });
+  await ch.command({
+    query: `DROP DATABASE IF EXISTS ${TEST_SYSTEM_DATABASE}`,
+  });
+  await ch.command({
+    query: `DROP DATABASE IF EXISTS ${TEST_WORKSPACE_DATABASE}`,
+  });
   for (const db of ADDITIONAL_WORKSPACE_DATABASES) {
     await ch.command({ query: `DROP DATABASE IF EXISTS ${db}` });
   }
   await ch.close();
-  const allDatabases = [TEST_WORKSPACE_DATABASE, ...ADDITIONAL_WORKSPACE_DATABASES].join(', ');
-  console.log(`Test databases ${TEST_SYSTEM_DATABASE} and ${allDatabases} dropped`);
+  const allDatabases = [
+    TEST_WORKSPACE_DATABASE,
+    ...ADDITIONAL_WORKSPACE_DATABASES,
+  ].join(', ');
+  console.log(
+    `Test databases ${TEST_SYSTEM_DATABASE} and ${allDatabases} dropped`,
+  );
 }
 
 // Default export for Jest globalSetup

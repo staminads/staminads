@@ -2,6 +2,7 @@ import { ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { IS_API_KEY_ROUTE } from '../decorators/require-scope.decorator';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
@@ -17,6 +18,16 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     if (isPublic) {
       return true;
     }
+
+    // Skip JWT auth for API key routes - they use their own auth strategy
+    const isApiKeyRoute = this.reflector.getAllAndOverride<boolean>(
+      IS_API_KEY_ROUTE,
+      [context.getHandler(), context.getClass()],
+    );
+    if (isApiKeyRoute) {
+      return true;
+    }
+
     return super.canActivate(context);
   }
 }

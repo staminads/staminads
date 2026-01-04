@@ -241,7 +241,11 @@ describe('FiltersService', () => {
           workspace_id: 'ws-empty',
           name: 'Invalid Filter',
           conditions: [
-            { field: 'invalid_field' as any, operator: 'equals', value: 'test' },
+            {
+              field: 'invalid_field' as any,
+              operator: 'equals',
+              value: 'test',
+            },
           ],
           operations: [
             { dimension: 'channel', action: 'set_value', value: 'Test' },
@@ -278,7 +282,11 @@ describe('FiltersService', () => {
             { field: 'utm_source', operator: 'equals', value: 'test' },
           ],
           operations: [
-            { dimension: 'invalid_dim' as any, action: 'set_value', value: 'Test' },
+            {
+              dimension: 'invalid_dim' as any,
+              action: 'set_value',
+              value: 'Test',
+            },
           ],
         }),
       ).rejects.toThrow(BadRequestException);
@@ -294,9 +302,7 @@ describe('FiltersService', () => {
           conditions: [
             { field: 'utm_source', operator: 'equals', value: 'test' },
           ],
-          operations: [
-            { dimension: 'channel', action: 'set_value' },
-          ],
+          operations: [{ dimension: 'channel', action: 'set_value' }],
         }),
       ).rejects.toThrow(BadRequestException);
     });
@@ -353,7 +359,11 @@ describe('FiltersService', () => {
           workspace_id: 'ws-1',
           id: 'filter-1',
           conditions: [
-            { field: 'invalid_field' as any, operator: 'equals', value: 'test' },
+            {
+              field: 'invalid_field' as any,
+              operator: 'equals',
+              value: 'test',
+            },
           ],
         }),
       ).rejects.toThrow(BadRequestException);

@@ -264,8 +264,18 @@ describe('fillGaps', () => {
 
   it('fills gaps for multiple dimensions', () => {
     const data = [
-      { date_day: '2025-12-01', device: 'mobile', utm_source: 'google', sessions: 25 },
-      { date_day: '2025-12-01', device: 'desktop', utm_source: 'facebook', sessions: 30 },
+      {
+        date_day: '2025-12-01',
+        device: 'mobile',
+        utm_source: 'google',
+        sessions: 25,
+      },
+      {
+        date_day: '2025-12-01',
+        device: 'desktop',
+        utm_source: 'facebook',
+        sessions: 30,
+      },
     ];
     const result = fillGaps(
       data,
@@ -329,8 +339,14 @@ describe('shiftPresetToPreviousPeriod', () => {
   it('preserves duration when shifting', () => {
     const current = resolveDatePreset('last_7_days', tz);
     const shifted = shiftPresetToPreviousPeriod('last_7_days', tz);
-    const currentDuration = dayjs(current.end).diff(dayjs(current.start), 'day');
-    const shiftedDuration = dayjs(shifted.end).diff(dayjs(shifted.start), 'day');
+    const currentDuration = dayjs(current.end).diff(
+      dayjs(current.start),
+      'day',
+    );
+    const shiftedDuration = dayjs(shifted.end).diff(
+      dayjs(shifted.start),
+      'day',
+    );
     expect(shiftedDuration).toBe(currentDuration);
   });
 });

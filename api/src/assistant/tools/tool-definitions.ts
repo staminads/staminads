@@ -96,7 +96,8 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
       properties: {
         dimension: {
           type: 'string',
-          description: 'The dimension name to get values for (e.g., "channel", "utm_source")',
+          description:
+            'The dimension name to get values for (e.g., "channel", "utm_source")',
         },
         period: {
           type: 'string',
@@ -105,7 +106,8 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
         },
         search: {
           type: 'string',
-          description: 'Optional search string to filter values (case-insensitive contains match)',
+          description:
+            'Optional search string to filter values (case-insensitive contains match)',
         },
         limit: {
           type: 'number',

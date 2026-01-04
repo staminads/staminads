@@ -19,7 +19,15 @@ export class FilterConditionDto {
   field: string;
 
   @IsString()
-  @IsIn(['equals', 'not_equals', 'contains', 'not_contains', 'is_empty', 'is_not_empty', 'regex'])
+  @IsIn([
+    'equals',
+    'not_equals',
+    'contains',
+    'not_contains',
+    'is_empty',
+    'is_not_empty',
+    'regex',
+  ])
   operator: string;
 
   @IsOptional()

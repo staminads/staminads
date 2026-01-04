@@ -2,10 +2,7 @@ import { Semaphore } from 'async-mutex';
 import { ClickHouseService } from '../../database/clickhouse.service';
 import { BackfillTask } from './backfill-task.entity';
 import { FilterDefinition } from '../entities/filter.entity';
-import {
-  compileFiltersToSQL,
-  CompiledFilters,
-} from '../lib/filter-compiler';
+import { compileFiltersToSQL, CompiledFilters } from '../lib/filter-compiler';
 
 // Import type only to avoid circular dependency
 import type { FilterBackfillService } from './backfill.service';
@@ -93,7 +90,10 @@ export class FilterBackfillProcessor {
         `KILL MUTATION WHERE database = '${dbName}' AND is_done = 0`,
       );
     } catch (error) {
-      console.warn(`Failed to kill mutations for workspace ${workspaceId}:`, error);
+      console.warn(
+        `Failed to kill mutations for workspace ${workspaceId}:`,
+        error,
+      );
       // Best effort - don't throw
     }
   }
@@ -282,7 +282,7 @@ export class FilterBackfillProcessor {
     const startUTC = new Date(endUTC);
     startUTC.setUTCDate(startUTC.getUTCDate() - lookbackDays + 1);
 
-    let current = new Date(startUTC);
+    const current = new Date(startUTC);
     while (current <= endUTC) {
       chunks.push(new Date(current));
       current.setUTCDate(current.getUTCDate() + chunkSizeDays);
@@ -355,11 +355,19 @@ export class FilterBackfillProcessor {
     // Process events first (if within TTL)
     let eventsProcessed = 0;
     if (this.isWithinEventsTTL(chunkDate)) {
-      eventsProcessed = await this.processEventsForDate(task, compiled, chunkDate);
+      eventsProcessed = await this.processEventsForDate(
+        task,
+        compiled,
+        chunkDate,
+      );
     }
 
     // Then process sessions
-    const sessionsProcessed = await this.processSessionsForDate(task, compiled, chunkDate);
+    const sessionsProcessed = await this.processSessionsForDate(
+      task,
+      compiled,
+      chunkDate,
+    );
 
     // Update progress with actual counts
     await this.backfillService.updateTaskProgress(task, {

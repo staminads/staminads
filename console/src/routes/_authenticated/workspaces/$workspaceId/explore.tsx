@@ -153,7 +153,7 @@ function Explore() {
   // Initial data query - fetch first dimension only
   const initialQuery = dimensions.length > 0 ? {
     workspace_id: workspaceId,
-    metrics: ['sessions', 'median_duration', 'bounce_rate', 'max_scroll'],
+    metrics: ['sessions', 'median_duration', 'bounce_rate', 'median_scroll'],
     dimensions: [dimensions[0]],
     filters,
     dateRange,
@@ -198,7 +198,7 @@ function Explore() {
     queryKey: ['explore', 'totals', workspaceId, dateRange, filters, timezone, showComparison],
     queryFn: () => api.analytics.query({
       workspace_id: workspaceId,
-      metrics: ['sessions', 'median_duration', 'bounce_rate', 'max_scroll'],
+      metrics: ['sessions', 'median_duration', 'bounce_rate', 'median_scroll'],
       dimensions: [], // Empty = no grouping = totals
       filters,
       dateRange,
@@ -228,22 +228,22 @@ function Explore() {
       const prevDuration = Number(prev.median_duration) || 0
       const currBounceRate = Number(curr.bounce_rate) || 0
       const prevBounceRate = Number(prev.bounce_rate) || 0
-      const currMaxScroll = Number(curr.max_scroll) || 0
-      const prevMaxScroll = Number(prev.max_scroll) || 0
+      const currMedianScroll = Number(curr.median_scroll) || 0
+      const prevMedianScroll = Number(prev.median_scroll) || 0
 
       return {
         sessions: currSessions,
         median_duration: currDuration,
         bounce_rate: currBounceRate,
-        max_scroll: currMaxScroll,
+        median_scroll: currMedianScroll,
         sessions_prev: prevSessions,
         median_duration_prev: prevDuration,
         bounce_rate_prev: prevBounceRate,
-        max_scroll_prev: prevMaxScroll,
+        median_scroll_prev: prevMedianScroll,
         sessions_change: prevSessions > 0 ? ((currSessions - prevSessions) / prevSessions) * 100 : undefined,
         median_duration_change: prevDuration > 0 ? ((currDuration - prevDuration) / prevDuration) * 100 : undefined,
         bounce_rate_change: prevBounceRate > 0 ? ((currBounceRate - prevBounceRate) / prevBounceRate) * 100 : undefined,
-        max_scroll_change: prevMaxScroll > 0 ? ((currMaxScroll - prevMaxScroll) / prevMaxScroll) * 100 : undefined,
+        median_scroll_change: prevMedianScroll > 0 ? ((currMedianScroll - prevMedianScroll) / prevMedianScroll) * 100 : undefined,
       }
     }
 
@@ -252,7 +252,7 @@ function Explore() {
       sessions: Number(row.sessions) || 0,
       median_duration: Number(row.median_duration) || 0,
       bounce_rate: Number(row.bounce_rate) || 0,
-      max_scroll: Number(row.max_scroll) || 0,
+      median_scroll: Number(row.median_scroll) || 0,
     }
   })()
 
@@ -330,7 +330,7 @@ function Explore() {
 
         const query = {
           workspace_id: workspaceId,
-          metrics: ['sessions', 'median_duration', 'bounce_rate', 'max_scroll'],
+          metrics: ['sessions', 'median_duration', 'bounce_rate', 'median_scroll'],
           dimensions: dimensionsToFetch,
           filters: childFilters,
           dateRange,

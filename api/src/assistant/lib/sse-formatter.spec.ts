@@ -22,9 +22,7 @@ describe('sse-formatter', () => {
 
       const result = formatSSE(event);
 
-      expect(result).toBe(
-        'event: thinking\ndata: {"text":"Hello"}\n\n',
-      );
+      expect(result).toBe('event: thinking\ndata: {"text":"Hello"}\n\n');
     });
 
     it('properly escapes JSON data', () => {

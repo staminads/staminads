@@ -1,8 +1,10 @@
 import { Space } from 'antd'
 import { DateRangePicker } from './DateRangePicker'
 import { ComparisonPicker } from './ComparisonPicker'
-import type { DatePreset } from '../../types/analytics'
+import { ExploreFilterBuilder } from '../explore/ExploreFilterBuilder'
+import type { DatePreset, Filter } from '../../types/analytics'
 import type { ComparisonMode } from '../../types/dashboard'
+import type { CustomDimensionLabels } from '../../types/workspace'
 
 interface DashboardFiltersProps {
   period: DatePreset
@@ -15,6 +17,10 @@ interface DashboardFiltersProps {
   onComparisonChange: (comparison: ComparisonMode) => void
   onCustomRangeChange: (start: string, end: string) => void
   isPending?: boolean
+  filters: Filter[]
+  onFiltersChange: (filters: Filter[]) => void
+  customDimensionLabels?: CustomDimensionLabels | null
+  hideFilterBuilder?: boolean
 }
 
 export function DashboardFilters({
@@ -28,9 +34,20 @@ export function DashboardFilters({
   onComparisonChange,
   onCustomRangeChange,
   isPending = false,
+  filters,
+  onFiltersChange,
+  customDimensionLabels,
+  hideFilterBuilder = false,
 }: DashboardFiltersProps) {
   return (
     <Space size="small" className={isPending ? 'opacity-75 transition-opacity' : ''}>
+      {!hideFilterBuilder && (
+        <ExploreFilterBuilder
+          value={filters}
+          onChange={onFiltersChange}
+          customDimensionLabels={customDimensionLabels}
+        />
+      )}
       <DateRangePicker
         period={period}
         timezone={timezone}

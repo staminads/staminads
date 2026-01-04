@@ -35,7 +35,13 @@ const createMockStream = (options: {
         }
       }
 
-      const content: Array<{ type: string; text?: string; id?: string; name?: string; input?: unknown }> = [];
+      const content: Array<{
+        type: string;
+        text?: string;
+        id?: string;
+        name?: string;
+        input?: unknown;
+      }> = [];
 
       // Add text blocks if we have text
       if (options.textChunks?.length) {
@@ -132,7 +138,10 @@ describe('AssistantService', () => {
   const mockWorkspaceDisabledIntegration: Workspace = {
     ...mockWorkspace,
     id: 'ws-disabled',
-    settings: { ...mockWorkspace.settings, integrations: [{ ...mockIntegration, enabled: false }] },
+    settings: {
+      ...mockWorkspace.settings,
+      integrations: [{ ...mockIntegration, enabled: false }],
+    },
   };
 
   beforeEach(async () => {
@@ -479,23 +488,22 @@ describe('AssistantService', () => {
       configService.get.mockReturnValue('test-encryption-key');
 
       // First call: tool use, second call: end_turn
-      mockStream
-        .mockReturnValueOnce(
-          createMockStream({
-            textChunks: ['Let me query the data...'],
-            stopReason: 'tool_use',
-            toolUseBlocks: [
-              {
-                id: 'tool-1',
-                name: 'configure_explore',
-                input: {
-                  metrics: ['sessions'],
-                  dimensions: ['device'],
-                },
+      mockStream.mockReturnValueOnce(
+        createMockStream({
+          textChunks: ['Let me query the data...'],
+          stopReason: 'tool_use',
+          toolUseBlocks: [
+            {
+              id: 'tool-1',
+              name: 'configure_explore',
+              input: {
+                metrics: ['sessions'],
+                dimensions: ['device'],
               },
-            ],
-          }),
-        );
+            },
+          ],
+        }),
+      );
 
       const { job_id } = await service.createJob({
         workspace_id: 'ws-1',

@@ -1,7 +1,10 @@
-import { Body, Controller, HttpCode, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Public } from '../common/decorators/public.decorator';
 import { ClientIp } from '../common/decorators/client-ip.decorator';
+import { RequireScope } from '../common/decorators/require-scope.decorator';
+import { ScopeGuard } from '../common/guards/scope.guard';
+import { WorkspaceGuard } from '../common/guards/workspace.guard';
 import { TrackEventDto, TrackBatchDto } from './dto/track-event.dto';
 import { EventsService } from './events.service';
 
@@ -10,20 +13,19 @@ import { EventsService } from './events.service';
 export class EventsController {
   constructor(private readonly eventsService: EventsService) {}
 
-  @Public()
   @Post('track')
   @HttpCode(200)
+  @UseGuards(AuthGuard('api-key'), ScopeGuard, WorkspaceGuard)
+  @RequireScope('events.track')
   @ApiOperation({ summary: 'Track a single event' })
-  async track(
-    @Body() dto: TrackEventDto,
-    @ClientIp() clientIp: string | null,
-  ) {
+  async track(@Body() dto: TrackEventDto, @ClientIp() clientIp: string | null) {
     return this.eventsService.track(dto, clientIp);
   }
 
-  @Public()
   @Post('track.batch')
   @HttpCode(200)
+  @UseGuards(AuthGuard('api-key'), ScopeGuard, WorkspaceGuard)
+  @RequireScope('events.track')
   @ApiOperation({ summary: 'Track multiple events in a batch' })
   async trackBatch(
     @Body() dto: TrackBatchDto,

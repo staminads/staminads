@@ -9,7 +9,11 @@ import {
   Validate,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { DateRangeDto, FilterDto, DateRangeValidator } from './analytics-query.dto';
+import {
+  DateRangeDto,
+  FilterDto,
+  DateRangeValidator,
+} from './analytics-query.dto';
 
 export class ExtremesQueryDto {
   @IsString()

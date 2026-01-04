@@ -8,7 +8,10 @@ import {
   IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { FilterDto, DATE_PRESETS } from '../../analytics/dto/analytics-query.dto';
+import {
+  FilterDto,
+  DATE_PRESETS,
+} from '../../analytics/dto/analytics-query.dto';
 import type { DatePreset } from '../../analytics/dto/analytics-query.dto';
 
 /**

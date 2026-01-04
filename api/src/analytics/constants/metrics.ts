@@ -36,6 +36,11 @@ export const METRICS: Record<string, MetricDefinition> = {
     sql: 'round(avg(max_scroll), 1)',
     description: 'Average max scroll depth (%)',
   },
+  median_scroll: {
+    name: 'median_scroll',
+    sql: 'round(median(max_scroll), 1)',
+    description: 'Median max scroll depth (%)',
+  },
   bounce_rate: {
     name: 'bounce_rate',
     sql: (ctx: MetricContext) =>

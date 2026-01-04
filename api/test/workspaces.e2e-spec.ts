@@ -67,11 +67,29 @@ describe('Workspaces Integration', () => {
     await app.close();
   });
 
+  // Helper to get fresh auth token (needed after table truncation)
+  async function getAuthToken(): Promise<string> {
+    const loginRes = await request(app.getHttpServer())
+      .post('/api/auth.login')
+      .send({
+        email: process.env.ADMIN_EMAIL,
+        password: process.env.ADMIN_PASSWORD,
+      });
+    return loginRes.body.access_token;
+  }
+
   beforeEach(async () => {
     // Clean system tables before each test
     await systemClient.command({ query: 'TRUNCATE TABLE workspaces' });
+    await systemClient.command({ query: 'TRUNCATE TABLE workspace_memberships' });
+    await systemClient.command({ query: 'TRUNCATE TABLE invitations' });
+    await systemClient.command({ query: 'TRUNCATE TABLE users' });
+    await systemClient.command({ query: 'TRUNCATE TABLE sessions' });
     // Wait for mutations to complete
     await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Get fresh auth token after truncation (re-creates admin user via legacy flow)
+    authToken = await getAuthToken();
   });
 
   describe('POST /api/workspaces.create', () => {
@@ -117,7 +135,7 @@ describe('Workspaces Integration', () => {
         query_params: { id: dto.id },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Array<Record<string, unknown>>;
+      const rows = (await result.json()) as Record<string, unknown>[];
 
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({
@@ -222,6 +240,93 @@ describe('Workspaces Integration', () => {
         })
         .expect(401);
     });
+
+    it('adds creator as owner to workspace_memberships', async () => {
+      const dto = {
+        id: 'membership_test_ws',
+        name: 'Membership Test',
+        website: 'https://membership-test.com',
+        timezone: 'UTC',
+        currency: 'USD',
+      };
+
+      await request(app.getHttpServer())
+        .post('/api/workspaces.create')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(dto)
+        .expect(201);
+
+      // Wait for insert to be visible
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Verify creator is added to workspace_memberships as owner
+      const result = await systemClient.query({
+        query: `SELECT * FROM workspace_memberships FINAL
+                WHERE workspace_id = {workspaceId:String}`,
+        query_params: { workspaceId: dto.id },
+        format: 'JSONEachRow',
+      });
+      const memberships = (await result.json()) as Record<string, unknown>[];
+
+      expect(memberships).toHaveLength(1);
+      expect(memberships[0].workspace_id).toBe(dto.id);
+      expect(memberships[0].role).toBe('owner');
+      expect(memberships[0].user_id).toBeDefined();
+      // invited_by should be null for self-created workspace
+      expect(memberships[0].invited_by).toBeNull();
+    });
+
+    it('rejects workspace creation by non-super_admin user', async () => {
+      const now = toClickHouseDateTime();
+      const bcrypt = require('bcrypt');
+      const passwordHash = await bcrypt.hash('password123', 10);
+
+      // Directly insert a regular user (not super_admin) into the database
+      const regularUserId = 'regular_user_id';
+      await systemClient.insert({
+        table: 'users',
+        values: [
+          {
+            id: regularUserId,
+            email: 'regular@test.com',
+            password_hash: passwordHash,
+            name: 'Regular User',
+            type: 'user',
+            status: 'active',
+            is_super_admin: 0, // NOT a super admin
+            failed_login_attempts: 0,
+            created_at: now,
+            updated_at: now,
+          },
+        ],
+        format: 'JSONEachRow',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Login as regular user
+      const loginRes = await request(app.getHttpServer())
+        .post('/api/auth.login')
+        .send({
+          email: 'regular@test.com',
+          password: 'password123',
+        })
+        .expect(201);
+
+      const regularUserToken = loginRes.body.access_token;
+
+      // Try to create workspace as regular user (should fail with 403)
+      await request(app.getHttpServer())
+        .post('/api/workspaces.create')
+        .set('Authorization', `Bearer ${regularUserToken}`)
+        .send({
+          id: 'regular_user_ws',
+          name: 'Regular User Workspace',
+          website: 'https://regular.com',
+          timezone: 'UTC',
+          currency: 'USD',
+        })
+        .expect(403);
+    });
   });
 
   describe('GET /api/workspaces.get', () => {
@@ -234,7 +339,10 @@ describe('Workspaces Integration', () => {
         timezone: 'UTC',
         currency: 'USD',
         status: 'active',
-        settings: JSON.stringify({ timescore_reference: 60, bounce_threshold: 10 }),
+        settings: JSON.stringify({
+          timescore_reference: 60,
+          bounce_threshold: 10,
+        }),
         created_at: toClickHouseDateTime(),
         updated_at: toClickHouseDateTime(),
       };
@@ -283,7 +391,10 @@ describe('Workspaces Integration', () => {
           timezone: 'UTC',
           currency: 'USD',
           status: 'active',
-          settings: JSON.stringify({ timescore_reference: 60, bounce_threshold: 10 }),
+          settings: JSON.stringify({
+            timescore_reference: 60,
+            bounce_threshold: 10,
+          }),
           created_at: toClickHouseDateTime(new Date(now - 2000)),
           updated_at: toClickHouseDateTime(),
         },
@@ -294,7 +405,10 @@ describe('Workspaces Integration', () => {
           timezone: 'UTC',
           currency: 'USD',
           status: 'active',
-          settings: JSON.stringify({ timescore_reference: 60, bounce_threshold: 10 }),
+          settings: JSON.stringify({
+            timescore_reference: 60,
+            bounce_threshold: 10,
+          }),
           created_at: toClickHouseDateTime(new Date(now - 1000)),
           updated_at: toClickHouseDateTime(),
         },
@@ -305,7 +419,10 @@ describe('Workspaces Integration', () => {
           timezone: 'UTC',
           currency: 'USD',
           status: 'active',
-          settings: JSON.stringify({ timescore_reference: 60, bounce_threshold: 10 }),
+          settings: JSON.stringify({
+            timescore_reference: 60,
+            bounce_threshold: 10,
+          }),
           created_at: toClickHouseDateTime(new Date(now)),
           updated_at: toClickHouseDateTime(),
         },
@@ -339,7 +456,9 @@ describe('Workspaces Integration', () => {
     });
 
     it('requires authentication', async () => {
-      await request(app.getHttpServer()).get('/api/workspaces.list').expect(401);
+      await request(app.getHttpServer())
+        .get('/api/workspaces.list')
+        .expect(401);
     });
   });
 
@@ -434,7 +553,9 @@ describe('Workspaces Integration', () => {
       expect(response.body.settings.integrations).toHaveLength(1);
       expect(response.body.settings.integrations[0].type).toBe('anthropic');
       // API key should be encrypted (contains ':' separators)
-      expect(response.body.settings.integrations[0].settings.api_key_encrypted).toContain(':');
+      expect(
+        response.body.settings.integrations[0].settings.api_key_encrypted,
+      ).toContain(':');
 
       // Original fields must be preserved
       expect(response.body.name).toBe('Integration Test');
@@ -531,7 +652,10 @@ describe('Workspaces Integration', () => {
         timezone: 'UTC',
         currency: 'USD',
         status: 'active',
-        settings: JSON.stringify({ timescore_reference: 60, bounce_threshold: 10 }),
+        settings: JSON.stringify({
+          timescore_reference: 60,
+          bounce_threshold: 10,
+        }),
         created_at: toClickHouseDateTime(),
         updated_at: toClickHouseDateTime(),
       };
@@ -557,7 +681,7 @@ describe('Workspaces Integration', () => {
         query_params: { id: workspace.id },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Array<Record<string, unknown>>;
+      const rows = (await result.json()) as Record<string, unknown>[];
       expect(rows).toHaveLength(0);
     });
 
@@ -583,11 +707,10 @@ describe('Workspaces Integration', () => {
         query: 'DESCRIBE TABLE workspaces',
         format: 'JSONEachRow',
       });
-      const columns = (await result.json()) as Array<{
-        name: string;
-        type: string;
-      }>;
-      const columnMap = Object.fromEntries(columns.map((c) => [c.name, c.type]));
+      const columns = (await result.json()) as Record<string, unknown>[];
+      const columnMap = Object.fromEntries(
+        columns.map((c) => [c.name, c.type]),
+      );
 
       expect(columnMap['id']).toBe('String');
       expect(columnMap['name']).toBe('String');
@@ -606,10 +729,7 @@ describe('Workspaces Integration', () => {
         query: 'DESCRIBE TABLE sessions',
         format: 'JSONEachRow',
       });
-      const columns = (await result.json()) as Array<{
-        name: string;
-        type: string;
-      }>;
+      const columns = (await result.json()) as Record<string, unknown>[];
       const columnNames = columns.map((c) => c.name);
 
       // Core fields
@@ -646,10 +766,7 @@ describe('Workspaces Integration', () => {
         query: 'DESCRIBE TABLE events',
         format: 'JSONEachRow',
       });
-      const columns = (await result.json()) as Array<{
-        name: string;
-        type: string;
-      }>;
+      const columns = (await result.json()) as Record<string, unknown>[];
       const columnNames = columns.map((c) => c.name);
 
       expect(columnNames).toContain('id');

@@ -10,7 +10,8 @@ import { WebsiteMetaResponse } from './dto/website-meta.dto';
 const FAVICON_FETCH_TIMEOUT = 10_000; // 10 seconds
 const FAVICON_MAX_SIZE = 1_000_000; // 1MB
 const FAVICON_TARGET_SIZE = 32; // 32x32 px
-const USER_AGENT = 'Mozilla/5.0 (compatible; StaminadsBot/1.0; +https://staminads.com)';
+const USER_AGENT =
+  'Mozilla/5.0 (compatible; StaminadsBot/1.0; +https://staminads.com)';
 
 // 1x1 transparent PNG
 const FALLBACK_IMAGE = Buffer.from(
@@ -306,13 +307,21 @@ export class ToolsService {
       clearTimeout(timeout);
 
       if (!response.ok) {
-        return { buffer: Buffer.alloc(0), contentType: 'text/plain', ok: false };
+        return {
+          buffer: Buffer.alloc(0),
+          contentType: 'text/plain',
+          ok: false,
+        };
       }
 
       // Check Content-Length header
       const contentLength = Number(response.headers.get('content-length') ?? 0);
       if (contentLength > FAVICON_MAX_SIZE) {
-        return { buffer: Buffer.alloc(0), contentType: 'text/plain', ok: false };
+        return {
+          buffer: Buffer.alloc(0),
+          contentType: 'text/plain',
+          ok: false,
+        };
       }
 
       const arrayBuffer = await response.arrayBuffer();
@@ -320,7 +329,11 @@ export class ToolsService {
 
       // Double-check actual size
       if (buffer.length > FAVICON_MAX_SIZE) {
-        return { buffer: Buffer.alloc(0), contentType: 'text/plain', ok: false };
+        return {
+          buffer: Buffer.alloc(0),
+          contentType: 'text/plain',
+          ok: false,
+        };
       }
 
       const contentType =
@@ -334,9 +347,7 @@ export class ToolsService {
   }
 
   private isIcoFile(url: string, contentType: string): boolean {
-    return (
-      url.toLowerCase().endsWith('.ico') || contentType === 'image/x-icon'
-    );
+    return url.toLowerCase().endsWith('.ico') || contentType === 'image/x-icon';
   }
 
   private isSvgFile(url: string, contentType: string): boolean {
@@ -378,7 +389,10 @@ export class ToolsService {
       return { processedBuffer: resized, processedContentType: 'image/png' };
     } catch {
       // If Sharp fails, return fallback
-      return { processedBuffer: FALLBACK_IMAGE, processedContentType: 'image/png' };
+      return {
+        processedBuffer: FALLBACK_IMAGE,
+        processedContentType: 'image/png',
+      };
     }
   }
 }

@@ -23,6 +23,20 @@ export interface Annotation {
 }
 
 /**
+ * SMTP settings for workspace email configuration.
+ * TLS mode is auto-detected based on port: 465 = implicit TLS, others = STARTTLS
+ */
+export interface SmtpSettings {
+  enabled: boolean;
+  host: string;
+  port: number;
+  username?: string;
+  password_encrypted?: string;
+  from_name: string;
+  from_email: string;
+}
+
+/**
  * Workspace settings stored as JSON in the settings column.
  */
 export interface WorkspaceSettings {
@@ -47,6 +61,9 @@ export interface WorkspaceSettings {
 
   // Annotations
   annotations?: Annotation[];
+
+  // SMTP settings
+  smtp?: SmtpSettings;
 }
 
 /**

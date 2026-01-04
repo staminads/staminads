@@ -151,6 +151,7 @@ function WorkspaceLayout() {
                   { to: '/workspaces/$workspaceId', label: 'Dashboard', exact: true },
                   { to: '/workspaces/$workspaceId/explore', label: 'Explore' },
                   { to: '/workspaces/$workspaceId/filters', label: 'Filters' },
+                  { to: '/workspaces/$workspaceId/annotations', label: 'Annotations' },
                   { to: '/workspaces/$workspaceId/settings', label: 'Settings' },
                 ].map(({ to, label, exact }) => {
                   const resolvedPath = to.replace('$workspaceId', workspaceId)

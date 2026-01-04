@@ -33,19 +33,19 @@ export interface ExploreRow {
   sessions: number
   median_duration: number
   bounce_rate: number
-  max_scroll: number
+  median_scroll: number
 
   // Metrics - previous period (when comparison enabled)
   sessions_prev?: number
   median_duration_prev?: number
   bounce_rate_prev?: number
-  max_scroll_prev?: number
+  median_scroll_prev?: number
 
   // Change percentages
   sessions_change?: number
   median_duration_change?: number
   bounce_rate_change?: number
-  max_scroll_change?: number
+  median_scroll_change?: number
 }
 
 /**
@@ -82,17 +82,17 @@ export interface ExploreTotals {
   sessions: number
   median_duration: number
   bounce_rate: number
-  max_scroll: number
+  median_scroll: number
   // Previous period values (when comparison enabled)
   sessions_prev?: number
   median_duration_prev?: number
   bounce_rate_prev?: number
-  max_scroll_prev?: number
+  median_scroll_prev?: number
   // Change percentages
   sessions_change?: number
   median_duration_change?: number
   bounce_rate_change?: number
-  max_scroll_change?: number
+  median_scroll_change?: number
 }
 
 /**

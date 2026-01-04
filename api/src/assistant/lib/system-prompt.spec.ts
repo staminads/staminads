@@ -3,9 +3,7 @@ import { Workspace } from '../../workspaces/entities/workspace.entity';
 import { ExploreStateDto } from '../dto/chat.dto';
 
 describe('buildSystemPrompt', () => {
-  const createWorkspace = (
-    overrides: Partial<Workspace> = {},
-  ): Workspace => ({
+  const createWorkspace = (overrides: Partial<Workspace> = {}): Workspace => ({
     id: 'ws-123',
     name: 'Test Workspace',
     website: 'https://example.com',
@@ -41,7 +39,9 @@ describe('buildSystemPrompt', () => {
   });
 
   it('shows "None configured" when no custom dimensions', () => {
-    const workspace = createWorkspace({ settings: { custom_dimensions: null } as any });
+    const workspace = createWorkspace({
+      settings: { custom_dimensions: null } as any,
+    });
 
     const prompt = buildSystemPrompt(workspace);
 
@@ -71,9 +71,7 @@ describe('buildSystemPrompt', () => {
       period: 'last_7_days',
       comparison: 'previous_period',
       minSessions: 10,
-      filters: [
-        { dimension: 'country', operator: 'equals', values: ['US'] },
-      ],
+      filters: [{ dimension: 'country', operator: 'equals', values: ['US'] }],
     };
 
     const prompt = buildSystemPrompt(workspace, currentState);

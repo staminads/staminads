@@ -3,7 +3,7 @@
 [![Test & Coverage](https://github.com/staminads/staminads/actions/workflows/test.yml/badge.svg)](https://github.com/staminads/staminads/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/staminads/staminads/graph/badge.svg)](https://codecov.io/gh/staminads/staminads)
 
-Staminads is a web analytics platform that collects and analyzes web sessions.
+Staminads helps you categorize your traffic source and measure the quality of each source.
 
 It focuses on TimeScore metric, that is the median time spent by sessions per source of traffic.
 
@@ -18,14 +18,6 @@ A source of traffic can be any dimensions or combination of dimensions such as:
 - Page Path
 - etc.
 
-## Project Structure
-
-```
-/api          NestJS TypeScript API
-/console      Frontend React Typescript Antd
-```
-
 ## Roadmap
 
-- add date references
 - docs

@@ -32,6 +32,11 @@ export const ISO2_TO_ISO3: Record<string, string> = {
   ZW: 'ZWE', XK: 'XKX', PS: 'PSE', EH: 'ESH', NC: 'NCL', FK: 'FLK', TF: 'ATF',
 }
 
+// ISO 3166-1 alpha-3 to alpha-2 country code mapping (reverse of ISO2_TO_ISO3)
+export const ISO3_TO_ISO2: Record<string, string> = Object.fromEntries(
+  Object.entries(ISO2_TO_ISO3).map(([iso2, iso3]) => [iso3, iso2])
+)
+
 // ISO 3166-1 alpha-3 to country name mapping (from world-geo.json)
 export const ISO3_TO_NAME: Record<string, string> = {
   AFG: 'Afghanistan', ALB: 'Albania', DZA: 'Algeria', AGO: 'Angola', ARG: 'Argentina',

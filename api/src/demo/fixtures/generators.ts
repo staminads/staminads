@@ -13,7 +13,11 @@ import {
   TECH_NEWS_TOTAL_WEIGHT,
   Referrer,
 } from './referrers';
-import { DEVICE_PROFILES, DEVICE_PROFILES_TOTAL_WEIGHT, DeviceProfile } from './devices';
+import {
+  DEVICE_PROFILES,
+  DEVICE_PROFILES_TOTAL_WEIGHT,
+  DeviceProfile,
+} from './devices';
 import {
   UTM_CAMPAIGNS,
   UTM_CAMPAIGNS_TOTAL_WEIGHT,
@@ -31,7 +35,10 @@ import {
 } from './geo-languages';
 import { TrackingEvent } from '../../events/entities/event.entity';
 import { FilterDefinition } from '../../filters/entities/filter.entity';
-import { evaluateFilters, computeFilterVersion } from '../../filters/lib/filter-evaluator';
+import {
+  evaluateFilters,
+  computeFilterVersion,
+} from '../../filters/lib/filter-evaluator';
 import { getDemoFilters } from './demo-filters';
 
 // Base session duration categories (in seconds)
@@ -80,7 +87,10 @@ let _cachedFilterVersion: string | null = null;
  * Get cached demo filters. This ensures the same filter IDs are used
  * for both session generation and workspace creation.
  */
-export function getCachedFilters(): { filters: FilterDefinition[]; version: string } {
+export function getCachedFilters(): {
+  filters: FilterDefinition[];
+  version: string;
+} {
   if (!_cachedFilters) {
     _cachedFilters = getDemoFilters();
     _cachedFilterVersion = computeFilterVersion(_cachedFilters);
@@ -118,7 +128,7 @@ function generateConnectionType(): string | null {
   const random = Math.random();
 
   // 30% null (Safari/Firefox don't support Network Information API)
-  if (random < 0.30) {
+  if (random < 0.3) {
     return null;
   }
 
@@ -136,11 +146,14 @@ function generateConnectionType(): string | null {
 }
 
 // Generate viewport dimensions from screen dimensions
-function generateViewport(screenWidth: number, screenHeight: number): { width: number; height: number } {
+function generateViewport(
+  screenWidth: number,
+  screenHeight: number,
+): { width: number; height: number } {
   // Viewport is typically 90-100% of screen width (scrollbar, etc.)
-  const widthRatio = 0.90 + Math.random() * 0.10;
+  const widthRatio = 0.9 + Math.random() * 0.1;
   // Viewport height is 75-95% of screen (browser chrome, toolbars)
-  const heightRatio = 0.75 + Math.random() * 0.20;
+  const heightRatio = 0.75 + Math.random() * 0.2;
 
   return {
     width: Math.round(screenWidth * widthRatio),
@@ -148,7 +161,10 @@ function generateViewport(screenWidth: number, screenHeight: number): { width: n
   };
 }
 
-function isIPhoneLaunchPeriod(date: Date, launchDate: Date): 'launch' | 'post' | 'normal' {
+function isIPhoneLaunchPeriod(
+  date: Date,
+  launchDate: Date,
+): 'launch' | 'post' | 'normal' {
   const diff = date.getTime() - launchDate.getTime();
   const daysDiff = diff / (1000 * 60 * 60 * 24);
 
@@ -218,7 +234,9 @@ export function generateEvents(config: GenerationConfig): TrackingEvent[] {
  * Generator version of generateEvents that yields day-by-day batches.
  * This allows streaming insertion without loading all events in memory.
  */
-export function* generateEventsByDay(config: GenerationConfig): Generator<DayBatch> {
+export function* generateEventsByDay(
+  config: GenerationConfig,
+): Generator<DayBatch> {
   const { workspaceId, sessionCount, endDate, daysRange } = config;
 
   // Calculate date range
@@ -274,7 +292,9 @@ function calculateDailySessionCounts(
   let totalWeight = 0;
 
   // Calculate total days for growth trend
-  const daysTotal = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+  const daysTotal = Math.floor(
+    (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
+  );
 
   // Calculate weight for each day
   const current = new Date(startDate);
@@ -284,8 +304,10 @@ function calculateDailySessionCounts(
     let weight = DAY_OF_WEEK_WEIGHTS[dayOfWeek] || 1;
 
     // Growth trend: starts at 0.85x, ends at 1.15x over the period
-    const dayIndex = Math.floor((current.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-    const growthMultiplier = 0.85 + (dayIndex / daysTotal) * 0.30;
+    const dayIndex = Math.floor(
+      (current.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
+    );
+    const growthMultiplier = 0.85 + (dayIndex / daysTotal) * 0.3;
     weight *= growthMultiplier;
 
     // Apply launch multipliers
@@ -340,7 +362,12 @@ function generateSessionEvents(
 
   // Create timestamp
   const sessionStart = new Date(dayDate);
-  sessionStart.setHours(hour, randomBetween(0, 59), randomBetween(0, 59), randomBetween(0, 999));
+  sessionStart.setHours(
+    hour,
+    randomBetween(0, 59),
+    randomBetween(0, 59),
+    randomBetween(0, 999),
+  );
 
   // Select components based on launch period
   const page = selectPage(launchPeriod);
@@ -399,7 +426,16 @@ function generateSessionEvents(
   const cdValues = evaluateFilters(filters, fieldValues);
 
   // Base event properties (shared across all events in session)
-  const baseProps: Omit<TrackingEvent, 'received_at' | 'created_at' | 'updated_at' | 'name' | 'path' | 'duration' | 'max_scroll'> = {
+  const baseProps: Omit<
+    TrackingEvent,
+    | 'received_at'
+    | 'created_at'
+    | 'updated_at'
+    | 'name'
+    | 'path'
+    | 'duration'
+    | 'max_scroll'
+  > = {
     session_id: sessionId,
     workspace_id: workspaceId,
     referrer: referrerUrl ?? '',
@@ -420,7 +456,7 @@ function generateSessionEvents(
     channel: (cdValues.channel as string) ?? '',
     channel_group: (cdValues.channel_group as string) ?? '',
     // Custom dimensions (stm_1 = Product Category; stm_2-stm_10 available for user use)
-    stm_1: (cdValues.stm_1 as string) ?? '',  // Product Category
+    stm_1: (cdValues.stm_1 as string) ?? '', // Product Category
     stm_2: '',
     stm_3: '',
     stm_4: '',
@@ -459,12 +495,12 @@ function generateSessionEvents(
   // duration variable = total session duration in seconds
   events.push({
     ...baseProps,
-    received_at: toClickHouseDateTime(sessionStart),  // Server timestamp
-    created_at: sessionCreatedAt,                      // SDK session start
-    updated_at: toClickHouseDateTime(sessionStart),   // SDK interaction time
+    received_at: toClickHouseDateTime(sessionStart), // Server timestamp
+    created_at: sessionCreatedAt, // SDK session start
+    updated_at: toClickHouseDateTime(sessionStart), // SDK interaction time
     name: 'screen_view',
     path: page.path,
-    duration: 0,  // First event has 0 duration
+    duration: 0, // First event has 0 duration
     max_scroll: 0,
   });
 
@@ -479,7 +515,7 @@ function generateSessionEvents(
       updated_at: toClickHouseDateTime(scrollTime),
       name: 'scroll',
       path: page.path,
-      duration: elapsedSeconds,  // Cumulative duration at this point
+      duration: elapsedSeconds, // Cumulative duration at this point
       max_scroll: generateMaxScroll(duration),
     });
   }
@@ -496,7 +532,7 @@ function generateSessionEvents(
       updated_at: toClickHouseDateTime(secondPageTime),
       name: 'screen_view',
       path: secondPage.path,
-      duration: elapsedSeconds,  // Cumulative duration at this point
+      duration: elapsedSeconds, // Cumulative duration at this point
       max_scroll: generateMaxScroll(duration / 2),
     });
   }
@@ -511,7 +547,7 @@ function generateSessionEvents(
       updated_at: toClickHouseDateTime(endTime),
       name: 'scroll',
       path: events[events.length - 1].path, // Same as last page
-      duration: duration,  // Final cumulative duration (full session)
+      duration: duration, // Final cumulative duration (full session)
       max_scroll: generateMaxScroll(duration),
     });
   }
@@ -521,10 +557,12 @@ function generateSessionEvents(
 
 function generateHour(): number {
   // Weight hours by traffic patterns
-  const hourWeights = Object.entries(HOUR_MULTIPLIERS).map(([hour, weight]) => ({
-    hour: parseInt(hour),
-    weight: weight * 10, // Scale up for better distribution
-  }));
+  const hourWeights = Object.entries(HOUR_MULTIPLIERS).map(
+    ([hour, weight]) => ({
+      hour: parseInt(hour),
+      weight: weight * 10, // Scale up for better distribution
+    }),
+  );
   const totalWeight = hourWeights.reduce((sum, h) => sum + h.weight, 0);
 
   let random = Math.random() * totalWeight;
@@ -542,12 +580,18 @@ function selectPage(launchPeriod: 'launch' | 'post' | 'normal'): ApplePage {
   if (launchPeriod === 'launch') {
     // 70% chance of iPhone launch pages
     if (Math.random() < 0.7) {
-      return weightedRandom(IPHONE_LAUNCH_PAGES, IPHONE_LAUNCH_PAGES_TOTAL_WEIGHT);
+      return weightedRandom(
+        IPHONE_LAUNCH_PAGES,
+        IPHONE_LAUNCH_PAGES_TOTAL_WEIGHT,
+      );
     }
   } else if (launchPeriod === 'post') {
     // 50% chance of iPhone launch pages
     if (Math.random() < 0.5) {
-      return weightedRandom(IPHONE_LAUNCH_PAGES, IPHONE_LAUNCH_PAGES_TOTAL_WEIGHT);
+      return weightedRandom(
+        IPHONE_LAUNCH_PAGES,
+        IPHONE_LAUNCH_PAGES_TOTAL_WEIGHT,
+      );
     }
   }
 
@@ -642,7 +686,9 @@ function selectReferrerForUtm(
   return selectReferrer(launchPeriod);
 }
 
-function selectUtm(launchPeriod: 'launch' | 'post' | 'normal'): UtmCampaign | null {
+function selectUtm(
+  launchPeriod: 'launch' | 'post' | 'normal',
+): UtmCampaign | null {
   // Most traffic has no UTM parameters
   const totalWeight = UTM_CAMPAIGNS_TOTAL_WEIGHT + NO_UTM_WEIGHT;
   const random = Math.random() * totalWeight;
@@ -655,7 +701,10 @@ function selectUtm(launchPeriod: 'launch' | 'post' | 'normal'): UtmCampaign | nu
   if (launchPeriod === 'launch' || launchPeriod === 'post') {
     // 60% of UTM traffic uses iPhone launch campaigns
     if (Math.random() < 0.6) {
-      return weightedRandom(IPHONE_LAUNCH_CAMPAIGNS, IPHONE_LAUNCH_CAMPAIGNS_TOTAL_WEIGHT);
+      return weightedRandom(
+        IPHONE_LAUNCH_CAMPAIGNS,
+        IPHONE_LAUNCH_CAMPAIGNS_TOTAL_WEIGHT,
+      );
     }
   }
 

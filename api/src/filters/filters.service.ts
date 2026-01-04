@@ -18,7 +18,10 @@ import {
 import { CreateFilterDto } from './dto/create-filter.dto';
 import { UpdateFilterDto } from './dto/update-filter.dto';
 import { ReorderFiltersDto } from './dto/reorder-filters.dto';
-import { computeFilterVersion, evaluateConditions } from './lib/filter-evaluator';
+import {
+  computeFilterVersion,
+  evaluateConditions,
+} from './lib/filter-evaluator';
 
 function toClickHouseDateTime(date: Date = new Date()): string {
   return date.toISOString().replace('T', ' ').replace('Z', '');
@@ -45,9 +48,7 @@ export class FiltersService {
 
     // Filter by tags if provided
     if (tags && tags.length > 0) {
-      filters = filters.filter((f) =>
-        tags.some((tag) => f.tags.includes(tag)),
-      );
+      filters = filters.filter((f) => tags.some((tag) => f.tags.includes(tag)));
     }
 
     // Sort by order
@@ -61,7 +62,9 @@ export class FiltersService {
    */
   async get(workspaceId: string, filterId: string): Promise<FilterDefinition> {
     const workspace = await this.workspacesService.get(workspaceId);
-    const filter = (workspace.settings.filters ?? []).find((f) => f.id === filterId);
+    const filter = (workspace.settings.filters ?? []).find(
+      (f) => f.id === filterId,
+    );
 
     if (!filter) {
       throw new NotFoundException(
@@ -84,7 +87,10 @@ export class FiltersService {
     this.validateOperations(dto.operations);
 
     const now = toClickHouseDateTime();
-    const maxOrder = filters.reduce((max, f) => Math.max(max, f.order ?? 0), -1);
+    const maxOrder = filters.reduce(
+      (max, f) => Math.max(max, f.order ?? 0),
+      -1,
+    );
 
     const filter: FilterDefinition = {
       id: randomUUID(),
@@ -144,8 +150,12 @@ export class FiltersService {
       priority: dto.priority ?? existing.priority,
       order: dto.order ?? existing.order,
       tags: dto.tags ?? existing.tags,
-      conditions: dto.conditions ? (dto.conditions as unknown as FilterCondition[]) : existing.conditions,
-      operations: dto.operations ? (dto.operations as unknown as FilterOperation[]) : existing.operations,
+      conditions: dto.conditions
+        ? (dto.conditions as unknown as FilterCondition[])
+        : existing.conditions,
+      operations: dto.operations
+        ? (dto.operations as unknown as FilterOperation[])
+        : existing.operations,
       enabled: dto.enabled ?? existing.enabled,
       updatedAt: toClickHouseDateTime(),
     };
@@ -244,9 +254,7 @@ export class FiltersService {
         try {
           new RegExp(regexValue);
         } catch {
-          throw new BadRequestException(
-            `Invalid regex pattern: ${regexValue}`,
-          );
+          throw new BadRequestException(`Invalid regex pattern: ${regexValue}`);
         }
       }
     }

@@ -130,7 +130,9 @@ describe('buildAnalyticsQuery', () => {
   it('applies filters to WHERE clause', () => {
     const { sql, params } = buildAnalyticsQuery({
       ...baseQuery,
-      filters: [{ dimension: 'device', operator: 'equals', values: ['mobile'] }],
+      filters: [
+        { dimension: 'device', operator: 'equals', values: ['mobile'] },
+      ],
     });
     expect(sql).toContain('device = {f0:String}');
     expect(params.f0).toBe('mobile');
@@ -141,7 +143,11 @@ describe('buildAnalyticsQuery', () => {
       ...baseQuery,
       filters: [
         { dimension: 'device', operator: 'equals', values: ['mobile'] },
-        { dimension: 'utm_source', operator: 'in', values: ['google', 'facebook'] },
+        {
+          dimension: 'utm_source',
+          operator: 'in',
+          values: ['google', 'facebook'],
+        },
       ],
     });
     expect(sql).toContain('device = {f0:String}');
@@ -367,7 +373,9 @@ describe('buildExtremesQuery', () => {
   it('applies filters to both subqueries', () => {
     const { sql, params } = buildExtremesQuery({
       ...baseExtremesQuery,
-      filters: [{ dimension: 'device', operator: 'equals', values: ['mobile'] }],
+      filters: [
+        { dimension: 'device', operator: 'equals', values: ['mobile'] },
+      ],
     });
 
     expect(sql).toContain('device = {f0:String}');
