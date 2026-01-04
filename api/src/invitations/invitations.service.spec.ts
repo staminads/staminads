@@ -185,7 +185,7 @@ describe('InvitationsService', () => {
       });
       expect(clickhouse.querySystem).toHaveBeenCalledWith(
         expect.stringContaining('WHERE workspace_id ='),
-        { workspace_id: 'ws-test-001' },
+        { workspaceId: 'ws-test-001' },
       );
     });
 
@@ -731,7 +731,7 @@ describe('InvitationsService', () => {
 
         expect(result).toEqual({
           userId: 'user-new-001',
-          workspace_id: 'ws-test-001',
+          workspaceId: 'ws-test-001',
         });
 
         expect(usersService.create).toHaveBeenCalledWith({
@@ -808,7 +808,7 @@ describe('InvitationsService', () => {
 
         expect(result).toEqual({
           userId: 'user-001',
-          workspace_id: 'ws-test-001',
+          workspaceId: 'ws-test-001',
         });
 
         expect(usersService.create).not.toHaveBeenCalled();

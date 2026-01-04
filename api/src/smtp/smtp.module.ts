@@ -9,7 +9,7 @@ import { MembersModule } from '../members/members.module';
 @Module({
   imports: [
     ConfigModule,
-    WorkspacesModule,
+    forwardRef(() => WorkspacesModule),
     forwardRef(() => MailModule),
     forwardRef(() => MembersModule),
   ],
