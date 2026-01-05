@@ -1,7 +1,8 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { validate } from './config/env.validation';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { ApiKeysModule } from './api-keys/api-keys.module';
@@ -16,6 +17,8 @@ import { FiltersModule } from './filters/filters.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { MailModule } from './mail/mail.module';
 import { MembersModule } from './members/members.module';
+import { SetupModule } from './setup/setup.module';
+import { SetupMiddleware } from './setup/setup.middleware';
 import { SmtpModule } from './smtp/smtp.module';
 import { ToolsModule } from './tools/tools.module';
 import { UsersModule } from './users/users.module';
@@ -32,8 +35,15 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
       ttl: 24 * 60 * 60 * 1000, // 24 hours in ms
     }),
     EventEmitterModule.forRoot(),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        { name: 'auth', ttl: 60000, limit: 10 }, // 10 req/min for auth endpoints
+        { name: 'default', ttl: 60000, limit: 100 }, // 100 req/min for general API
+      ],
+    }),
     DatabaseModule,
     CommonModule,
+    SetupModule,
     AuthModule,
     AuditModule,
     UsersModule,
@@ -51,4 +61,8 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     AssistantModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(SetupMiddleware).forRoutes('*');
+  }
+}

@@ -17,6 +17,7 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Public } from '../common/decorators/public.decorator';
+import { AuthThrottle } from '../common/decorators/throttle.decorator';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -30,6 +31,7 @@ export class AuthController {
 
   @Post('auth.login')
   @Public()
+  @AuthThrottle()
   @ApiOperation({ summary: 'Login with email and password' })
   @ApiResponse({
     status: 200,
@@ -60,6 +62,7 @@ export class AuthController {
 
   @Post('auth.forgotPassword')
   @Public()
+  @AuthThrottle()
   @ApiOperation({ summary: 'Request password reset email' })
   @ApiResponse({
     status: 200,
@@ -81,6 +84,7 @@ export class AuthController {
 
   @Post('auth.resetPassword')
   @Public()
+  @AuthThrottle()
   @ApiOperation({ summary: 'Reset password with token' })
   @ApiResponse({
     status: 200,

@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
   BadRequestException,
 } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { UsersService } from './users.service';
 import { ClickHouseService } from '../database/clickhouse.service';
 import { User, UserStatus } from '../common/entities/user.entity';
@@ -16,6 +17,7 @@ jest.mock('../common/crypto');
 describe('UsersService', () => {
   let service: UsersService;
   let clickhouse: jest.Mocked<ClickHouseService>;
+  let cacheManager: { get: jest.Mock; set: jest.Mock; del: jest.Mock };
 
   const mockUser: User = {
     id: 'user-123',
@@ -46,11 +48,20 @@ describe('UsersService', () => {
             insertSystem: jest.fn(),
           },
         },
+        {
+          provide: CACHE_MANAGER,
+          useValue: {
+            get: jest.fn(),
+            set: jest.fn(),
+            del: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<UsersService>(UsersService);
     clickhouse = module.get(ClickHouseService);
+    cacheManager = module.get(CACHE_MANAGER);
 
     // Setup default crypto mocks
     (crypto.generateId as jest.Mock).mockReturnValue('new-user-id');
@@ -355,6 +366,15 @@ describe('UsersService', () => {
       expect(updatedAt >= beforeUpdate - 1000).toBe(true);
       expect(updatedAt <= afterUpdate + 1000).toBe(true);
     });
+
+    it('invalidates user cache', async () => {
+      clickhouse.querySystem.mockResolvedValue([mockUser]);
+      clickhouse.insertSystem.mockResolvedValue(undefined);
+
+      await service.updateProfile('user-123', { name: 'New Name' });
+
+      expect(cacheManager.del).toHaveBeenCalledWith('user:user-123');
+    });
   });
 
   describe('changePassword', () => {
@@ -450,6 +470,16 @@ describe('UsersService', () => {
       const changedAt = new Date(insertCall.password_changed_at!.replace(' ', 'T') + 'Z').getTime();
       expect(changedAt >= beforeChange - 1000).toBe(true);
       expect(changedAt <= afterChange + 1000).toBe(true);
+    });
+
+    it('invalidates user cache', async () => {
+      clickhouse.querySystem.mockResolvedValue([mockUser]);
+      clickhouse.insertSystem.mockResolvedValue(undefined);
+      (crypto.verifyPassword as jest.Mock).mockResolvedValue(true);
+
+      await service.changePassword('user-123', changePasswordDto);
+
+      expect(cacheManager.del).toHaveBeenCalledWith('user:user-123');
     });
   });
 
@@ -613,6 +643,15 @@ describe('UsersService', () => {
         ]),
       );
     });
+
+    it('invalidates user cache', async () => {
+      clickhouse.querySystem.mockResolvedValue([mockUser]);
+      clickhouse.insertSystem.mockResolvedValue(undefined);
+
+      await service.recordFailedLogin('test@example.com');
+
+      expect(cacheManager.del).toHaveBeenCalledWith('user:user-123');
+    });
   });
 
   describe('isLocked', () => {
@@ -721,6 +760,15 @@ describe('UsersService', () => {
           }),
         ]),
       );
+    });
+
+    it('invalidates user cache', async () => {
+      clickhouse.querySystem.mockResolvedValue([mockUser]);
+      clickhouse.insertSystem.mockResolvedValue(undefined);
+
+      await service.delete('user-123', 'admin-id');
+
+      expect(cacheManager.del).toHaveBeenCalledWith('user:user-123');
     });
   });
 

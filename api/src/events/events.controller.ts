@@ -3,11 +3,13 @@ import { AuthGuard } from '@nestjs/passport';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ClientIp } from '../common/decorators/client-ip.decorator';
 import { RequireScope } from '../common/decorators/require-scope.decorator';
+import { SkipRateLimit } from '../common/decorators/throttle.decorator';
 import { ScopeGuard } from '../common/guards/scope.guard';
 import { WorkspaceGuard } from '../common/guards/workspace.guard';
 import { TrackEventDto, TrackBatchDto } from './dto/track-event.dto';
 import { EventsService } from './events.service';
 
+@SkipRateLimit() // High-volume endpoints - millions of devices may share same IP
 @ApiTags('events')
 @Controller('api')
 export class EventsController {

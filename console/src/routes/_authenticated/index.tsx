@@ -13,7 +13,10 @@ export const Route = createFileRoute('/_authenticated/')({
       throw redirect({ to: '/no-access' })
     }
     if (workspaces.length === 0) {
-      // User has no workspace memberships
+      // No workspaces - super admins can create one, others go to no-access
+      if (context.auth.user?.isSuperAdmin) {
+        throw redirect({ to: '/workspaces/new' })
+      }
       throw redirect({ to: '/no-access' })
     }
     // Redirect to first workspace

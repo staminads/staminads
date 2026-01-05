@@ -140,6 +140,15 @@ export const SYSTEM_SCHEMAS: Record<string, string> = {
     ORDER BY id
   `,
 
+  system_settings: `
+    CREATE TABLE IF NOT EXISTS {database}.system_settings (
+      key String,
+      value String,
+      updated_at DateTime64(3) DEFAULT now64(3)
+    ) ENGINE = ReplacingMergeTree(updated_at)
+    ORDER BY (key)
+  `,
+
   api_keys: `
     CREATE TABLE IF NOT EXISTS {database}.api_keys (
       id String,

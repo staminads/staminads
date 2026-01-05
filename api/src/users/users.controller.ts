@@ -7,6 +7,7 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { UsersService } from './users.service';
+import { AuthService } from '../auth/auth.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { PublicUser } from '../common/entities/user.entity';
@@ -16,7 +17,10 @@ import { PublicUser } from '../common/entities/user.entity';
 @UseGuards(JwtAuthGuard)
 @Controller('api')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly authService: AuthService,
+  ) {}
 
   @Get('auth.me')
   @ApiOperation({ summary: 'Get current user profile' })
@@ -47,6 +51,10 @@ export class UsersController {
     @Body() dto: ChangePasswordDto,
   ): Promise<{ success: boolean }> {
     await this.usersService.changePassword(req.user.id, dto);
+
+    // Revoke all sessions to force re-login on all devices
+    await this.authService.revokeAllSessions(req.user.id);
+
     return { success: true };
   }
 }

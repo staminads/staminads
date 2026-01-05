@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { AuthContext, type AuthUser } from './AuthContext'
 
 // Re-export types for convenience
@@ -26,8 +26,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Use lazy initialization to avoid useEffect
   const [token, setToken] = useState<string | null>(getStoredToken)
   const [user, setUser] = useState<AuthUser | null>(getStoredUser)
-  // Since we're using lazy init, loading is false immediately
-  const [isLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+
+  // Check if setup is required on initial load
+  useEffect(() => {
+    const checkSetup = async () => {
+      // Skip check if we're already on the setup page
+      if (window.location.pathname === '/setup') {
+        setIsLoading(false)
+        return
+      }
+
+      try {
+        const res = await fetch('/api/setup.status')
+        if (res.ok) {
+          const { setupCompleted } = await res.json()
+          if (!setupCompleted) {
+            window.location.href = '/setup'
+            return
+          }
+        }
+      } catch {
+        // If we can't check status, continue normally
+      }
+      setIsLoading(false)
+    }
+
+    checkSetup()
+  }, [])
 
   const login = async (email: string, password: string) => {
     const res = await fetch('/api/auth.login', {

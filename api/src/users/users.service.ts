@@ -1,10 +1,13 @@
 import {
+  Inject,
   Injectable,
   ConflictException,
   NotFoundException,
   UnauthorizedException,
   BadRequestException,
 } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import { ClickHouseService } from '../database/clickhouse.service';
 import { generateId, hashPassword, verifyPassword } from '../common/crypto';
 import { User, PublicUser, UserStatus } from '../common/entities/user.entity';
@@ -18,7 +21,10 @@ function toClickHouseDateTime(date: Date = new Date()): string {
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly clickhouse: ClickHouseService) {}
+  constructor(
+    private readonly clickhouse: ClickHouseService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+  ) {}
 
   /**
    * Find user by ID
@@ -129,6 +135,9 @@ export class UsersService {
 
     await this.clickhouse.insertSystem('users', [updates]);
 
+    // Invalidate user cache
+    await this.invalidateUserCache(userId);
+
     return {
       id: user.id,
       email: updates.email,
@@ -174,6 +183,9 @@ export class UsersService {
         updated_at: now,
       },
     ]);
+
+    // Invalidate user cache
+    await this.invalidateUserCache(userId);
   }
 
   /**
@@ -226,6 +238,9 @@ export class UsersService {
       },
     ]);
 
+    // Invalidate user cache (status may have changed to locked)
+    await this.invalidateUserCache(user.id);
+
     return {
       locked: !!lockedUntil,
       lockedUntil: lockedUntil || undefined,
@@ -263,6 +278,16 @@ export class UsersService {
         updated_at: now,
       },
     ]);
+
+    // Invalidate user cache
+    await this.invalidateUserCache(userId);
+  }
+
+  /**
+   * Invalidate user cache entry
+   */
+  async invalidateUserCache(userId: string): Promise<void> {
+    await this.cacheManager.del(`user:${userId}`);
   }
 
   /**

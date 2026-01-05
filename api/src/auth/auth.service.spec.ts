@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { AuthService } from './auth.service';
 import { ClickHouseService } from '../database/clickhouse.service';
 import { UsersService } from '../users/users.service';
@@ -38,6 +39,7 @@ describe('AuthService', () => {
   let usersService: jest.Mocked<UsersService>;
   let mailService: jest.Mocked<MailService>;
   let auditService: jest.Mocked<AuditService>;
+  let cacheManager: { get: jest.Mock; set: jest.Mock; del: jest.Mock };
 
   const mockUser: User = {
     id: 'user-123',
@@ -55,15 +57,6 @@ describe('AuthService', () => {
     deleted_by: null,
     created_at: '2025-01-01T00:00:00.000Z',
     updated_at: '2025-01-01T00:00:00.000Z',
-  };
-
-  const mockAdminUser: User = {
-    ...mockUser,
-    id: 'admin-123',
-    email: 'admin@example.com',
-    password_hash: 'hashed-adminpass',
-    name: 'Admin',
-    is_super_admin: true,
   };
 
   const mockSession: Session = {
@@ -123,6 +116,14 @@ describe('AuthService', () => {
             log: jest.fn(),
           },
         },
+        {
+          provide: CACHE_MANAGER,
+          useValue: {
+            get: jest.fn(),
+            set: jest.fn(),
+            del: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -133,11 +134,10 @@ describe('AuthService', () => {
     usersService = module.get(UsersService);
     mailService = module.get(MailService);
     auditService = module.get(AuditService);
+    cacheManager = module.get(CACHE_MANAGER);
 
     // Default config mock
     configService.get.mockImplementation((key: string, defaultValue?: any) => {
-      if (key === 'ADMIN_EMAIL') return 'admin@example.com';
-      if (key === 'ADMIN_PASSWORD') return 'adminpass';
       if (key === 'APP_URL') return 'http://localhost:5173';
       return defaultValue;
     });
@@ -219,79 +219,6 @@ describe('AuthService', () => {
         );
 
         expect(usersService.recordLogin).toHaveBeenCalledWith('user-123');
-      });
-    });
-
-    describe('success with legacy admin', () => {
-      beforeEach(() => {
-        usersService.isLocked.mockResolvedValue(false);
-        // No database user found
-        usersService.findByEmail.mockResolvedValue(null);
-        clickhouse.insertSystem.mockResolvedValue(undefined);
-        clickhouse.querySystem.mockResolvedValue([]);
-      });
-
-      it('should create admin user on first legacy admin login', async () => {
-        const result = await service.login(
-          { email: 'admin@example.com', password: 'adminpass' },
-        );
-
-        expect(result.access_token).toBe('mock-jwt-token');
-        expect(clickhouse.insertSystem).toHaveBeenCalledWith(
-          'users',
-          expect.arrayContaining([
-            expect.objectContaining({
-              email: 'admin@example.com',
-              name: 'Admin',
-              is_super_admin: true,
-              type: 'user',
-              status: 'active',
-            }),
-          ]),
-        );
-      });
-
-      it('should assign owner role to all existing workspaces for new admin', async () => {
-        clickhouse.querySystem.mockResolvedValueOnce([
-          { id: 'ws-1' },
-          { id: 'ws-2' },
-        ]);
-
-        await service.login(
-          { email: 'admin@example.com', password: 'adminpass' },
-        );
-
-        expect(clickhouse.insertSystem).toHaveBeenCalledWith(
-          'workspace_memberships',
-          expect.arrayContaining([
-            expect.objectContaining({
-              workspace_id: 'ws-1',
-              role: 'owner',
-            }),
-          ]),
-        );
-        expect(clickhouse.insertSystem).toHaveBeenCalledWith(
-          'workspace_memberships',
-          expect.arrayContaining([
-            expect.objectContaining({
-              workspace_id: 'ws-2',
-              role: 'owner',
-            }),
-          ]),
-        );
-      });
-
-      it('should use existing admin user if already created', async () => {
-        // First call returns null (no db user), second call returns admin user (after creation)
-        usersService.findByEmail
-          .mockResolvedValueOnce(null)
-          .mockResolvedValueOnce(mockAdminUser);
-
-        const result = await service.login(
-          { email: 'admin@example.com', password: 'adminpass' },
-        );
-
-        expect(result.user.id).toBe('admin-123');
       });
     });
 
@@ -523,6 +450,25 @@ describe('AuthService', () => {
       });
     });
 
+    describe('account locked', () => {
+      it('should silently fail if account is locked', async () => {
+        usersService.isLocked.mockResolvedValue(true);
+
+        await service.forgotPassword({ email: 'test@example.com' });
+
+        expect(mailService.sendPasswordReset).not.toHaveBeenCalled();
+        expect(clickhouse.insertSystem).not.toHaveBeenCalled();
+      });
+
+      it('should not throw error when account is locked', async () => {
+        usersService.isLocked.mockResolvedValue(true);
+
+        await expect(
+          service.forgotPassword({ email: 'test@example.com' }),
+        ).resolves.toBeUndefined();
+      });
+    });
+
     describe('silent fail for unknown email', () => {
       it('should not throw error for non-existent email', async () => {
         usersService.findByEmail.mockResolvedValue(null);
@@ -650,6 +596,15 @@ describe('AuthService', () => {
           ip_address: '192.168.1.1',
           user_agent: undefined,
         });
+      });
+
+      it('should invalidate user cache', async () => {
+        await service.resetPassword({
+          token: 'valid-token',
+          newPassword: 'newpass123',
+        });
+
+        expect(cacheManager.del).toHaveBeenCalledWith('user:user-123');
       });
     });
 
@@ -874,6 +829,15 @@ describe('AuthService', () => {
         { sessionId: 'session-123', userId: 'user-123' },
       );
     });
+
+    it('should invalidate session cache', async () => {
+      clickhouse.querySystem.mockResolvedValue([mockSession]);
+      clickhouse.insertSystem.mockResolvedValue(undefined);
+
+      await service.revokeSession('session-123', 'user-123');
+
+      expect(cacheManager.del).toHaveBeenCalledWith('session:session-123:user-123');
+    });
   });
 
   describe('revokeAllSessions', () => {
@@ -919,6 +883,23 @@ describe('AuthService', () => {
       ).resolves.toBeUndefined();
 
       expect(clickhouse.insertSystem).not.toHaveBeenCalled();
+    });
+
+    it('should invalidate all session caches for user', async () => {
+      const sessions = [
+        mockSession,
+        { ...mockSession, id: 'session-456' },
+        { ...mockSession, id: 'session-789' },
+      ];
+      clickhouse.querySystem.mockResolvedValue(sessions);
+      clickhouse.insertSystem.mockResolvedValue(undefined);
+
+      await service.revokeAllSessions('user-123');
+
+      expect(cacheManager.del).toHaveBeenCalledTimes(3);
+      expect(cacheManager.del).toHaveBeenCalledWith('session:session-123:user-123');
+      expect(cacheManager.del).toHaveBeenCalledWith('session:session-456:user-123');
+      expect(cacheManager.del).toHaveBeenCalledWith('session:session-789:user-123');
     });
   });
 
