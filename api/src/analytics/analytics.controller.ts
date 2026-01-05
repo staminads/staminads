@@ -4,9 +4,11 @@ import { AnalyticsService } from './analytics.service';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
 import { ExtremesQueryDto, ExtremesResponse } from './dto/extremes-query.dto';
 import { WorkspaceAuthGuard } from '../common/guards/workspace.guard';
+import { AnalyticsThrottle } from '../common/decorators/throttle.decorator';
 
 @ApiTags('analytics')
 @ApiSecurity('jwt-auth')
+@AnalyticsThrottle()
 @Controller('api')
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}

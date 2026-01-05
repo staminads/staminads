@@ -293,6 +293,23 @@ export function DashboardGrid({
     })
   }, [onAddFilter, tabKeyToDimension])
 
+  // Heatmap cell click handler - adds filters for day_of_week and hour
+  const handleHeatmapCellClick = useCallback((dayOfWeek: number, hour: number) => {
+    if (!onAddFilter) return
+    // Add day_of_week filter
+    onAddFilter({
+      dimension: 'day_of_week',
+      operator: 'equals',
+      values: [dayOfWeek]
+    })
+    // Add hour filter
+    onAddFilter({
+      dimension: 'hour',
+      operator: 'equals',
+      values: [hour]
+    })
+  }, [onAddFilter])
+
   if (isError) {
     return (
       <Alert
@@ -392,6 +409,7 @@ export function DashboardGrid({
             loading={heatmapFetching && !heatmapResponse}
             timescoreReference={timescoreReference}
             emptyText="No traffic data"
+            onCellClick={handleHeatmapCellClick}
           />
           <DimensionTableWidget
             title="Devices"

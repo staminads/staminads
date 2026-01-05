@@ -1,10 +1,18 @@
+// Set env vars BEFORE any imports to ensure ConfigModule picks them up
+const TEST_SYSTEM_DATABASE = 'staminads_test_system';
+process.env.NODE_ENV = 'test';
+process.env.CLICKHOUSE_SYSTEM_DATABASE = TEST_SYSTEM_DATABASE;
+process.env.JWT_SECRET = 'test-secret-key';
+process.env.ADMIN_EMAIL = 'admin@test.com';
+process.env.ADMIN_PASSWORD = 'testpass';
+process.env.ENCRYPTION_KEY = 'test-encryption-key-32-chars-ok!';
+
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { createClient, ClickHouseClient } from '@clickhouse/client';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
-
-const TEST_SYSTEM_DATABASE = 'staminads_test_system';
+import { generateId, hashPassword } from '../src/common/crypto';
 // Workspace ID used in tests - must match what's inserted into workspaces table
 const testWorkspaceId = 'analytics_test_ws';
 // DB name = staminads_ws_<workspace_id> (matches what ClickHouseService.getWorkspaceDatabaseName returns)
@@ -22,11 +30,6 @@ describe('Analytics E2E', () => {
   let workspaceId: string;
 
   beforeAll(async () => {
-    process.env.CLICKHOUSE_SYSTEM_DATABASE = TEST_SYSTEM_DATABASE;
-    process.env.JWT_SECRET = 'test-secret-key';
-    process.env.ADMIN_EMAIL = 'admin@test.com';
-    process.env.ADMIN_PASSWORD = 'testpass';
-
     const moduleFixture = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -50,13 +53,42 @@ describe('Analytics E2E', () => {
       database: TEST_WORKSPACE_DATABASE,
     });
 
+    // Create test user for this test suite
+    const testEmail = 'analytics-test@test.com';
+    const testPassword = 'password123';
+    const passwordHash = await hashPassword(testPassword);
+    const now = toClickHouseDateTime();
+
+    // Clean users table first to avoid duplicates
+    await systemClient.command({ query: 'TRUNCATE TABLE users' });
+
+    await systemClient.insert({
+      table: 'users',
+      values: [
+        {
+          id: generateId(),
+          email: testEmail,
+          password_hash: passwordHash,
+          name: 'Analytics Test User',
+          type: 'user',
+          status: 'active',
+          is_super_admin: 1,
+          failed_login_attempts: 0,
+          created_at: now,
+          updated_at: now,
+        },
+      ],
+      format: 'JSONEachRow',
+    });
+
+    // Force ClickHouse to merge parts and make data visible
+    await systemClient.command({ query: 'OPTIMIZE TABLE users FINAL' });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
     // Get auth token
     const loginRes = await request(app.getHttpServer())
       .post('/api/auth.login')
-      .send({
-        email: process.env.ADMIN_EMAIL,
-        password: process.env.ADMIN_PASSWORD,
-      });
+      .send({ email: testEmail, password: testPassword });
 
     expect(loginRes.status).toBe(201);
     authToken = loginRes.body.access_token;
@@ -635,6 +667,189 @@ describe('Analytics E2E', () => {
           dateRange: { start: '2025-12-01', end: '2025-12-31' },
         })
         .expect(401);
+    });
+  });
+
+  describe('Analytics Caching', () => {
+    it('returns cached response for identical queries', async () => {
+      const query = {
+        workspace_id: workspaceId,
+        metrics: ['sessions'],
+        dateRange: { start: '2025-12-01', end: '2025-12-10' },
+      };
+
+      // First request - should hit database
+      const response1 = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(query)
+        .expect(200);
+
+      // Second identical request - should return cached response
+      const response2 = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(query)
+        .expect(200);
+
+      // Both responses should be identical
+      expect(response1.body.data).toEqual(response2.body.data);
+      expect(response1.body.meta).toEqual(response2.body.meta);
+    });
+
+    it('returns different responses for different queries', async () => {
+      const query1 = {
+        workspace_id: workspaceId,
+        metrics: ['sessions'],
+        dateRange: { start: '2025-12-01', end: '2025-12-05' },
+      };
+
+      const query2 = {
+        workspace_id: workspaceId,
+        metrics: ['sessions'],
+        dateRange: { start: '2025-12-01', end: '2025-12-10' },
+      };
+
+      const response1 = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(query1)
+        .expect(200);
+
+      const response2 = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(query2)
+        .expect(200);
+
+      // Different date ranges should produce different meta
+      expect(response1.body.meta.dateRange.end).not.toEqual(
+        response2.body.meta.dateRange.end,
+      );
+    });
+
+    it('caches queries with different metrics separately', async () => {
+      const baseQuery = {
+        workspace_id: workspaceId,
+        dateRange: { start: '2025-12-01', end: '2025-12-10' },
+      };
+
+      const response1 = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ ...baseQuery, metrics: ['sessions'] })
+        .expect(200);
+
+      const response2 = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ ...baseQuery, metrics: ['avg_duration'] })
+        .expect(200);
+
+      // Different metrics means different queries
+      expect(response1.body.meta.metrics).toEqual(['sessions']);
+      expect(response2.body.meta.metrics).toEqual(['avg_duration']);
+    });
+
+    it('caches queries with different filters separately', async () => {
+      const baseQuery = {
+        workspace_id: workspaceId,
+        metrics: ['sessions'],
+        dateRange: { start: '2025-12-01', end: '2025-12-31' },
+      };
+
+      const response1 = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          ...baseQuery,
+          filters: [
+            { dimension: 'device', operator: 'equals', values: ['desktop'] },
+          ],
+        })
+        .expect(200);
+
+      const response2 = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          ...baseQuery,
+          filters: [
+            { dimension: 'device', operator: 'equals', values: ['mobile'] },
+          ],
+        })
+        .expect(200);
+
+      // Different filters should return different session counts (15 each)
+      expect(Number(response1.body.data[0].sessions)).toBe(15); // desktop
+      expect(Number(response2.body.data[0].sessions)).toBe(15); // mobile
+    });
+
+    it('handles concurrent identical requests efficiently', async () => {
+      const query = {
+        workspace_id: workspaceId,
+        metrics: ['sessions', 'avg_duration'],
+        dimensions: ['device'],
+        dateRange: { start: '2025-12-01', end: '2025-12-15' },
+      };
+
+      // Fire 5 identical requests concurrently
+      const responses = await Promise.all([
+        request(app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send(query),
+        request(app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send(query),
+        request(app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send(query),
+        request(app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send(query),
+        request(app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send(query),
+      ]);
+
+      // All should succeed with identical results
+      for (const res of responses) {
+        expect(res.status).toBe(200);
+        expect(res.body.data).toEqual(responses[0].body.data);
+      }
+    });
+
+    it('caches queries with granularity correctly', async () => {
+      const query = {
+        workspace_id: workspaceId,
+        metrics: ['sessions'],
+        dateRange: {
+          start: '2025-12-01',
+          end: '2025-12-05',
+          granularity: 'day',
+        },
+      };
+
+      const response1 = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(query)
+        .expect(200);
+
+      // Same query should return cached result
+      const response2 = await request(app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(query)
+        .expect(200);
+
+      expect(response1.body.data).toEqual(response2.body.data);
+      expect(response1.body.meta.granularity).toBe('day');
     });
   });
 });

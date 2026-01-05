@@ -10,6 +10,19 @@ import { getClientIp } from '../utils/ip.util';
 @Injectable()
 export class CustomThrottlerGuard extends ThrottlerGuard {
   /**
+   * Skip throttling in test mode.
+   */
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const isTest =
+      process.env.NODE_ENV === 'test' ||
+      process.env.CLICKHOUSE_SYSTEM_DATABASE?.includes('test');
+    if (isTest) {
+      return true;
+    }
+    return super.canActivate(context);
+  }
+
+  /**
    * Extract tracker key (client IP) for rate limiting.
    * Uses the shared IP utility for consistent behavior with @ClientIp decorator.
    */

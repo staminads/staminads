@@ -1,3 +1,14 @@
+// Set env vars BEFORE any imports to ensure ConfigModule picks them up
+const TEST_SYSTEM_DATABASE = 'staminads_test_system';
+process.env.NODE_ENV = 'test';
+process.env.CLICKHOUSE_SYSTEM_DATABASE = TEST_SYSTEM_DATABASE;
+process.env.JWT_SECRET = 'test-secret-key';
+process.env.ADMIN_EMAIL = 'admin@test.com';
+process.env.ADMIN_PASSWORD = 'testpass';
+process.env.APP_URL = 'http://localhost:5173';
+process.env.ENCRYPTION_KEY = 'test-encryption-key-32-chars-ok!';
+process.env.SMTP_HOST = '';
+
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { createClient, ClickHouseClient } from '@clickhouse/client';
@@ -5,8 +16,6 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { MailService } from '../src/mail/mail.service';
 import { generateId, hashPassword } from '../src/common/crypto';
-
-const TEST_SYSTEM_DATABASE = 'staminads_test_system';
 
 function toClickHouseDateTime(date: Date = new Date()): string {
   return date.toISOString().replace('T', ' ').replace('Z', '');
@@ -101,15 +110,6 @@ describe('Auth Integration', () => {
   }
 
   beforeAll(async () => {
-    // Override env vars for test databases
-    process.env.CLICKHOUSE_SYSTEM_DATABASE = TEST_SYSTEM_DATABASE;
-    process.env.JWT_SECRET = 'test-secret-key';
-    process.env.ADMIN_EMAIL = 'admin@test.com';
-    process.env.ADMIN_PASSWORD = 'testpass';
-    process.env.APP_URL = 'http://localhost:5173';
-    // Disable mail sending for tests (missing SMTP config would cause errors)
-    process.env.SMTP_HOST = '';
-
     // Create ClickHouse client first (before app init)
     systemClient = createClient({
       url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',

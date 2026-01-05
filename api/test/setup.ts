@@ -1,5 +1,7 @@
 import { createClient, ClickHouseClient } from '@clickhouse/client';
+import * as bcrypt from 'bcrypt';
 import { SYSTEM_SCHEMAS, WORKSPACE_SCHEMAS } from '../src/database/schemas';
+import { generateId } from '../src/common/crypto';
 
 const TEST_SYSTEM_DATABASE = 'staminads_test_system';
 const TEST_WORKSPACE_DATABASE = 'staminads_test_ws';
@@ -49,6 +51,41 @@ export async function setup(): Promise<void> {
     const query = schema.replace(/{database}/g, TEST_SYSTEM_DATABASE);
     await ch.command({ query });
   }
+
+  // Mark setup as complete for tests (required by SetupMiddleware)
+  const now = new Date().toISOString().replace('T', ' ').replace('Z', '');
+  await ch.insert({
+    table: `${TEST_SYSTEM_DATABASE}.system_settings`,
+    values: [
+      {
+        key: 'setup_completed',
+        value: 'true',
+        updated_at: now,
+      },
+    ],
+    format: 'JSONEachRow',
+  });
+
+  // Create admin test user (used by tests expecting ADMIN_EMAIL/ADMIN_PASSWORD)
+  const adminPasswordHash = await bcrypt.hash('testpass', 10);
+  await ch.insert({
+    table: `${TEST_SYSTEM_DATABASE}.users`,
+    values: [
+      {
+        id: generateId(),
+        email: 'admin@test.com',
+        password_hash: adminPasswordHash,
+        name: 'Test Admin',
+        type: 'user',
+        status: 'active',
+        is_super_admin: 1,
+        failed_login_attempts: 0,
+        created_at: now,
+        updated_at: now,
+      },
+    ],
+    format: 'JSONEachRow',
+  });
 
   // Create main test workspace database
   await createWorkspaceDatabase(ch, TEST_WORKSPACE_DATABASE);

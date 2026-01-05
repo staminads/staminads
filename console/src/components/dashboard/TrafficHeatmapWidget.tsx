@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import ReactECharts from 'echarts-for-react'
+import type { EChartsReactProps } from 'echarts-for-react'
 import { Spin, Empty } from 'antd'
 import { formatValue } from '../../lib/chart-utils'
 
@@ -34,6 +35,7 @@ interface TrafficHeatmapWidgetProps {
   loading: boolean
   timescoreReference?: number
   emptyText?: string
+  onCellClick?: (dayOfWeek: number, hour: number) => void
 }
 
 // Get heat map color based on value relative to reference (same logic as CountriesMapWidget)
@@ -95,6 +97,7 @@ export function TrafficHeatmapWidget({
   loading,
   timescoreReference = 60,
   emptyText = 'No data available',
+  onCellClick,
 }: TrafficHeatmapWidgetProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('sessions')
 
@@ -197,6 +200,25 @@ export function TrafficHeatmapWidget({
     }
   }, [heatmapData, maxValue, activeTab, timescoreReference])
 
+  // Handle heatmap cell click
+  const handleChartClick = useCallback(
+    (params: { data?: [number, number, number] | { value: [number, number, number] } }) => {
+      if (!onCellClick || !params.data) return
+      // Data can be [x, y, value] or { value: [x, y, value] } depending on series format
+      const dataArray = Array.isArray(params.data) ? params.data : params.data.value
+      const [hourIndex, dayIndex] = dataArray
+      // Convert dayIndex (0-6) to day_of_week (1-7 for ClickHouse ISO standard)
+      const dayOfWeek = dayIndex + 1
+      onCellClick(dayOfWeek, hourIndex)
+    },
+    [onCellClick]
+  )
+
+  const onEvents: EChartsReactProps['onEvents'] = useMemo(
+    () => (onCellClick ? { click: handleChartClick } : undefined),
+    [onCellClick, handleChartClick]
+  )
+
   return (
     <div className="rounded-md overflow-hidden bg-white">
       {/* Title */}
@@ -235,8 +257,9 @@ export function TrafficHeatmapWidget({
       ) : (
         <ReactECharts
           option={option}
-          style={{ height: 300 }}
+          style={{ height: 300, cursor: onCellClick ? 'pointer' : 'default' }}
           opts={{ renderer: 'svg' }}
+          onEvents={onEvents}
         />
       )}
     </div>

@@ -1,3 +1,13 @@
+// Set env vars BEFORE any imports to ensure ConfigModule picks them up
+const TEST_SYSTEM_DATABASE = 'staminads_test_system';
+process.env.NODE_ENV = 'test';
+process.env.CLICKHOUSE_SYSTEM_DATABASE = TEST_SYSTEM_DATABASE;
+process.env.JWT_SECRET = 'test-secret-key';
+process.env.ADMIN_EMAIL = 'admin@test.com';
+process.env.ADMIN_PASSWORD = 'testpass';
+process.env.APP_URL = 'http://localhost:5173';
+process.env.ENCRYPTION_KEY = 'test-encryption-key-32-chars-ok!';
+
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { createClient, ClickHouseClient } from '@clickhouse/client';
@@ -6,8 +16,6 @@ import { AppModule } from '../src/app.module';
 import { MailService } from '../src/mail/mail.service';
 import { generateId, hashToken, hashPassword } from '../src/common/crypto';
 
-const TEST_SYSTEM_DATABASE = 'staminads_test_system';
-
 function toClickHouseDateTime(date: Date = new Date()): string {
   return date.toISOString().replace('T', ' ').replace('Z', '');
 }
@@ -15,9 +23,7 @@ function toClickHouseDateTime(date: Date = new Date()): string {
 describe('Invitations Integration', () => {
   let app: INestApplication;
   let systemClient: ClickHouseClient;
-  let adminAuthToken: string;
   let ownerAuthToken: string;
-  let adminUserId: string;
   let ownerUserId: string;
   let editorUserId: string;
   let viewerUserId: string;
@@ -27,13 +33,6 @@ describe('Invitations Integration', () => {
   let mailService: MailService;
 
   beforeAll(async () => {
-    // Override env vars for test databases
-    process.env.CLICKHOUSE_SYSTEM_DATABASE = TEST_SYSTEM_DATABASE;
-    process.env.JWT_SECRET = 'test-secret-key';
-    process.env.ADMIN_EMAIL = 'admin@test.com';
-    process.env.ADMIN_PASSWORD = 'testpass';
-    process.env.APP_URL = 'http://localhost:5173';
-
     const moduleFixture = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -57,18 +56,6 @@ describe('Invitations Integration', () => {
       url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
       database: TEST_SYSTEM_DATABASE,
     });
-
-    // Get admin auth token
-    const loginRes = await request(app.getHttpServer())
-      .post('/api/auth.login')
-      .send({
-        email: process.env.ADMIN_EMAIL,
-        password: process.env.ADMIN_PASSWORD,
-      });
-
-    expect(loginRes.status).toBe(201);
-    adminAuthToken = loginRes.body.access_token;
-    adminUserId = loginRes.body.user.id;
   });
 
   afterAll(async () => {
@@ -202,16 +189,19 @@ describe('Invitations Integration', () => {
     const ownerLogin = await request(app.getHttpServer())
       .post('/api/auth.login')
       .send({ email: 'owner@test.com', password: 'password123' });
+    expect(ownerLogin.status).toBe(201);
     ownerAuthToken = ownerLogin.body.access_token;
 
     const editorLogin = await request(app.getHttpServer())
       .post('/api/auth.login')
       .send({ email: 'editor@test.com', password: 'password123' });
+    expect(editorLogin.status).toBe(201);
     editorAuthToken = editorLogin.body.access_token;
 
     const viewerLogin = await request(app.getHttpServer())
       .post('/api/auth.login')
       .send({ email: 'viewer@test.com', password: 'password123' });
+    expect(viewerLogin.status).toBe(201);
     viewerAuthToken = viewerLogin.body.access_token;
   });
 
@@ -600,16 +590,13 @@ describe('Invitations Integration', () => {
     });
 
     it('fails for invalid token', async () => {
-      await request(app.getHttpServer())
-        .get('/api/invitations.get')
-        .query({ token: 'invalid-token' })
-        .expect(200); // Returns null
-
       const response = await request(app.getHttpServer())
         .get('/api/invitations.get')
-        .query({ token: 'invalid-token' });
+        .query({ token: 'invalid-token' })
+        .expect(200);
 
-      expect(response.body).toBeNull();
+      // NestJS serializes null as empty object
+      expect(response.body).toEqual({});
     });
 
     it('fails for expired invitation', async () => {

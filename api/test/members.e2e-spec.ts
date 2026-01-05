@@ -1,16 +1,18 @@
+// Set env vars BEFORE any imports to ensure ConfigModule picks them up
+const TEST_SYSTEM_DATABASE = 'staminads_test_system';
+process.env.NODE_ENV = 'test';
+process.env.CLICKHOUSE_SYSTEM_DATABASE = TEST_SYSTEM_DATABASE;
+process.env.JWT_SECRET = 'test-secret-key';
+process.env.ADMIN_EMAIL = 'admin@test.com';
+process.env.ADMIN_PASSWORD = 'testpass';
+process.env.ENCRYPTION_KEY = 'test-encryption-key-32-chars-ok!';
+
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { createClient, ClickHouseClient } from '@clickhouse/client';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { generateId } from '../src/common/crypto';
-
-const TEST_SYSTEM_DATABASE = 'staminads_test_system';
-
-// Set environment variables BEFORE any module imports
-// This ensures ConfigService picks up test database names
-process.env.CLICKHOUSE_SYSTEM_DATABASE = TEST_SYSTEM_DATABASE;
-process.env.JWT_SECRET = 'test-secret-key';
 
 function toClickHouseDateTime(date: Date = new Date()): string {
   return date.toISOString().replace('T', ' ').replace('Z', '');

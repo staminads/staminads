@@ -1,6 +1,6 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { CacheModule } from '@nestjs/cache-manager';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { validate } from './config/env.validation';
@@ -35,11 +35,30 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
       ttl: 24 * 60 * 60 * 1000, // 24 hours in ms
     }),
     EventEmitterModule.forRoot(),
-    ThrottlerModule.forRoot({
-      throttlers: [
-        { name: 'auth', ttl: 60000, limit: 10 }, // 10 req/min for auth endpoints
-        { name: 'default', ttl: 60000, limit: 100 }, // 100 req/min for general API
-      ],
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        // Disable rate limiting in test mode by setting extremely high limits
+        const isTest = config.get('NODE_ENV') === 'test' ||
+          config.get('CLICKHOUSE_SYSTEM_DATABASE')?.includes('test');
+        if (isTest) {
+          return {
+            throttlers: [
+              { name: 'auth', ttl: 1, limit: 1000000 },
+              { name: 'default', ttl: 1, limit: 1000000 },
+              { name: 'analytics', ttl: 1, limit: 1000000 },
+            ],
+          };
+        }
+        return {
+          throttlers: [
+            { name: 'auth', ttl: 60000, limit: 10 },
+            { name: 'default', ttl: 60000, limit: 100 },
+            { name: 'analytics', ttl: 60000, limit: 1000 },
+          ],
+        };
+      },
     }),
     DatabaseModule,
     CommonModule,

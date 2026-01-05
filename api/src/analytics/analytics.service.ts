@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Inject } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
+import { OnEvent } from '@nestjs/event-emitter';
+import * as crypto from 'crypto';
 import { ClickHouseService } from '../database/clickhouse.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
@@ -11,6 +15,7 @@ import {
 } from './lib/date-utils';
 import { METRICS, MetricContext } from './constants/metrics';
 import { DIMENSIONS } from './constants/dimensions';
+import { Workspace } from '../workspaces/entities/workspace.entity';
 
 // Convert ISO date string to ClickHouse DateTime64 format
 function toClickHouseDateTime(isoDate: string): string {
@@ -50,9 +55,15 @@ export interface AnalyticsResponse {
 
 @Injectable()
 export class AnalyticsService {
+  private readonly CACHE_TTL_HISTORICAL = 5 * 60 * 1000; // 5 min for historical
+  private readonly CACHE_TTL_LIVE = 60 * 1000; // 1 min for queries including today
+  private pendingQueries = new Map<string, Promise<AnalyticsResponse>>();
+  private workspaceCacheKeys = new Map<string, Set<string>>();
+
   constructor(
     private readonly clickhouse: ClickHouseService,
     private readonly workspacesService: WorkspacesService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
   async query(dto: AnalyticsQueryDto): Promise<AnalyticsResponse> {
@@ -60,6 +71,42 @@ export class AnalyticsService {
     const workspace = await this.workspacesService.get(dto.workspace_id);
     const tz = dto.timezone || workspace.timezone || 'UTC';
 
+    // Resolve date range from preset for cache key
+    const resolvedDates = dto.dateRange.preset
+      ? resolveDatePreset(dto.dateRange.preset, tz)
+      : { start: dto.dateRange.start!, end: dto.dateRange.end! };
+
+    const cacheKey = this.generateCacheKey(dto, resolvedDates, tz);
+
+    // Check cache first
+    const cached = await this.cacheManager.get<AnalyticsResponse>(cacheKey);
+    if (cached) return cached;
+
+    // Deduplicate concurrent identical requests
+    if (this.pendingQueries.has(cacheKey)) {
+      return this.pendingQueries.get(cacheKey)!;
+    }
+
+    // Execute query and cache result
+    const queryPromise = this.executeQueryInternal(dto, workspace, tz)
+      .then(async (result) => {
+        const ttl = this.getTTL(resolvedDates, tz);
+        await this.cacheManager.set(cacheKey, result, ttl);
+        return result;
+      })
+      .finally(() => {
+        this.pendingQueries.delete(cacheKey);
+      });
+
+    this.pendingQueries.set(cacheKey, queryPromise);
+    return queryPromise;
+  }
+
+  private async executeQueryInternal(
+    dto: AnalyticsQueryDto,
+    workspace: Workspace,
+    tz: string,
+  ): Promise<AnalyticsResponse> {
     // Validate metrics
     for (const metric of dto.metrics) {
       if (!METRICS[metric]) {
@@ -348,5 +395,76 @@ export class AnalyticsService {
         },
       },
     };
+  }
+
+  /**
+   * Get cache TTL based on whether the date range includes today.
+   * Live data (includes today) gets 1 min TTL, historical gets 5 min.
+   */
+  private getTTL(
+    dates: { start: string; end: string },
+    tz: string,
+  ): number {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: tz });
+    // Handle both ISO format (2025-01-05T...) and ClickHouse format (2025-01-05 ...)
+    const endDate = dates.end.split(' ')[0].split('T')[0];
+    return endDate >= today
+      ? this.CACHE_TTL_LIVE
+      : this.CACHE_TTL_HISTORICAL;
+  }
+
+  /**
+   * Generate a cache key from query parameters.
+   * Key is workspace-scoped and includes all query-affecting parameters.
+   */
+  private generateCacheKey(
+    dto: AnalyticsQueryDto,
+    dates: { start: string; end: string },
+    tz: string,
+  ): string {
+    const parts = [
+      dto.workspace_id,
+      dto.metrics.sort().join(','),
+      (dto.dimensions || []).sort().join(','),
+      dates.start,
+      dates.end,
+      dto.dateRange.granularity || '',
+      tz,
+      dto.limit || 1000,
+      JSON.stringify(dto.filters || []),
+      JSON.stringify(dto.order || {}),
+      dto.compareDateRange ? JSON.stringify(dto.compareDateRange) : '',
+      dto.havingMinSessions || 0,
+    ];
+    const hash = crypto
+      .createHash('sha256')
+      .update(parts.join('|'))
+      .digest('hex')
+      .slice(0, 16);
+    const key = `analytics:${dto.workspace_id}:${hash}`;
+
+    // Track key for invalidation
+    if (!this.workspaceCacheKeys.has(dto.workspace_id)) {
+      this.workspaceCacheKeys.set(dto.workspace_id, new Set());
+    }
+    this.workspaceCacheKeys.get(dto.workspace_id)!.add(key);
+
+    return key;
+  }
+
+  /**
+   * Handle backfill completion event.
+   * Clears all cached queries for the workspace.
+   */
+  @OnEvent('backfill.completed')
+  async handleBackfillCompleted(payload: { workspaceId: string }) {
+    const keys = this.workspaceCacheKeys.get(payload.workspaceId);
+    if (keys) {
+      await Promise.all([...keys].map((k) => this.cacheManager.del(k)));
+      this.workspaceCacheKeys.delete(payload.workspaceId);
+      console.log(
+        `Cleared ${keys.size} cached analytics queries for workspace ${payload.workspaceId}`,
+      );
+    }
   }
 }

@@ -97,6 +97,7 @@ export class InvitationsController {
   }
 
   @Post('invitations.accept')
+  @HttpCode(200)
   @Public()
   @ApiOperation({ summary: 'Accept invitation' })
   @ApiResponse({ status: 200, description: 'Invitation accepted' })

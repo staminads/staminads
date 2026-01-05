@@ -6,6 +6,7 @@ import {
   OnModuleInit,
   OnModuleDestroy,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { randomUUID } from 'crypto';
 import { ClickHouseService } from '../../database/clickhouse.service';
 import { WorkspacesService } from '../../workspaces/workspaces.service';
@@ -38,6 +39,7 @@ export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly clickhouse: ClickHouseService,
     private readonly workspacesService: WorkspacesService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -208,6 +210,9 @@ export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
         await processor.process(task);
         if (!processor.isCancelled()) {
           await this.updateTaskStatusWithRetry(task, 'completed');
+          this.eventEmitter.emit('backfill.completed', {
+            workspaceId: task.workspace_id,
+          });
           finalStatus = 'completed';
         } else {
           await this.updateTaskStatusWithRetry(task, 'cancelled');

@@ -1,10 +1,18 @@
+// Set env vars BEFORE any imports to ensure ConfigModule picks them up
+const TEST_SYSTEM_DATABASE = 'staminads_test_system';
+process.env.NODE_ENV = 'test';
+process.env.CLICKHOUSE_SYSTEM_DATABASE = TEST_SYSTEM_DATABASE;
+process.env.JWT_SECRET = 'test-secret-key';
+process.env.ADMIN_EMAIL = 'admin@test.com';
+process.env.ADMIN_PASSWORD = 'testpass';
+process.env.ENCRYPTION_KEY = 'test-encryption-key-32-chars-ok!';
+
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { createClient, ClickHouseClient } from '@clickhouse/client';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
-
-const TEST_SYSTEM_DATABASE = 'staminads_test_system';
+import { generateId, hashPassword } from '../src/common/crypto';
 const TEST_WORKSPACE_DATABASE = 'staminads_test_ws';
 
 function toClickHouseDateTime(date: Date = new Date()): string {
@@ -18,12 +26,6 @@ describe('Workspaces Integration', () => {
   let authToken: string;
 
   beforeAll(async () => {
-    // Override env vars for test databases
-    process.env.CLICKHOUSE_SYSTEM_DATABASE = TEST_SYSTEM_DATABASE;
-    process.env.JWT_SECRET = 'test-secret-key';
-    process.env.ADMIN_EMAIL = 'admin@test.com';
-    process.env.ADMIN_PASSWORD = 'testpass';
-
     const moduleFixture = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -48,13 +50,36 @@ describe('Workspaces Integration', () => {
       database: TEST_WORKSPACE_DATABASE,
     });
 
+    // Create test user for this test suite
+    const testEmail = 'workspaces-test@test.com';
+    const testPassword = 'password123';
+    const passwordHash = await hashPassword(testPassword);
+    const now = toClickHouseDateTime();
+
+    await systemClient.insert({
+      table: 'users',
+      values: [
+        {
+          id: generateId(),
+          email: testEmail,
+          password_hash: passwordHash,
+          name: 'Workspaces Test User',
+          type: 'user',
+          status: 'active',
+          is_super_admin: 1,
+          failed_login_attempts: 0,
+          created_at: now,
+          updated_at: now,
+        },
+      ],
+      format: 'JSONEachRow',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
     // Get auth token
     const loginRes = await request(app.getHttpServer())
       .post('/api/auth.login')
-      .send({
-        email: process.env.ADMIN_EMAIL,
-        password: process.env.ADMIN_PASSWORD,
-      });
+      .send({ email: testEmail, password: testPassword });
 
     expect(loginRes.status).toBe(201);
     expect(loginRes.body.access_token).toBeDefined();
