@@ -179,7 +179,7 @@ export function useExploreParams(workspaceTimezone: string) {
     dimensions,
     filters,
     minSessions: search.minSessions ? parseInt(search.minSessions, 10) : 10,
-    period: (search.period ?? 'last_7_days') as DatePreset,
+    period: (search.period ?? 'previous_7_days') as DatePreset,
     timezone: search.timezone ?? workspaceTimezone,
     comparison: (search.comparison ?? 'previous_period') as ComparisonMode,
     customStart: search.customStart,

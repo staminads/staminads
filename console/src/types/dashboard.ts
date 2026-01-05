@@ -147,33 +147,33 @@ export const METRICS: MetricConfig[] = [
 ]
 
 export const PERIOD_LABELS: Record<DatePreset, string> = {
-  last_30_minutes: 'Last 30 Minutes',
+  previous_30_minutes: 'Previous 30 Minutes',
   today: 'Today',
   yesterday: 'Yesterday',
-  last_7_days: 'Last 7 Days',
-  last_14_days: 'Last 14 Days',
-  last_28_days: 'Last 28 Days',
-  last_30_days: 'Last 30 Days',
-  last_90_days: 'Last 90 Days',
-  last_91_days: 'Last 91 Days',
+  previous_7_days: 'Previous 7 Days',
+  previous_14_days: 'Previous 14 Days',
+  previous_28_days: 'Previous 28 Days',
+  previous_30_days: 'Previous 30 Days',
+  previous_90_days: 'Previous 90 Days',
+  previous_91_days: 'Previous 91 Days',
   this_week: 'This Week',
-  last_week: 'Last Week',
+  previous_week: 'Previous Week',
   this_month: 'Month to Date',
-  last_month: 'Last Month',
+  previous_month: 'Previous Month',
   this_quarter: 'This Quarter',
-  last_quarter: 'Last Quarter',
+  previous_quarter: 'Previous Quarter',
   this_year: 'Year to Date',
-  last_year: 'Last Year',
-  last_12_months: 'Last 12 Months',
+  previous_year: 'Previous Year',
+  previous_12_months: 'Previous 12 Months',
   all_time: 'All time',
   custom: 'Custom Range',
 }
 
 export const PRESET_GROUPS: DatePreset[][] = [
   ['today', 'yesterday'],
-  ['last_7_days', 'last_28_days', 'last_91_days'],
-  ['this_month', 'last_month'],
-  ['this_year', 'last_12_months'],
+  ['previous_7_days', 'previous_28_days', 'previous_91_days'],
+  ['this_month', 'previous_month'],
+  ['this_year', 'previous_12_months'],
   ['all_time', 'custom'],
 ]
 
@@ -183,7 +183,13 @@ export function extractDashboardData(
   granularity: Granularity,
 ): DashboardData {
   const data = response.data as { current: Record<string, unknown>[]; previous: Record<string, unknown>[] }
-  const dateColumn = getDateColumn(granularity)
+  const expectedDateColumn = getDateColumn(granularity)
+
+  // Find the actual date column in the data (handles keepPreviousData cache mismatch)
+  const firstRow = data.current[0]
+  const dateColumn = firstRow
+    ? findDateColumn(firstRow, expectedDateColumn)
+    : expectedDateColumn
 
   const metrics: Record<string, MetricData> = {}
 
@@ -240,4 +246,26 @@ function getDateColumn(granularity: Granularity): string {
     year: 'date_year',
   }
   return columns[granularity]
+}
+
+// All possible date columns in priority order (most granular first)
+const DATE_COLUMNS = ['date_hour', 'date_day', 'date_week', 'date_month', 'date_year']
+
+/**
+ * Find the actual date column in the row data.
+ * This handles cases where cached data has a different granularity than expected.
+ */
+function findDateColumn(row: Record<string, unknown>, expected: string): string {
+  // If expected column exists, use it
+  if (row[expected] !== undefined) {
+    return expected
+  }
+  // Otherwise, find the first available date column
+  for (const col of DATE_COLUMNS) {
+    if (row[col] !== undefined) {
+      return col
+    }
+  }
+  // Fallback to expected (will result in undefined timestamps, but won't crash)
+  return expected
 }

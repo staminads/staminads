@@ -90,7 +90,7 @@ describe('sse-formatter', () => {
     it('creates config event with configuration object', () => {
       const config = {
         dimensions: ['country', 'device'],
-        period: 'last_7_days',
+        period: 'previous_7_days',
       };
       const event = configEvent(config);
 

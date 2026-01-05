@@ -18,7 +18,7 @@ export function buildSystemPrompt(
     ? `
 ## Current Explore Configuration
 - Dimensions: ${currentState.dimensions?.join(', ') || 'None'}
-- Period: ${currentState.period || 'last_7_days'}
+- Period: ${currentState.period || 'previous_7_days'}
 - Comparison: ${currentState.comparison || 'previous_period'}
 - Filters: ${currentState.filters?.length ? JSON.stringify(currentState.filters) : 'None'}
 - Min Sessions: ${currentState.minSessions || 1}`
@@ -56,10 +56,10 @@ You can use tools to:
 - Time analysis: day_of_week → hour
 
 ## Common Patterns
-- "Show me campaigns" → dimensions: ['utm_campaign'], period: 'last_7_days'
-- "Traffic by device" → dimensions: ['device'], period: 'last_7_days'
+- "Show me campaigns" → dimensions: ['utm_campaign'], period: 'previous_7_days'
+- "Traffic by device" → dimensions: ['device'], period: 'previous_7_days'
 - "Compare sources" → dimensions: ['utm_source'], comparison: 'previous_period'
-- "Last week" → period: 'last_week'
+- "Previous week" → period: 'previous_week'
 - "This month" → period: 'this_month'
 
 Think step by step, then configure the Explore page.`;

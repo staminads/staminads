@@ -37,7 +37,7 @@ export function useDashboardParams(workspaceTimezone: string) {
 
   // Save to localStorage when values change
   useEffect(() => {
-    const period = search.period ?? 'last_7_days'
+    const period = search.period ?? 'previous_7_days'
     localStorage.setItem(STORAGE_KEY_PERIOD, period)
   }, [search.period])
 
@@ -128,7 +128,7 @@ export function useDashboardParams(workspaceTimezone: string) {
   )
 
   return {
-    period: (search.period ?? 'last_7_days') as DatePreset,
+    period: (search.period ?? 'previous_7_days') as DatePreset,
     timezone: search.timezone ?? workspaceTimezone,
     comparison: (search.comparison ?? 'previous_period') as ComparisonMode,
     customStart: search.customStart,

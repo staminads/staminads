@@ -32,29 +32,29 @@ describe('resolveDatePreset', () => {
     expect(result.end).toContain('2025-12-14');
   });
 
-  it('resolves last_7_days', () => {
-    const result = resolveDatePreset('last_7_days', tz);
+  it('resolves previous_7_days', () => {
+    const result = resolveDatePreset('previous_7_days', tz);
     // Dec 15 - 7 = Dec 8, ends at Dec 14 (yesterday)
     expect(result.start).toContain('2025-12-08');
     expect(result.end).toContain('2025-12-14');
   });
 
-  it('resolves last_14_days', () => {
-    const result = resolveDatePreset('last_14_days', tz);
+  it('resolves previous_14_days', () => {
+    const result = resolveDatePreset('previous_14_days', tz);
     // Dec 15 - 14 = Dec 1, ends at Dec 14 (yesterday)
     expect(result.start).toContain('2025-12-01');
     expect(result.end).toContain('2025-12-14');
   });
 
-  it('resolves last_30_days', () => {
-    const result = resolveDatePreset('last_30_days', tz);
+  it('resolves previous_30_days', () => {
+    const result = resolveDatePreset('previous_30_days', tz);
     // Dec 15 - 30 = Nov 15, ends at Dec 14 (yesterday)
     expect(result.start).toContain('2025-11-15');
     expect(result.end).toContain('2025-12-14');
   });
 
-  it('resolves last_90_days', () => {
-    const result = resolveDatePreset('last_90_days', tz);
+  it('resolves previous_90_days', () => {
+    const result = resolveDatePreset('previous_90_days', tz);
     // Dec 15 - 90 = Sep 16, ends at Dec 14 (yesterday)
     expect(result.start).toContain('2025-09-16');
     expect(result.end).toContain('2025-12-14');
@@ -67,8 +67,8 @@ describe('resolveDatePreset', () => {
     expect(result.end).toContain('2025-12-15');
   });
 
-  it('resolves last_week', () => {
-    const result = resolveDatePreset('last_week', tz);
+  it('resolves previous_week', () => {
+    const result = resolveDatePreset('previous_week', tz);
     // Week before Dec 15: Dec 8 (Mon) to Dec 14 (Sun)
     expect(result.start).toContain('2025-12-08');
     expect(result.end).toContain('2025-12-14');
@@ -80,8 +80,8 @@ describe('resolveDatePreset', () => {
     expect(result.end).toContain('2025-12-15');
   });
 
-  it('resolves last_month', () => {
-    const result = resolveDatePreset('last_month', tz);
+  it('resolves previous_month', () => {
+    const result = resolveDatePreset('previous_month', tz);
     expect(result.start).toContain('2025-11-01');
     expect(result.end).toContain('2025-11-30');
   });
@@ -93,8 +93,8 @@ describe('resolveDatePreset', () => {
     expect(result.end).toContain('2025-12-15');
   });
 
-  it('resolves last_quarter (Q3)', () => {
-    const result = resolveDatePreset('last_quarter', tz);
+  it('resolves previous_quarter (Q3)', () => {
+    const result = resolveDatePreset('previous_quarter', tz);
     // Q3: Jul 1 to Sep 30
     expect(result.start).toContain('2025-07-01');
     expect(result.end).toContain('2025-09-30');
@@ -106,8 +106,8 @@ describe('resolveDatePreset', () => {
     expect(result.end).toContain('2025-12-15');
   });
 
-  it('resolves last_year', () => {
-    const result = resolveDatePreset('last_year', tz);
+  it('resolves previous_year', () => {
+    const result = resolveDatePreset('previous_year', tz);
     expect(result.start).toContain('2024-01-01');
     expect(result.end).toContain('2024-12-31');
   });
@@ -314,31 +314,31 @@ describe('shiftPresetToPreviousPeriod', () => {
     jest.useRealTimers();
   });
 
-  it('shifts last_7_days to previous 7 days', () => {
-    const result = shiftPresetToPreviousPeriod('last_7_days', tz);
-    // last_7_days = Dec 8-14, shifted = Dec 1-7
+  it('shifts previous_7_days to previous 7 days', () => {
+    const result = shiftPresetToPreviousPeriod('previous_7_days', tz);
+    // previous_7_days = Dec 8-14, shifted = Dec 1-7
     expect(dayjs(result.end).diff(dayjs(result.start), 'day')).toBe(6);
     expect(result.start).toContain('2025-12-01');
     expect(result.end).toContain('2025-12-07');
   });
 
-  it('shifts last_14_days to previous 14 days', () => {
-    const result = shiftPresetToPreviousPeriod('last_14_days', tz);
-    // last_14_days = Dec 1-14, shifted = Nov 17-30
+  it('shifts previous_14_days to previous 14 days', () => {
+    const result = shiftPresetToPreviousPeriod('previous_14_days', tz);
+    // previous_14_days = Dec 1-14, shifted = Nov 17-30
     expect(dayjs(result.end).diff(dayjs(result.start), 'day')).toBe(13);
     expect(result.start).toContain('2025-11-17');
     expect(result.end).toContain('2025-11-30');
   });
 
-  it('shifts last_30_days to previous 30 days', () => {
-    const result = shiftPresetToPreviousPeriod('last_30_days', tz);
-    // last_30_days = Nov 15 - Dec 14, shifted = Oct 16 - Nov 14
+  it('shifts previous_30_days to previous 30 days', () => {
+    const result = shiftPresetToPreviousPeriod('previous_30_days', tz);
+    // previous_30_days = Nov 15 - Dec 14, shifted = Oct 16 - Nov 14
     expect(dayjs(result.end).diff(dayjs(result.start), 'day')).toBe(29);
   });
 
   it('preserves duration when shifting', () => {
-    const current = resolveDatePreset('last_7_days', tz);
-    const shifted = shiftPresetToPreviousPeriod('last_7_days', tz);
+    const current = resolveDatePreset('previous_7_days', tz);
+    const shifted = shiftPresetToPreviousPeriod('previous_7_days', tz);
     const currentDuration = dayjs(current.end).diff(
       dayjs(current.start),
       'day',

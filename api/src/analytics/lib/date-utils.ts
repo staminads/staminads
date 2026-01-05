@@ -38,7 +38,7 @@ export function resolveDatePreset(
   const now = dayjs().tz(tz);
 
   switch (preset) {
-    case 'last_30_minutes':
+    case 'previous_30_minutes':
       return {
         start: now.subtract(30, 'minute').toISOString(),
         end: now.toISOString(),
@@ -55,32 +55,32 @@ export function resolveDatePreset(
         end: yesterday.endOf('day').toISOString(),
       };
     }
-    case 'last_7_days':
+    case 'previous_7_days':
       return {
         start: now.subtract(7, 'day').startOf('day').toISOString(),
         end: now.subtract(1, 'day').endOf('day').toISOString(),
       };
-    case 'last_14_days':
+    case 'previous_14_days':
       return {
         start: now.subtract(14, 'day').startOf('day').toISOString(),
         end: now.subtract(1, 'day').endOf('day').toISOString(),
       };
-    case 'last_28_days':
+    case 'previous_28_days':
       return {
         start: now.subtract(28, 'day').startOf('day').toISOString(),
         end: now.subtract(1, 'day').endOf('day').toISOString(),
       };
-    case 'last_30_days':
+    case 'previous_30_days':
       return {
         start: now.subtract(30, 'day').startOf('day').toISOString(),
         end: now.subtract(1, 'day').endOf('day').toISOString(),
       };
-    case 'last_90_days':
+    case 'previous_90_days':
       return {
         start: now.subtract(90, 'day').startOf('day').toISOString(),
         end: now.subtract(1, 'day').endOf('day').toISOString(),
       };
-    case 'last_91_days':
+    case 'previous_91_days':
       return {
         start: now.subtract(91, 'day').startOf('day').toISOString(),
         end: now.subtract(1, 'day').endOf('day').toISOString(),
@@ -90,11 +90,11 @@ export function resolveDatePreset(
         start: now.startOf('isoWeek').toISOString(),
         end: now.endOf('day').toISOString(),
       };
-    case 'last_week': {
-      const lastWeek = now.subtract(1, 'week');
+    case 'previous_week': {
+      const previousWeek = now.subtract(1, 'week');
       return {
-        start: lastWeek.startOf('isoWeek').toISOString(),
-        end: lastWeek.endOf('isoWeek').toISOString(),
+        start: previousWeek.startOf('isoWeek').toISOString(),
+        end: previousWeek.endOf('isoWeek').toISOString(),
       };
     }
     case 'this_month':
@@ -102,11 +102,11 @@ export function resolveDatePreset(
         start: now.startOf('month').toISOString(),
         end: now.endOf('day').toISOString(),
       };
-    case 'last_month': {
-      const lastMonth = now.subtract(1, 'month');
+    case 'previous_month': {
+      const previousMonth = now.subtract(1, 'month');
       return {
-        start: lastMonth.startOf('month').toISOString(),
-        end: lastMonth.endOf('month').toISOString(),
+        start: previousMonth.startOf('month').toISOString(),
+        end: previousMonth.endOf('month').toISOString(),
       };
     }
     case 'this_quarter':
@@ -114,11 +114,11 @@ export function resolveDatePreset(
         start: now.startOf('quarter').toISOString(),
         end: now.endOf('day').toISOString(),
       };
-    case 'last_quarter': {
-      const lastQuarter = now.subtract(1, 'quarter');
+    case 'previous_quarter': {
+      const previousQuarter = now.subtract(1, 'quarter');
       return {
-        start: lastQuarter.startOf('quarter').toISOString(),
-        end: lastQuarter.endOf('quarter').toISOString(),
+        start: previousQuarter.startOf('quarter').toISOString(),
+        end: previousQuarter.endOf('quarter').toISOString(),
       };
     }
     case 'this_year':
@@ -126,14 +126,14 @@ export function resolveDatePreset(
         start: now.startOf('year').toISOString(),
         end: now.endOf('day').toISOString(),
       };
-    case 'last_year': {
-      const lastYear = now.subtract(1, 'year');
+    case 'previous_year': {
+      const previousYear = now.subtract(1, 'year');
       return {
-        start: lastYear.startOf('year').toISOString(),
-        end: lastYear.endOf('year').toISOString(),
+        start: previousYear.startOf('year').toISOString(),
+        end: previousYear.endOf('year').toISOString(),
       };
     }
-    case 'last_12_months':
+    case 'previous_12_months':
       return {
         start: now.subtract(12, 'month').startOf('month').toISOString(),
         end: now.subtract(1, 'day').endOf('day').toISOString(),

@@ -10,15 +10,18 @@ import { getClientIp } from '../utils/ip.util';
 @Injectable()
 export class CustomThrottlerGuard extends ThrottlerGuard {
   /**
-   * Skip throttling in test mode.
+   * Skip throttling in test mode or when @SkipThrottle() is applied.
    */
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    // Skip in test mode
     const isTest =
       process.env.NODE_ENV === 'test' ||
       process.env.CLICKHOUSE_SYSTEM_DATABASE?.includes('test');
     if (isTest) {
       return true;
     }
+
+    // Let parent class handle @SkipThrottle() and rate limiting
     return super.canActivate(context);
   }
 

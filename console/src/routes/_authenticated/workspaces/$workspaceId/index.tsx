@@ -30,12 +30,32 @@ function Dashboard() {
     isPending,
   } = useDashboardParams(workspace.timezone)
 
-  // Add a filter from row click (replaces existing filter for same dimension)
+  // Toggle filter(s) from row/cell click - removes if same value exists, adds otherwise
   const handleAddFilter = useCallback(
-    (filter: Filter) => {
-      const newFilters = filters.filter((f) => f.dimension !== filter.dimension)
-      newFilters.push(filter)
-      setFilters(newFilters)
+    (filter: Filter | Filter[]) => {
+      const filtersToToggle = Array.isArray(filter) ? filter : [filter]
+
+      // Check if ALL filters already exist with same values (for toggle off)
+      const allExist = filtersToToggle.every((f) => {
+        const existing = filters.find((ef) => ef.dimension === f.dimension)
+        if (!existing) return false
+        // Compare values arrays
+        const existingValues = JSON.stringify(existing.values?.sort())
+        const newValues = JSON.stringify(f.values?.sort())
+        return existing.operator === f.operator && existingValues === newValues
+      })
+
+      if (allExist) {
+        // Remove all matching filters (toggle off)
+        const dimensionsToRemove = new Set(filtersToToggle.map((f) => f.dimension))
+        setFilters(filters.filter((f) => !dimensionsToRemove.has(f.dimension)))
+      } else {
+        // Add/replace filters
+        const dimensionsToAdd = new Set(filtersToToggle.map((f) => f.dimension))
+        const newFilters = filters.filter((f) => !dimensionsToAdd.has(f.dimension))
+        newFilters.push(...filtersToToggle)
+        setFilters(newFilters)
+      }
     },
     [filters, setFilters]
   )

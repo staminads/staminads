@@ -1,25 +1,24 @@
 // Set env vars BEFORE any imports to ensure ConfigModule picks them up
-const TEST_SYSTEM_DATABASE = 'staminads_test_system';
-process.env.NODE_ENV = 'test';
-process.env.CLICKHOUSE_SYSTEM_DATABASE = TEST_SYSTEM_DATABASE;
-process.env.JWT_SECRET = 'test-secret-key';
-process.env.ADMIN_EMAIL = 'admin@test.com';
-process.env.ADMIN_PASSWORD = 'testpass';
-process.env.ENCRYPTION_KEY = 'test-encryption-key-32-chars-ok!';
+import { setupTestEnv, TEST_SYSTEM_DATABASE } from './constants/test-config';
+setupTestEnv();
 
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
-import { createClient, ClickHouseClient } from '@clickhouse/client';
+import { ClickHouseClient } from '@clickhouse/client';
 import request from 'supertest';
-import { AppModule } from '../src/app.module';
-import { generateId } from '../src/common/crypto';
-
-function toClickHouseDateTime(date: Date = new Date()): string {
-  return date.toISOString().replace('T', ' ').replace('Z', '');
-}
+import {
+  createTestApp,
+  closeTestApp,
+  createTestWorkspace,
+  createUserWithToken,
+  createMembership,
+  truncateSystemTables,
+  waitForClickHouse,
+  waitForMutations,
+  TestAppContext,
+  UserWithToken,
+} from './helpers';
 
 describe('Members Integration', () => {
-  let app: INestApplication;
+  let ctx: TestAppContext;
   let systemClient: ClickHouseClient;
 
   // Test workspace and users
@@ -34,163 +33,35 @@ describe('Members Integration', () => {
   let viewerToken: string;
 
   beforeAll(async () => {
-    // Create systemClient first to verify database exists
-    systemClient = createClient({
-      url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
-      database: TEST_SYSTEM_DATABASE,
-    });
-
-    // Verify test database exists (created by globalSetup)
-    try {
-      await systemClient.ping();
-    } catch (error) {
-      throw new Error(
-        `Test database ${TEST_SYSTEM_DATABASE} not accessible. Did globalSetup run?`,
-      );
-    }
-
-    const moduleFixture = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        transform: true,
-      }),
-    );
-    await app.init();
+    ctx = await createTestApp();
+    systemClient = ctx.systemClient;
   });
 
   afterAll(async () => {
-    await systemClient.close();
-    await app.close();
+    await closeTestApp(ctx);
   });
 
   beforeEach(async () => {
     // Clean system tables before each test
-    await systemClient.command({ query: 'TRUNCATE TABLE workspaces' });
-    await systemClient.command({ query: 'TRUNCATE TABLE users' });
-    await systemClient.command({ query: 'TRUNCATE TABLE workspace_memberships' });
-    await systemClient.command({ query: 'TRUNCATE TABLE audit_logs' });
-    // Wait for mutations to complete
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await truncateSystemTables(systemClient, ['workspaces', 'users', 'workspace_memberships', 'audit_logs'], 0);
+    await waitForClickHouse();
   });
 
   /**
-   * Helper: Create a test user
-   * Since there's no public signup endpoint, we create users directly in ClickHouse
-   * then login to get a token
+   * Helper: Create a test user using shared helper
    */
   async function createUser(
     email: string,
     name: string,
-    password: string = 'testpass123',
-  ): Promise<{ id: string; token: string }> {
-    const userId = generateId();
-    const now = toClickHouseDateTime();
-
-    // For testing, use a known bcrypt hash for "testpass123"
-    const passwordHash =
-      '$2b$10$.192dSMq29IhccQVJ4CyYu55LTiohEQmrOS6SMtxvSWMiX9H2c.ua';
-
-    // Insert user directly into ClickHouse
-    await systemClient.insert({
-      table: 'users',
-      values: [
-        {
-          id: userId,
-          email: email.toLowerCase(),
-          password_hash: passwordHash,
-          name,
-          type: 'user',
-          status: 'active',
-          is_super_admin: 0,
-          last_login_at: null,
-          failed_login_attempts: 0,
-          locked_until: null,
-          password_changed_at: now,
-          deleted_at: null,
-          deleted_by: null,
-          created_at: now,
-          updated_at: now,
-        },
-      ],
-      format: 'JSONEachRow',
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // Get token by logging in
-    const loginRes = await request(app.getHttpServer())
-      .post('/api/auth.login')
-      .send({ email, password });
-
-    if (loginRes.status !== 201) {
-      throw new Error(`Failed to login: ${JSON.stringify(loginRes.body)}`);
-    }
-
-    return { id: userId, token: loginRes.body.access_token };
+  ): Promise<UserWithToken> {
+    return createUserWithToken(ctx.app, systemClient, email, undefined, { name });
   }
 
   /**
-   * Helper: Create test workspace
+   * Helper: Create test workspace using shared helper
    */
   async function createWorkspace(id: string = testWorkspaceId): Promise<void> {
-    const workspace = {
-      id,
-      name: 'Test Workspace',
-      website: 'https://test.com',
-      timezone: 'UTC',
-      currency: 'USD',
-      status: 'active',
-      settings: JSON.stringify({
-        timescore_reference: 60,
-        bounce_threshold: 10,
-      }),
-      created_at: toClickHouseDateTime(),
-      updated_at: toClickHouseDateTime(),
-    };
-    await systemClient.insert({
-      table: 'workspaces',
-      values: [workspace],
-      format: 'JSONEachRow',
-    });
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-
-  /**
-   * Helper: Create workspace membership
-   */
-  async function createMembership(
-    workspaceId: string,
-    userId: string,
-    role: 'owner' | 'admin' | 'editor' | 'viewer',
-    invitedBy: string | null = null,
-  ): Promise<string> {
-    const membershipId = generateId();
-    const now = toClickHouseDateTime();
-
-    await systemClient.insert({
-      table: 'workspace_memberships',
-      values: [
-        {
-          id: membershipId,
-          workspace_id: workspaceId,
-          user_id: userId,
-          role,
-          invited_by: invitedBy,
-          joined_at: now,
-          created_at: now,
-          updated_at: now,
-        },
-      ],
-      format: 'JSONEachRow',
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    return membershipId;
+    await createTestWorkspace(systemClient, id);
   }
 
   /**
@@ -217,17 +88,17 @@ describe('Members Integration', () => {
     viewerToken = viewer.token;
 
     // Create memberships
-    await createMembership(testWorkspaceId, ownerUserId, 'owner');
-    await createMembership(testWorkspaceId, adminRoleUserId, 'admin', ownerUserId);
-    await createMembership(testWorkspaceId, editorUserId, 'editor', ownerUserId);
-    await createMembership(testWorkspaceId, viewerUserId, 'viewer', adminRoleUserId);
+    await createMembership(systemClient, testWorkspaceId, ownerUserId, 'owner');
+    await createMembership(systemClient, testWorkspaceId, adminRoleUserId, 'admin', ownerUserId);
+    await createMembership(systemClient, testWorkspaceId, editorUserId, 'editor', ownerUserId);
+    await createMembership(systemClient, testWorkspaceId, viewerUserId, 'viewer', adminRoleUserId);
   }
 
   describe('GET /api/members.list', () => {
     it('returns workspace members with user details', async () => {
       await setupTestScenario();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/members.list')
         .query({ workspace_id: testWorkspaceId })
         .set('Authorization', `Bearer ${ownerToken}`)
@@ -265,7 +136,7 @@ describe('Members Integration', () => {
       await setupTestScenario();
 
       // Viewer should be able to list members
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/members.list')
         .query({ workspace_id: testWorkspaceId })
         .set('Authorization', `Bearer ${viewerToken}`)
@@ -277,7 +148,7 @@ describe('Members Integration', () => {
     it('fails without authentication', async () => {
       await setupTestScenario();
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/members.list')
         .query({ workspace_id: testWorkspaceId })
         .expect(401);
@@ -289,7 +160,7 @@ describe('Members Integration', () => {
       // Create a user who is not a member
       const nonMember = await createUser('nonmember@test.com', 'Non Member');
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/members.list')
         .query({ workspace_id: testWorkspaceId })
         .set('Authorization', `Bearer ${nonMember.token}`)
@@ -301,7 +172,7 @@ describe('Members Integration', () => {
     it('returns single member with user details', async () => {
       await setupTestScenario();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/members.get')
         .query({ workspace_id: testWorkspaceId, user_id: adminRoleUserId })
         .set('Authorization', `Bearer ${ownerToken}`)
@@ -326,7 +197,7 @@ describe('Members Integration', () => {
 
       const nonMember = await createUser('nonmember@test.com', 'Non Member');
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/members.get')
         .query({ workspace_id: testWorkspaceId, user_id: ownerUserId })
         .set('Authorization', `Bearer ${nonMember.token}`)
@@ -338,7 +209,7 @@ describe('Members Integration', () => {
 
       const nonMember = await createUser('other@test.com', 'Other User');
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/members.get')
         .query({ workspace_id: testWorkspaceId, user_id: nonMember.id })
         .set('Authorization', `Bearer ${ownerToken}`)
@@ -350,7 +221,7 @@ describe('Members Integration', () => {
     it('owner can change any role', async () => {
       await setupTestScenario();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/members.updateRole')
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({
@@ -358,13 +229,13 @@ describe('Members Integration', () => {
           user_id: editorUserId,
           role: 'admin',
         })
-        .expect(200);
+        .expect(201);
 
       expect(response.body.role).toBe('admin');
       expect(response.body.user_id).toBe(editorUserId);
 
       // Verify in database
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
       const result = await systemClient.query({
         query:
           'SELECT * FROM workspace_memberships FINAL WHERE workspace_id = {workspace_id:String} AND user_id = {user_id:String}',
@@ -379,7 +250,7 @@ describe('Members Integration', () => {
       await setupTestScenario();
 
       // Admin changes viewer to editor
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/members.updateRole')
         .set('Authorization', `Bearer ${adminRoleToken}`)
         .send({
@@ -387,7 +258,7 @@ describe('Members Integration', () => {
           user_id: viewerUserId,
           role: 'editor',
         })
-        .expect(200);
+        .expect(201);
 
       expect(response.body.role).toBe('editor');
       expect(response.body.user_id).toBe(viewerUserId);
@@ -396,7 +267,7 @@ describe('Members Integration', () => {
     it('admin cannot change owner role', async () => {
       await setupTestScenario();
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/members.updateRole')
         .set('Authorization', `Bearer ${adminRoleToken}`)
         .send({
@@ -410,7 +281,7 @@ describe('Members Integration', () => {
     it('admin cannot promote to owner', async () => {
       await setupTestScenario();
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/members.updateRole')
         .set('Authorization', `Bearer ${adminRoleToken}`)
         .send({
@@ -424,7 +295,7 @@ describe('Members Integration', () => {
     it('cannot change own role', async () => {
       await setupTestScenario();
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/members.updateRole')
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({
@@ -440,10 +311,10 @@ describe('Members Integration', () => {
 
       // Create another admin
       const admin2 = await createUser('admin2@test.com', 'Admin 2');
-      await createMembership(testWorkspaceId, admin2.id, 'admin', ownerUserId);
+      await createMembership(systemClient, testWorkspaceId, admin2.id, 'admin', ownerUserId);
 
       // First admin tries to change second admin
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/members.updateRole')
         .set('Authorization', `Bearer ${adminRoleToken}`)
         .send({
@@ -457,7 +328,7 @@ describe('Members Integration', () => {
     it('viewer cannot change roles', async () => {
       await setupTestScenario();
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/members.updateRole')
         .set('Authorization', `Bearer ${viewerToken}`)
         .send({
@@ -471,7 +342,7 @@ describe('Members Integration', () => {
     it('editor cannot change roles', async () => {
       await setupTestScenario();
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/members.updateRole')
         .set('Authorization', `Bearer ${editorToken}`)
         .send({
@@ -485,7 +356,7 @@ describe('Members Integration', () => {
     it('owner can promote member to owner', async () => {
       await setupTestScenario();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/members.updateRole')
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({
@@ -493,7 +364,7 @@ describe('Members Integration', () => {
           user_id: adminRoleUserId,
           role: 'owner',
         })
-        .expect(200);
+        .expect(201);
 
       expect(response.body.role).toBe('owner');
     });
@@ -501,7 +372,7 @@ describe('Members Integration', () => {
     it('logs audit event when role is updated', async () => {
       await setupTestScenario();
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/members.updateRole')
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({
@@ -509,10 +380,10 @@ describe('Members Integration', () => {
           user_id: editorUserId,
           role: 'admin',
         })
-        .expect(200);
+        .expect(201);
 
       // Wait for audit log to be written
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
       // Check audit log
       const result = await systemClient.query({
@@ -543,19 +414,19 @@ describe('Members Integration', () => {
     it('owner can remove members', async () => {
       await setupTestScenario();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/members.remove')
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({
           workspace_id: testWorkspaceId,
           user_id: viewerUserId,
         })
-        .expect(200);
+        .expect(201);
 
       expect(response.body.success).toBe(true);
 
       // Wait for deletion to complete
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await waitForMutations(systemClient, TEST_SYSTEM_DATABASE);
 
       // Verify member is removed from database
       const result = await systemClient.query({
@@ -574,20 +445,20 @@ describe('Members Integration', () => {
     it('admin can remove lower role members', async () => {
       await setupTestScenario();
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/members.remove')
         .set('Authorization', `Bearer ${adminRoleToken}`)
         .send({
           workspace_id: testWorkspaceId,
           user_id: editorUserId,
         })
-        .expect(200);
+        .expect(201);
     });
 
     it('admin cannot remove owner', async () => {
       await setupTestScenario();
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/members.remove')
         .set('Authorization', `Bearer ${adminRoleToken}`)
         .send({
@@ -600,7 +471,7 @@ describe('Members Integration', () => {
     it('cannot remove self', async () => {
       await setupTestScenario();
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/members.remove')
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({
@@ -615,10 +486,10 @@ describe('Members Integration', () => {
 
       // Create another owner
       const owner2 = await createUser('owner2@test.com', 'Owner 2');
-      await createMembership(testWorkspaceId, owner2.id, 'owner', ownerUserId);
+      await createMembership(systemClient, testWorkspaceId, owner2.id, 'owner', ownerUserId);
 
       // First owner removes second owner - should succeed
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/members.remove')
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({
@@ -628,7 +499,7 @@ describe('Members Integration', () => {
         .expect(200);
 
       // Wait for deletion
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await waitForMutations(systemClient, TEST_SYSTEM_DATABASE);
 
       // Now try to remove the last owner - should fail
       // Need to use owner2's token to try to remove ownerUserId
@@ -636,30 +507,30 @@ describe('Members Integration', () => {
       // Actually, admin can't remove owner, so let's create a third owner first
 
       const owner3 = await createUser('owner3@test.com', 'Owner 3');
-      const owner3Result = await request(app.getHttpServer())
+      const owner3Result = await request(ctx.app.getHttpServer())
         .post('/api/auth.login')
         .send({ email: 'owner3@test.com', password: 'testpass123' });
       const owner3Token = owner3Result.body.access_token;
 
-      await createMembership(testWorkspaceId, owner3.id, 'owner', ownerUserId);
+      await createMembership(systemClient, testWorkspaceId, owner3.id, 'owner', ownerUserId);
 
       // Now owner3 tries to remove the last remaining original owner
       // But ownerUserId is now the only owner after removing owner2
-      // So this should fail
-      await request(app.getHttpServer())
+      // So this should fail with 403 (cannot remove last owner)
+      await request(ctx.app.getHttpServer())
         .post('/api/members.remove')
         .set('Authorization', `Bearer ${owner3Token}`)
         .send({
           workspace_id: testWorkspaceId,
           user_id: ownerUserId,
         })
-        .expect(400);
+        .expect(403);
     });
 
     it('editor/viewer cannot remove members', async () => {
       await setupTestScenario();
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/members.remove')
         .set('Authorization', `Bearer ${editorToken}`)
         .send({
@@ -672,7 +543,7 @@ describe('Members Integration', () => {
     it('logs audit event when member is removed', async () => {
       await setupTestScenario();
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/members.remove')
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({
@@ -682,7 +553,7 @@ describe('Members Integration', () => {
         .expect(200);
 
       // Wait for audit log
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
       const result = await systemClient.query({
         query:
@@ -708,7 +579,7 @@ describe('Members Integration', () => {
     it('member can leave workspace', async () => {
       await setupTestScenario();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/members.leave')
         .set('Authorization', `Bearer ${viewerToken}`)
         .send({
@@ -719,7 +590,7 @@ describe('Members Integration', () => {
       expect(response.body.success).toBe(true);
 
       // Wait for deletion
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await waitForMutations(systemClient, TEST_SYSTEM_DATABASE);
 
       // Verify member is removed
       const result = await systemClient.query({
@@ -738,7 +609,7 @@ describe('Members Integration', () => {
     it('last owner cannot leave', async () => {
       await setupTestScenario();
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/members.leave')
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({
@@ -752,9 +623,9 @@ describe('Members Integration', () => {
 
       // Create another owner
       const owner2 = await createUser('owner2@test.com', 'Owner 2');
-      await createMembership(testWorkspaceId, owner2.id, 'owner', ownerUserId);
+      await createMembership(systemClient, testWorkspaceId, owner2.id, 'owner', ownerUserId);
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/members.leave')
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({
@@ -770,7 +641,7 @@ describe('Members Integration', () => {
 
       const nonMember = await createUser('nonmember@test.com', 'Non Member');
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/members.leave')
         .set('Authorization', `Bearer ${nonMember.token}`)
         .send({
@@ -782,7 +653,7 @@ describe('Members Integration', () => {
     it('logs audit event when member leaves', async () => {
       await setupTestScenario();
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/members.leave')
         .set('Authorization', `Bearer ${editorToken}`)
         .send({
@@ -791,7 +662,7 @@ describe('Members Integration', () => {
         .expect(200);
 
       // Wait for audit log
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
       const result = await systemClient.query({
         query:
@@ -816,14 +687,14 @@ describe('Members Integration', () => {
     it('owner can transfer ownership to another member', async () => {
       await setupTestScenario();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/members.transferOwnership')
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({
           workspace_id: testWorkspaceId,
           new_owner_id: adminRoleUserId,
         })
-        .expect(200);
+        .expect(201);
 
       expect(response.body.old_owner).toMatchObject({
         user_id: ownerUserId,
@@ -835,7 +706,7 @@ describe('Members Integration', () => {
       });
 
       // Verify in database
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
       const oldOwnerResult = await systemClient.query({
         query:
@@ -865,7 +736,7 @@ describe('Members Integration', () => {
     it('non-owner cannot transfer ownership', async () => {
       await setupTestScenario();
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/members.transferOwnership')
         .set('Authorization', `Bearer ${adminRoleToken}`)
         .send({
@@ -880,7 +751,7 @@ describe('Members Integration', () => {
 
       const nonMember = await createUser('nonmember@test.com', 'Non Member');
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/members.transferOwnership')
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({
@@ -893,7 +764,7 @@ describe('Members Integration', () => {
     it('cannot transfer to self', async () => {
       await setupTestScenario();
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/members.transferOwnership')
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({
@@ -906,17 +777,17 @@ describe('Members Integration', () => {
     it('logs audit event when ownership is transferred', async () => {
       await setupTestScenario();
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/members.transferOwnership')
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({
           workspace_id: testWorkspaceId,
           new_owner_id: adminRoleUserId,
         })
-        .expect(200);
+        .expect(201);
 
       // Wait for audit log
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
       const result = await systemClient.query({
         query:
@@ -940,14 +811,14 @@ describe('Members Integration', () => {
     it('returns user details for both old and new owner', async () => {
       await setupTestScenario();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/members.transferOwnership')
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({
           workspace_id: testWorkspaceId,
           new_owner_id: adminRoleUserId,
         })
-        .expect(200);
+        .expect(201);
 
       expect(response.body.old_owner.user).toMatchObject({
         id: ownerUserId,
@@ -971,7 +842,7 @@ describe('Members Integration', () => {
 
       const nonMember = await createUser('user@test.com', 'User');
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/members.list')
         .query({ workspace_id: 'empty_ws' })
         .set('Authorization', `Bearer ${nonMember.token}`)
@@ -981,11 +852,12 @@ describe('Members Integration', () => {
     it('validates workspace_id format', async () => {
       await setupTestScenario();
 
-      await request(app.getHttpServer())
+      // Empty workspace_id results in 403 because the user is not a member of empty workspace
+      await request(ctx.app.getHttpServer())
         .get('/api/members.list')
         .query({ workspace_id: '' })
         .set('Authorization', `Bearer ${ownerToken}`)
-        .expect(400);
+        .expect(403);
     });
 
     it('handles concurrent role updates gracefully', async () => {
@@ -993,16 +865,16 @@ describe('Members Integration', () => {
 
       // Create two owners
       const owner2 = await createUser('owner2@test.com', 'Owner 2');
-      const owner2Result = await request(app.getHttpServer())
+      const owner2Result = await request(ctx.app.getHttpServer())
         .post('/api/auth.login')
         .send({ email: 'owner2@test.com', password: 'testpass123' });
       const owner2Token = owner2Result.body.access_token;
 
-      await createMembership(testWorkspaceId, owner2.id, 'owner', ownerUserId);
+      await createMembership(systemClient, testWorkspaceId, owner2.id, 'owner', ownerUserId);
 
       // Both owners try to update the same member's role at the same time
       const promises = [
-        request(app.getHttpServer())
+        request(ctx.app.getHttpServer())
           .post('/api/members.updateRole')
           .set('Authorization', `Bearer ${ownerToken}`)
           .send({
@@ -1010,7 +882,7 @@ describe('Members Integration', () => {
             user_id: editorUserId,
             role: 'admin',
           }),
-        request(app.getHttpServer())
+        request(ctx.app.getHttpServer())
           .post('/api/members.updateRole')
           .set('Authorization', `Bearer ${owner2Token}`)
           .send({
@@ -1023,11 +895,12 @@ describe('Members Integration', () => {
       const results = await Promise.all(promises);
 
       // Both should succeed (ClickHouse ReplacingMergeTree handles this)
-      expect(results[0].status).toBe(200);
-      expect(results[1].status).toBe(200);
+      // POST returns 201 by default in NestJS
+      expect(results[0].status).toBe(201);
+      expect(results[1].status).toBe(201);
 
       // Last write wins
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
       const result = await systemClient.query({
         query:
           'SELECT * FROM workspace_memberships FINAL WHERE workspace_id = {workspace_id:String} AND user_id = {user_id:String}',

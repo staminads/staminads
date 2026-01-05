@@ -1,27 +1,27 @@
 // Set env vars BEFORE any imports to ensure ConfigModule picks them up
-const TEST_SYSTEM_DATABASE = 'staminads_test_system';
-process.env.NODE_ENV = 'test';
-process.env.CLICKHOUSE_SYSTEM_DATABASE = TEST_SYSTEM_DATABASE;
-process.env.JWT_SECRET = 'test-secret-key';
-process.env.ADMIN_EMAIL = 'admin@test.com';
-process.env.ADMIN_PASSWORD = 'testpass';
-process.env.APP_URL = 'http://localhost:5173';
-process.env.ENCRYPTION_KEY = 'test-encryption-key-32-chars-ok!';
+import { setupTestEnv, TEST_SYSTEM_DATABASE } from './constants/test-config';
+setupTestEnv();
 
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
-import { createClient, ClickHouseClient } from '@clickhouse/client';
+import { ClickHouseClient } from '@clickhouse/client';
 import request from 'supertest';
-import { AppModule } from '../src/app.module';
 import { MailService } from '../src/mail/mail.service';
-import { generateId, hashToken, hashPassword } from '../src/common/crypto';
-
-function toClickHouseDateTime(date: Date = new Date()): string {
-  return date.toISOString().replace('T', ' ').replace('Z', '');
-}
+import { generateId, hashToken } from '../src/common/crypto';
+import {
+  toClickHouseDateTime,
+  createTestApp,
+  closeTestApp,
+  createTestWorkspace,
+  createUserWithToken,
+  createMembership,
+  truncateSystemTables,
+  waitForClickHouse,
+  waitForMutations,
+  getAuthToken,
+  TestAppContext,
+} from './helpers';
 
 describe('Invitations Integration', () => {
-  let app: INestApplication;
+  let ctx: TestAppContext;
   let systemClient: ClickHouseClient;
   let ownerAuthToken: string;
   let ownerUserId: string;
@@ -33,176 +33,40 @@ describe('Invitations Integration', () => {
   let mailService: MailService;
 
   beforeAll(async () => {
-    const moduleFixture = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        transform: true,
-      }),
-    );
-    await app.init();
-
-    // Mock MailService
-    mailService = moduleFixture.get<MailService>(MailService);
-    jest.spyOn(mailService, 'sendInvitation').mockResolvedValue();
-    jest.spyOn(mailService, 'sendWelcome').mockResolvedValue();
-
-    // Direct ClickHouse client for verification
-    systemClient = createClient({
-      url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
-      database: TEST_SYSTEM_DATABASE,
-    });
+    ctx = await createTestApp({ mockMailService: true });
+    systemClient = ctx.systemClient;
+    mailService = ctx.mailService!;
   });
 
   afterAll(async () => {
-    await systemClient.close();
-    await app.close();
+    await closeTestApp(ctx);
   });
 
   beforeEach(async () => {
     // Clean tables before each test
-    await systemClient.command({ query: 'TRUNCATE TABLE workspaces' });
-    await systemClient.command({ query: 'TRUNCATE TABLE users' });
-    await systemClient.command({ query: 'TRUNCATE TABLE workspace_memberships' });
-    await systemClient.command({ query: 'TRUNCATE TABLE invitations' });
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await truncateSystemTables(systemClient, ['workspaces', 'users', 'workspace_memberships', 'invitations']);
 
     // Create test workspace
     workspaceId = 'test_ws_inv';
-    const now = toClickHouseDateTime();
-    await systemClient.insert({
-      table: 'workspaces',
-      values: [
-        {
-          id: workspaceId,
-          name: 'Test Workspace',
-          website: 'https://test.com',
-          timezone: 'UTC',
-          currency: 'USD',
-          status: 'active',
-          settings: JSON.stringify({
-            timescore_reference: 60,
-            bounce_threshold: 10,
-          }),
-          created_at: now,
-          updated_at: now,
-        },
-      ],
-      format: 'JSONEachRow',
-    });
+    await createTestWorkspace(systemClient, workspaceId, { name: 'Test Workspace' });
 
-    // Create test users with properly hashed passwords
-    ownerUserId = generateId();
-    editorUserId = generateId();
-    viewerUserId = generateId();
+    // Create test users with tokens
+    const owner = await createUserWithToken(ctx.app, systemClient, 'owner@test.com', undefined, { name: 'Owner User' });
+    ownerUserId = owner.id;
+    ownerAuthToken = owner.token;
 
-    const passwordHash = await hashPassword('password123');
+    const editor = await createUserWithToken(ctx.app, systemClient, 'editor@test.com', undefined, { name: 'Editor User' });
+    editorUserId = editor.id;
+    editorAuthToken = editor.token;
 
-    await systemClient.insert({
-      table: 'users',
-      values: [
-        {
-          id: ownerUserId,
-          email: 'owner@test.com',
-          password_hash: passwordHash,
-          name: 'Owner User',
-          type: 'user',
-          status: 'active',
-          is_super_admin: 0,
-          failed_login_attempts: 0,
-          created_at: now,
-          updated_at: now,
-        },
-        {
-          id: editorUserId,
-          email: 'editor@test.com',
-          password_hash: passwordHash,
-          name: 'Editor User',
-          type: 'user',
-          status: 'active',
-          is_super_admin: 0,
-          failed_login_attempts: 0,
-          created_at: now,
-          updated_at: now,
-        },
-        {
-          id: viewerUserId,
-          email: 'viewer@test.com',
-          password_hash: passwordHash,
-          name: 'Viewer User',
-          type: 'user',
-          status: 'active',
-          is_super_admin: 0,
-          failed_login_attempts: 0,
-          created_at: now,
-          updated_at: now,
-        },
-      ],
-      format: 'JSONEachRow',
-    });
+    const viewer = await createUserWithToken(ctx.app, systemClient, 'viewer@test.com', undefined, { name: 'Viewer User' });
+    viewerUserId = viewer.id;
+    viewerAuthToken = viewer.token;
 
     // Create memberships
-    await systemClient.insert({
-      table: 'workspace_memberships',
-      values: [
-        {
-          id: generateId(),
-          workspace_id: workspaceId,
-          user_id: ownerUserId,
-          role: 'owner',
-          invited_by: null,
-          joined_at: now,
-          created_at: now,
-          updated_at: now,
-        },
-        {
-          id: generateId(),
-          workspace_id: workspaceId,
-          user_id: editorUserId,
-          role: 'editor',
-          invited_by: ownerUserId,
-          joined_at: now,
-          created_at: now,
-          updated_at: now,
-        },
-        {
-          id: generateId(),
-          workspace_id: workspaceId,
-          user_id: viewerUserId,
-          role: 'viewer',
-          invited_by: ownerUserId,
-          joined_at: now,
-          created_at: now,
-          updated_at: now,
-        },
-      ],
-      format: 'JSONEachRow',
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // Login as each user to get tokens
-    const ownerLogin = await request(app.getHttpServer())
-      .post('/api/auth.login')
-      .send({ email: 'owner@test.com', password: 'password123' });
-    expect(ownerLogin.status).toBe(201);
-    ownerAuthToken = ownerLogin.body.access_token;
-
-    const editorLogin = await request(app.getHttpServer())
-      .post('/api/auth.login')
-      .send({ email: 'editor@test.com', password: 'password123' });
-    expect(editorLogin.status).toBe(201);
-    editorAuthToken = editorLogin.body.access_token;
-
-    const viewerLogin = await request(app.getHttpServer())
-      .post('/api/auth.login')
-      .send({ email: 'viewer@test.com', password: 'password123' });
-    expect(viewerLogin.status).toBe(201);
-    viewerAuthToken = viewerLogin.body.access_token;
+    await createMembership(systemClient, workspaceId, ownerUserId, 'owner');
+    await createMembership(systemClient, workspaceId, editorUserId, 'editor', ownerUserId);
+    await createMembership(systemClient, workspaceId, viewerUserId, 'viewer', ownerUserId);
   });
 
   describe('POST /api/invitations.create', () => {
@@ -213,7 +77,7 @@ describe('Invitations Integration', () => {
         role: 'editor',
       };
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/invitations.create')
         .set('Authorization', `Bearer ${ownerAuthToken}`)
         .send(dto)
@@ -242,7 +106,7 @@ describe('Invitations Integration', () => {
       );
 
       // Verify persisted in ClickHouse
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
       const result = await systemClient.query({
         query: 'SELECT * FROM invitations FINAL WHERE email = {email:String}',
         query_params: { email: 'newuser@test.com' },
@@ -271,7 +135,7 @@ describe('Invitations Integration', () => {
         ],
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
       const dto = {
         workspace_id: workspaceId,
@@ -279,7 +143,7 @@ describe('Invitations Integration', () => {
         role: 'viewer',
       };
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/invitations.create')
         .set('Authorization', `Bearer ${editorAuthToken}`)
         .send(dto)
@@ -298,7 +162,7 @@ describe('Invitations Integration', () => {
 
       // This should pass but might need permission check implementation
       // For now, checking if the endpoint is accessible
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/invitations.create')
         .set('Authorization', `Bearer ${viewerAuthToken}`)
         .send(dto);
@@ -312,7 +176,7 @@ describe('Invitations Integration', () => {
         role: 'viewer',
       };
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/invitations.create')
         .set('Authorization', `Bearer ${ownerAuthToken}`)
         .send(dto)
@@ -329,14 +193,14 @@ describe('Invitations Integration', () => {
       };
 
       // Create first invitation
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/invitations.create')
         .set('Authorization', `Bearer ${ownerAuthToken}`)
         .send(dto)
         .expect(201);
 
       // Try to create duplicate
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/invitations.create')
         .set('Authorization', `Bearer ${ownerAuthToken}`)
         .send(dto)
@@ -346,7 +210,7 @@ describe('Invitations Integration', () => {
     });
 
     it('requires authentication', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/invitations.create')
         .send({
           workspace_id: workspaceId,
@@ -357,7 +221,7 @@ describe('Invitations Integration', () => {
     });
 
     it('validates email format', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/invitations.create')
         .set('Authorization', `Bearer ${ownerAuthToken}`)
         .send({
@@ -369,7 +233,7 @@ describe('Invitations Integration', () => {
     });
 
     it('validates role', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/invitations.create')
         .set('Authorization', `Bearer ${ownerAuthToken}`)
         .send({
@@ -381,7 +245,7 @@ describe('Invitations Integration', () => {
     });
 
     it('normalizes email to lowercase', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/invitations.create')
         .set('Authorization', `Bearer ${ownerAuthToken}`)
         .send({
@@ -444,9 +308,9 @@ describe('Invitations Integration', () => {
         values: invitations,
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/invitations.list')
         .query({ workspaceId })
         .set('Authorization', `Bearer ${ownerAuthToken}`)
@@ -482,9 +346,9 @@ describe('Invitations Integration', () => {
         values: [expiredInvitation],
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/invitations.list')
         .query({ workspaceId })
         .set('Authorization', `Bearer ${ownerAuthToken}`)
@@ -494,7 +358,7 @@ describe('Invitations Integration', () => {
     });
 
     it('requires authentication', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/invitations.list')
         .query({ workspaceId })
         .expect(401);
@@ -529,9 +393,9 @@ describe('Invitations Integration', () => {
         values: [invitation],
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/invitations.get')
         .query({ token })
         .expect(200);
@@ -579,9 +443,9 @@ describe('Invitations Integration', () => {
         values: [invitation],
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/invitations.get')
         .query({ token })
         .expect(200);
@@ -590,7 +454,7 @@ describe('Invitations Integration', () => {
     });
 
     it('fails for invalid token', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/invitations.get')
         .query({ token: 'invalid-token' })
         .expect(200);
@@ -625,9 +489,9 @@ describe('Invitations Integration', () => {
         values: [invitation],
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/invitations.get')
         .query({ token })
         .expect(400);
@@ -661,9 +525,9 @@ describe('Invitations Integration', () => {
         values: [invitation],
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/invitations.get')
         .query({ token })
         .expect(400);
@@ -697,10 +561,10 @@ describe('Invitations Integration', () => {
         values: [invitation],
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
       // No Authorization header
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/invitations.get')
         .query({ token })
         .expect(200);
@@ -736,16 +600,16 @@ describe('Invitations Integration', () => {
         values: [invitation],
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/invitations.accept')
         .send({
           token,
           name: 'New User',
           password: 'password123',
         })
-        .expect(200);
+        .expect(201);
 
       expect(response.body).toMatchObject({
         workspaceId,
@@ -753,7 +617,7 @@ describe('Invitations Integration', () => {
       expect(response.body.userId).toBeDefined();
 
       // Verify user was created
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
       const userResult = await systemClient.query({
         query: 'SELECT * FROM users FINAL WHERE email = {email:String}',
         query_params: { email: 'newuser@test.com' },
@@ -822,28 +686,28 @@ describe('Invitations Integration', () => {
       await systemClient.command({
         query: `ALTER TABLE workspace_memberships DELETE WHERE workspace_id = '${workspaceId}' AND user_id = '${viewerUserId}'`,
       });
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await waitForMutations(systemClient, TEST_SYSTEM_DATABASE);
 
       await systemClient.insert({
         table: 'invitations',
         values: [invitation],
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/invitations.accept')
         .send({
           token,
           // No name/password needed for existing user
         })
-        .expect(200);
+        .expect(201);
 
       expect(response.body.userId).toBe(viewerUserId);
       expect(response.body.workspaceId).toBe(workspaceId);
 
       // Verify membership was created with new role
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
       const memberResult = await systemClient.query({
         query:
           'SELECT * FROM workspace_memberships FINAL WHERE workspace_id = {ws:String} AND user_id = {uid:String}',
@@ -881,9 +745,9 @@ describe('Invitations Integration', () => {
         values: [invitation],
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/invitations.accept')
         .send({
           token,
@@ -921,9 +785,9 @@ describe('Invitations Integration', () => {
         values: [invitation],
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/invitations.accept')
         .send({
           token,
@@ -961,9 +825,9 @@ describe('Invitations Integration', () => {
         values: [invitation],
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/invitations.accept')
         .send({
           token,
@@ -1000,17 +864,17 @@ describe('Invitations Integration', () => {
         values: [invitation],
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
       // No Authorization header
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/invitations.accept')
         .send({
           token,
           name: 'Public User',
           password: 'password123',
         })
-        .expect(200);
+        .expect(201);
 
       expect(response.body.userId).toBeDefined();
     });
@@ -1043,13 +907,13 @@ describe('Invitations Integration', () => {
         values: [invitation],
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/invitations.resend')
         .set('Authorization', `Bearer ${ownerAuthToken}`)
         .send({ id: invitation.id })
-        .expect(200);
+        .expect(201);
 
       expect(response.body.success).toBe(true);
 
@@ -1064,7 +928,7 @@ describe('Invitations Integration', () => {
       );
 
       // Verify token_hash was updated
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
       const result = await systemClient.query({
         query: 'SELECT * FROM invitations FINAL WHERE id = {id:String}',
         query_params: { id: invitation.id },
@@ -1098,9 +962,9 @@ describe('Invitations Integration', () => {
         values: [invitation],
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/invitations.resend')
         .set('Authorization', `Bearer ${ownerAuthToken}`)
         .send({ id: invitation.id })
@@ -1110,14 +974,14 @@ describe('Invitations Integration', () => {
     });
 
     it('requires authentication', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/invitations.resend')
         .send({ id: 'some-id' })
         .expect(401);
     });
 
     it('returns 404 for non-existent invitation', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/invitations.resend')
         .set('Authorization', `Bearer ${ownerAuthToken}`)
         .send({ id: 'non-existent-id' })
@@ -1152,18 +1016,18 @@ describe('Invitations Integration', () => {
         values: [invitation],
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/invitations.revoke')
         .set('Authorization', `Bearer ${ownerAuthToken}`)
         .send({ id: invitation.id })
-        .expect(200);
+        .expect(201);
 
       expect(response.body.success).toBe(true);
 
       // Verify invitation was marked as revoked
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
       const result = await systemClient.query({
         query: 'SELECT * FROM invitations FINAL WHERE id = {id:String}',
         query_params: { id: invitation.id },
@@ -1199,9 +1063,9 @@ describe('Invitations Integration', () => {
         values: [invitation],
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/invitations.revoke')
         .set('Authorization', `Bearer ${ownerAuthToken}`)
         .send({ id: invitation.id })
@@ -1211,14 +1075,14 @@ describe('Invitations Integration', () => {
     });
 
     it('requires authentication', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/invitations.revoke')
         .send({ id: 'some-id' })
         .expect(401);
     });
 
     it('returns 404 for non-existent invitation', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/invitations.revoke')
         .set('Authorization', `Bearer ${ownerAuthToken}`)
         .send({ id: 'non-existent-id' })

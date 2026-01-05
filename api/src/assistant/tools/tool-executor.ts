@@ -167,7 +167,7 @@ export class ToolExecutor {
       );
     }
 
-    const period = (input.period as DatePreset) || 'last_30_days';
+    const period = (input.period as DatePreset) || 'previous_30_days';
     if (!DATE_PRESETS.includes(period)) {
       throw new BadRequestException(
         `Invalid period: ${input.period}. Valid options: ${DATE_PRESETS.join(', ')}`,

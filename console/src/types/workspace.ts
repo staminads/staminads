@@ -35,6 +35,7 @@ export interface WorkspaceIntegration {
 export interface Annotation {
   id: string
   date: string // ISO date string (YYYY-MM-DD)
+  time: string // HH:mm format (e.g., '14:30')
   timezone: string // IANA timezone (e.g., 'America/New_York')
   title: string
   description?: string

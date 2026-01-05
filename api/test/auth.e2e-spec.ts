@@ -1,166 +1,39 @@
 // Set env vars BEFORE any imports to ensure ConfigModule picks them up
-const TEST_SYSTEM_DATABASE = 'staminads_test_system';
-process.env.NODE_ENV = 'test';
-process.env.CLICKHOUSE_SYSTEM_DATABASE = TEST_SYSTEM_DATABASE;
-process.env.JWT_SECRET = 'test-secret-key';
-process.env.ADMIN_EMAIL = 'admin@test.com';
-process.env.ADMIN_PASSWORD = 'testpass';
-process.env.APP_URL = 'http://localhost:5173';
-process.env.ENCRYPTION_KEY = 'test-encryption-key-32-chars-ok!';
-process.env.SMTP_HOST = '';
+import { setupTestEnv } from './constants/test-config';
+setupTestEnv();
 
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
-import { createClient, ClickHouseClient } from '@clickhouse/client';
+import { ClickHouseClient } from '@clickhouse/client';
 import request from 'supertest';
-import { AppModule } from '../src/app.module';
 import { MailService } from '../src/mail/mail.service';
-import { generateId, hashPassword } from '../src/common/crypto';
-
-function toClickHouseDateTime(date: Date = new Date()): string {
-  return date.toISOString().replace('T', ' ').replace('Z', '');
-}
+import { generateId } from '../src/common/crypto';
+import {
+  toClickHouseDateTime,
+  createTestUser,
+  getAuthToken,
+  createPasswordResetToken,
+  createTestWorkspace,
+  createTestApp,
+  closeTestApp,
+  waitForClickHouse,
+  TestAppContext,
+} from './helpers';
 
 describe('Auth Integration', () => {
-  let app: INestApplication;
+  let ctx: TestAppContext;
   let systemClient: ClickHouseClient;
   let mailService: MailService;
 
-  // Helper: Create a test user directly in DB
-  async function createTestUser(
-    email: string,
-    password: string,
-    options: {
-      status?: 'active' | 'pending' | 'disabled';
-      failedAttempts?: number;
-      lockedUntil?: string | null;
-    } = {},
-  ) {
-    const passwordHash = await hashPassword(password);
-    const now = toClickHouseDateTime();
-    const userId = generateId();
-
-    await systemClient.insert({
-      table: 'users',
-      values: [
-        {
-          id: userId,
-          email: email.toLowerCase(),
-          password_hash: passwordHash,
-          name: 'Test User',
-          type: 'user',
-          status: options.status || 'active',
-          is_super_admin: 0,
-          last_login_at: null,
-          failed_login_attempts: options.failedAttempts || 0,
-          locked_until: options.lockedUntil || null,
-          password_changed_at: now,
-          deleted_at: null,
-          deleted_by: null,
-          created_at: now,
-          updated_at: now,
-        },
-      ],
-      format: 'JSONEachRow',
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    return userId;
-  }
-
-  // Helper: Get auth token for a user
-  async function getAuthToken(email: string, password: string): Promise<string> {
-    const response = await request(app.getHttpServer())
-      .post('/api/auth.login')
-      .send({ email, password });
-
-    if (response.status !== 201) {
-      throw new Error(`Login failed: ${response.body.message}`);
-    }
-
-    return response.body.access_token;
-  }
-
-  // Helper: Create a password reset token
-  async function createPasswordResetToken(userId: string): Promise<string> {
-    const crypto = require('crypto');
-    const token = crypto.randomBytes(32).toString('hex');
-    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour
-
-    await systemClient.insert({
-      table: 'password_reset_tokens',
-      values: [
-        {
-          id: generateId(),
-          user_id: userId,
-          token_hash: tokenHash,
-          status: 'pending',
-          expires_at: toClickHouseDateTime(expiresAt),
-          created_at: toClickHouseDateTime(now),
-          updated_at: toClickHouseDateTime(now),
-        },
-      ],
-      format: 'JSONEachRow',
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    return token;
-  }
-
   beforeAll(async () => {
-    // Create ClickHouse client first (before app init)
-    systemClient = createClient({
-      url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
-      database: TEST_SYSTEM_DATABASE,
-    });
-
-    const moduleFixture = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        transform: true,
-      }),
-    );
-    await app.init();
-
-    mailService = moduleFixture.get<MailService>(MailService);
+    ctx = await createTestApp({ mockMailService: true });
+    systemClient = ctx.systemClient;
+    mailService = ctx.mailService!;
 
     // Create a test workspace for SMTP operations
-    const now = toClickHouseDateTime();
-    await systemClient.insert({
-      table: 'workspaces',
-      values: [
-        {
-          id: 'test_workspace',
-          name: 'Test Workspace',
-          website: 'https://test.com',
-          timezone: 'UTC',
-          currency: 'USD',
-          logo_url: null,
-          settings: '{}',
-          status: 'active',
-          created_at: now,
-          updated_at: now,
-        },
-      ],
-      format: 'JSONEachRow',
-    });
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await createTestWorkspace(systemClient, 'test_workspace');
   });
 
   afterAll(async () => {
-    if (systemClient) {
-      await systemClient.close();
-    }
-    if (app) {
-      await app.close();
-    }
+    await closeTestApp(ctx);
   });
 
   // No beforeEach cleanup - each test uses unique emails to avoid conflicts
@@ -170,9 +43,9 @@ describe('Auth Integration', () => {
     it('logs in successfully with valid credentials', async () => {
       const email = 'test1@test.com';
       const password = 'password123';
-      await createTestUser(email, password);
+      await createTestUser(systemClient, email, password);
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.login')
         .send({ email, password })
         .expect(201);
@@ -189,9 +62,9 @@ describe('Auth Integration', () => {
     it('is case-insensitive for email', async () => {
       const email = 'test2@test.com';
       const password = 'password123';
-      await createTestUser(email, password);
+      await createTestUser(systemClient, email, password);
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.login')
         .send({ email: email.toUpperCase(), password })
         .expect(201);
@@ -202,9 +75,9 @@ describe('Auth Integration', () => {
     it('creates a session with IP and user agent', async () => {
       const email = 'test3@test.com';
       const password = 'password123';
-      const userId = await createTestUser(email, password);
+      const userId = await createTestUser(systemClient, email, password);
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/auth.login')
         .set('X-Forwarded-For', '192.168.1.1, 10.0.0.1')
         .set('User-Agent', 'Mozilla/5.0 Test Browser')
@@ -212,7 +85,7 @@ describe('Auth Integration', () => {
         .expect(201);
 
       // Verify session was created with metadata
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
       const sessions = await systemClient.query({
         query: 'SELECT * FROM sessions FINAL WHERE user_id = {userId:String}',
         query_params: { userId },
@@ -228,15 +101,15 @@ describe('Auth Integration', () => {
     it('resets failed login attempts on successful login', async () => {
       const email = 'test4@test.com';
       const password = 'password123';
-      await createTestUser(email, password, { failedAttempts: 3 });
+      await createTestUser(systemClient, email, password, { failedAttempts: 3 });
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/auth.login')
         .send({ email, password })
         .expect(201);
 
       // Verify failed attempts reset
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
       const users = await systemClient.query({
         query: 'SELECT * FROM users FINAL WHERE email = {email:String}',
         query_params: { email },
@@ -250,9 +123,9 @@ describe('Auth Integration', () => {
 
     it('fails with wrong password', async () => {
       const email = 'test5@test.com';
-      await createTestUser(email, 'correctpassword');
+      await createTestUser(systemClient, email, 'correctpassword');
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.login')
         .send({ email, password: 'wrongpassword' })
         .expect(401);
@@ -261,7 +134,7 @@ describe('Auth Integration', () => {
     });
 
     it('fails with non-existent user', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.login')
         .send({ email: 'nonexistent@test.com', password: 'password123' })
         .expect(401);
@@ -271,15 +144,15 @@ describe('Auth Integration', () => {
 
     it('increments failed login attempts on wrong password', async () => {
       const email = 'test6@test.com';
-      await createTestUser(email, 'correctpassword');
+      await createTestUser(systemClient, email, 'correctpassword');
 
       // First failed attempt
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/auth.login')
         .send({ email, password: 'wrongpassword' })
         .expect(401);
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
       // Verify failed attempts incremented
       const users = await systemClient.query({
@@ -294,16 +167,16 @@ describe('Auth Integration', () => {
 
     it('locks account after 5 failed login attempts', async () => {
       const email = 'test7@test.com';
-      await createTestUser(email, 'correctpassword');
+      await createTestUser(systemClient, email, 'correctpassword');
 
       // Make 5 failed attempts
       for (let i = 0; i < 5; i++) {
-        await request(app.getHttpServer())
+        await request(ctx.app.getHttpServer())
           .post('/api/auth.login')
           .send({ email, password: 'wrongpassword' });
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
       // Verify account is locked
       const users = await systemClient.query({
@@ -329,12 +202,12 @@ describe('Auth Integration', () => {
       const lockedUntil = toClickHouseDateTime(
         new Date(Date.now() + 15 * 60 * 1000),
       );
-      await createTestUser(email, 'password123', {
+      await createTestUser(systemClient, email, 'password123', {
         failedAttempts: 5,
         lockedUntil,
       });
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.login')
         .send({ email, password: 'password123' })
         .expect(401);
@@ -345,9 +218,9 @@ describe('Auth Integration', () => {
 
     it('fails when user status is not active', async () => {
       const email = 'test9@test.com';
-      await createTestUser(email, 'password123', { status: 'disabled' });
+      await createTestUser(systemClient, email, 'password123', { status: 'disabled' });
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.login')
         .send({ email, password: 'password123' })
         .expect(401);
@@ -356,7 +229,7 @@ describe('Auth Integration', () => {
     });
 
     it('validates email format', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.login')
         .send({ email: 'not-an-email', password: 'password123' })
         .expect(400);
@@ -365,7 +238,7 @@ describe('Auth Integration', () => {
     });
 
     it('validates required fields', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.login')
         .send({ email: 'user@test.com' })
         .expect(400);
@@ -374,7 +247,7 @@ describe('Auth Integration', () => {
     });
 
     it('logs in with legacy admin credentials from env', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.login')
         .send({
           email: process.env.ADMIN_EMAIL,
@@ -390,17 +263,17 @@ describe('Auth Integration', () => {
   describe('POST /api/auth.forgotPassword', () => {
     it('returns success for existing email', async () => {
       const email = 'test10@test.com';
-      await createTestUser(email, 'password123');
+      await createTestUser(systemClient, email, 'password123');
 
       // Mock the mail service
       const sendPasswordResetSpy = jest
         .spyOn(mailService, 'sendPasswordReset')
         .mockResolvedValue();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.forgotPassword')
         .send({ email })
-        .expect(200);
+        .expect(201);
 
       expect(response.body.success).toBe(true);
       expect(sendPasswordResetSpy).toHaveBeenCalled();
@@ -409,27 +282,27 @@ describe('Auth Integration', () => {
     });
 
     it('returns success for non-existent email (no enumeration)', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.forgotPassword')
         .send({ email: 'nonexistent@test.com' })
-        .expect(200);
+        .expect(201);
 
       expect(response.body.success).toBe(true);
     });
 
     it('creates password reset token in database', async () => {
       const email = 'test11@test.com';
-      const userId = await createTestUser(email, 'password123');
+      const userId = await createTestUser(systemClient, email, 'password123');
 
       // Mock the mail service
       jest.spyOn(mailService, 'sendPasswordReset').mockResolvedValue();
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/auth.forgotPassword')
         .send({ email })
-        .expect(200);
+        .expect(201);
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
       // Verify token was created
       const tokens = await systemClient.query({
@@ -454,7 +327,7 @@ describe('Auth Integration', () => {
 
     it('rate limits to 3 requests per hour', async () => {
       const email = 'test12@test.com';
-      const userId = await createTestUser(email, 'password123');
+      const userId = await createTestUser(systemClient, email, 'password123');
 
       // Mock the mail service
       const sendPasswordResetSpy = jest
@@ -463,19 +336,19 @@ describe('Auth Integration', () => {
 
       // Make 3 requests
       for (let i = 0; i < 3; i++) {
-        await request(app.getHttpServer())
+        await request(ctx.app.getHttpServer())
           .post('/api/auth.forgotPassword')
           .send({ email })
-          .expect(200);
+          .expect(201);
       }
 
       expect(sendPasswordResetSpy).toHaveBeenCalledTimes(3);
 
       // 4th request should still return success but not send email
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/auth.forgotPassword')
         .send({ email })
-        .expect(200);
+        .expect(201);
 
       // Should still be only 3 emails sent (rate limited)
       expect(sendPasswordResetSpy).toHaveBeenCalledTimes(3);
@@ -484,7 +357,7 @@ describe('Auth Integration', () => {
     });
 
     it('validates email format', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.forgotPassword')
         .send({ email: 'not-an-email' })
         .expect(400);
@@ -498,10 +371,10 @@ describe('Auth Integration', () => {
       const email = 'test13@test.com';
       const oldPassword = 'oldpassword';
       const newPassword = 'newpassword123';
-      const userId = await createTestUser(email, oldPassword);
-      const token = await createPasswordResetToken(userId);
+      const userId = await createTestUser(systemClient, email, oldPassword);
+      const token = await createPasswordResetToken(systemClient, userId);
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.resetPassword')
         .send({ token, newPassword })
         .expect(200);
@@ -509,8 +382,8 @@ describe('Auth Integration', () => {
       expect(response.body.success).toBe(true);
 
       // Verify can login with new password
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      const loginResponse = await request(app.getHttpServer())
+      await waitForClickHouse(200);
+      const loginResponse = await request(ctx.app.getHttpServer())
         .post('/api/auth.login')
         .send({ email, password: newPassword })
         .expect(201);
@@ -518,7 +391,7 @@ describe('Auth Integration', () => {
       expect(loginResponse.body.access_token).toBeDefined();
 
       // Verify cannot login with old password
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/auth.login')
         .send({ email, password: oldPassword })
         .expect(401);
@@ -526,15 +399,15 @@ describe('Auth Integration', () => {
 
     it('marks token as used after successful reset', async () => {
       const email = 'test14@test.com';
-      const userId = await createTestUser(email, 'oldpassword');
-      const token = await createPasswordResetToken(userId);
+      const userId = await createTestUser(systemClient, email, 'oldpassword');
+      const token = await createPasswordResetToken(systemClient, userId);
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/auth.resetPassword')
         .send({ token, newPassword: 'newpassword123' })
         .expect(200);
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
       // Verify token is marked as used
       const tokens = await systemClient.query({
@@ -551,30 +424,30 @@ describe('Auth Integration', () => {
     it('revokes all sessions after password reset', async () => {
       const email = 'test15@test.com';
       const oldPassword = 'oldpassword';
-      const userId = await createTestUser(email, oldPassword);
+      const userId = await createTestUser(systemClient, email, oldPassword);
 
       // Create a session (login)
-      const oldToken = await getAuthToken(email, oldPassword);
+      const oldToken = await getAuthToken(ctx.app, email, oldPassword);
       expect(oldToken).toBeDefined();
 
       // Reset password
-      const resetToken = await createPasswordResetToken(userId);
-      await request(app.getHttpServer())
+      const resetToken = await createPasswordResetToken(systemClient, userId);
+      await request(ctx.app.getHttpServer())
         .post('/api/auth.resetPassword')
         .send({ token: resetToken, newPassword: 'newpassword123' })
         .expect(200);
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await waitForClickHouse(200);
 
       // Verify old token no longer works
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/auth.sessions')
         .set('Authorization', `Bearer ${oldToken}`)
         .expect(401);
     });
 
     it('fails with invalid token', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.resetPassword')
         .send({ token: 'invalidtoken123', newPassword: 'newpassword123' })
         .expect(400);
@@ -584,17 +457,17 @@ describe('Auth Integration', () => {
 
     it('fails with already used token', async () => {
       const email = 'test16@test.com';
-      const userId = await createTestUser(email, 'oldpassword');
-      const token = await createPasswordResetToken(userId);
+      const userId = await createTestUser(systemClient, email, 'oldpassword');
+      const token = await createPasswordResetToken(systemClient, userId);
 
       // Use token once
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/auth.resetPassword')
         .send({ token, newPassword: 'newpassword123' })
         .expect(200);
 
       // Try to use same token again
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.resetPassword')
         .send({ token, newPassword: 'anotherpassword' })
         .expect(400);
@@ -604,7 +477,7 @@ describe('Auth Integration', () => {
 
     it('fails with expired token', async () => {
       const email = 'test17@test.com';
-      const userId = await createTestUser(email, 'oldpassword');
+      const userId = await createTestUser(systemClient, email, 'oldpassword');
 
       // Create expired token
       const crypto = require('crypto');
@@ -629,9 +502,9 @@ describe('Auth Integration', () => {
         format: 'JSONEachRow',
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.resetPassword')
         .send({ token, newPassword: 'newpassword123' })
         .expect(400);
@@ -641,10 +514,10 @@ describe('Auth Integration', () => {
 
     it('validates password length (min 8 chars)', async () => {
       const email = 'test18@test.com';
-      const userId = await createTestUser(email, 'oldpassword');
-      const token = await createPasswordResetToken(userId);
+      const userId = await createTestUser(systemClient, email, 'oldpassword');
+      const token = await createPasswordResetToken(systemClient, userId);
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.resetPassword')
         .send({ token, newPassword: 'short' })
         .expect(400);
@@ -654,11 +527,11 @@ describe('Auth Integration', () => {
 
     it('validates password length (max 72 chars)', async () => {
       const email = 'test19@test.com';
-      const userId = await createTestUser(email, 'oldpassword');
-      const token = await createPasswordResetToken(userId);
+      const userId = await createTestUser(systemClient, email, 'oldpassword');
+      const token = await createPasswordResetToken(systemClient, userId);
 
       const tooLongPassword = 'a'.repeat(73);
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.resetPassword')
         .send({ token, newPassword: tooLongPassword })
         .expect(400);
@@ -671,11 +544,11 @@ describe('Auth Integration', () => {
     it('returns active sessions for authenticated user', async () => {
       const email = 'test20@test.com';
       const password = 'password123';
-      await createTestUser(email, password);
+      await createTestUser(systemClient, email, password);
 
-      const token = await getAuthToken(email, password);
+      const token = await getAuthToken(ctx.app, email, password);
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/auth.sessions')
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
@@ -693,7 +566,7 @@ describe('Auth Integration', () => {
     it('does not return revoked sessions', async () => {
       const email = 'test21@test.com';
       const password = 'password123';
-      const userId = await createTestUser(email, password);
+      const userId = await createTestUser(systemClient, email, password);
 
       // Create revoked session directly
       const now = new Date();
@@ -717,9 +590,9 @@ describe('Auth Integration', () => {
         format: 'JSONEachRow',
       });
 
-      const token = await getAuthToken(email, password);
+      const token = await getAuthToken(ctx.app, email, password);
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/auth.sessions')
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
@@ -730,7 +603,7 @@ describe('Auth Integration', () => {
     });
 
     it('requires authentication', async () => {
-      await request(app.getHttpServer()).get('/api/auth.sessions').expect(401);
+      await request(ctx.app.getHttpServer()).get('/api/auth.sessions').expect(401);
     });
   });
 
@@ -738,14 +611,14 @@ describe('Auth Integration', () => {
     it('revokes a specific session', async () => {
       const email = 'test22@test.com';
       const password = 'password123';
-      await createTestUser(email, password);
+      await createTestUser(systemClient, email, password);
 
       // Create two sessions
-      const token1 = await getAuthToken(email, password);
-      const token2 = await getAuthToken(email, password);
+      const token1 = await getAuthToken(ctx.app, email, password);
+      const token2 = await getAuthToken(ctx.app, email, password);
 
       // Get sessions list
-      const sessionsResponse = await request(app.getHttpServer())
+      const sessionsResponse = await request(ctx.app.getHttpServer())
         .get('/api/auth.sessions')
         .set('Authorization', `Bearer ${token1}`)
         .expect(200);
@@ -754,17 +627,17 @@ describe('Auth Integration', () => {
 
       // Revoke first session
       const sessionId = sessionsResponse.body[0].id;
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.revokeSession')
         .query({ sessionId })
         .set('Authorization', `Bearer ${token2}`)
-        .expect(200);
+        .expect(201);
 
       expect(response.body.success).toBe(true);
 
       // Verify only one session remains
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      const updatedSessions = await request(app.getHttpServer())
+      await waitForClickHouse();
+      const updatedSessions = await request(ctx.app.getHttpServer())
         .get('/api/auth.sessions')
         .set('Authorization', `Bearer ${token2}`)
         .expect(200);
@@ -776,14 +649,14 @@ describe('Auth Integration', () => {
     it('fails when revoking another user\'s session', async () => {
       const email1 = 'revoke1@test.com';
       const email2 = 'revoke2@test.com';
-      await createTestUser(email1, 'password123');
-      await createTestUser(email2, 'password123');
+      await createTestUser(systemClient, email1, 'password123');
+      await createTestUser(systemClient, email2, 'password123');
 
-      const token1 = await getAuthToken(email1, 'password123');
-      const token2 = await getAuthToken(email2, 'password123');
+      const token1 = await getAuthToken(ctx.app, email1, 'password123');
+      const token2 = await getAuthToken(ctx.app, email2, 'password123');
 
       // Get user1's session
-      const sessions = await request(app.getHttpServer())
+      const sessions = await request(ctx.app.getHttpServer())
         .get('/api/auth.sessions')
         .set('Authorization', `Bearer ${token1}`)
         .expect(200);
@@ -791,7 +664,7 @@ describe('Auth Integration', () => {
       const sessionId = sessions.body[0].id;
 
       // Try to revoke user1's session as user2
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.revokeSession')
         .query({ sessionId })
         .set('Authorization', `Bearer ${token2}`)
@@ -802,10 +675,10 @@ describe('Auth Integration', () => {
 
     it('fails with invalid session ID', async () => {
       const email = 'test23@test.com';
-      await createTestUser(email, 'password123');
-      const token = await getAuthToken(email, 'password123');
+      await createTestUser(systemClient, email, 'password123');
+      const token = await getAuthToken(ctx.app, email, 'password123');
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.revokeSession')
         .query({ sessionId: 'invalid-session-id' })
         .set('Authorization', `Bearer ${token}`)
@@ -815,7 +688,7 @@ describe('Auth Integration', () => {
     });
 
     it('requires authentication', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/auth.revokeSession')
         .query({ sessionId: 'some-id' })
         .expect(401);
@@ -826,15 +699,15 @@ describe('Auth Integration', () => {
     it('revokes all sessions for the user', async () => {
       const email = 'test24@test.com';
       const password = 'password123';
-      await createTestUser(email, password);
+      await createTestUser(systemClient, email, password);
 
       // Create multiple sessions
-      const token1 = await getAuthToken(email, password);
-      const token2 = await getAuthToken(email, password);
-      const token3 = await getAuthToken(email, password);
+      const token1 = await getAuthToken(ctx.app, email, password);
+      const token2 = await getAuthToken(ctx.app, email, password);
+      const token3 = await getAuthToken(ctx.app, email, password);
 
       // Verify we have 3 sessions
-      const sessionsResponse = await request(app.getHttpServer())
+      const sessionsResponse = await request(ctx.app.getHttpServer())
         .get('/api/auth.sessions')
         .set('Authorization', `Bearer ${token1}`)
         .expect(200);
@@ -842,27 +715,27 @@ describe('Auth Integration', () => {
       expect(sessionsResponse.body.length).toBe(3);
 
       // Revoke all sessions
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.revokeAllSessions')
         .set('Authorization', `Bearer ${token1}`)
         .expect(200);
 
       expect(response.body.success).toBe(true);
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await waitForClickHouse(200);
 
       // Verify all tokens are now invalid
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/auth.sessions')
         .set('Authorization', `Bearer ${token1}`)
         .expect(401);
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/auth.sessions')
         .set('Authorization', `Bearer ${token2}`)
         .expect(401);
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/auth.sessions')
         .set('Authorization', `Bearer ${token3}`)
         .expect(401);
@@ -871,35 +744,35 @@ describe('Auth Integration', () => {
     it('only revokes sessions for the authenticated user', async () => {
       const email1 = 'revokeall1@test.com';
       const email2 = 'revokeall2@test.com';
-      await createTestUser(email1, 'password123');
-      await createTestUser(email2, 'password123');
+      await createTestUser(systemClient, email1, 'password123');
+      await createTestUser(systemClient, email2, 'password123');
 
-      const token1 = await getAuthToken(email1, 'password123');
-      const token2 = await getAuthToken(email2, 'password123');
+      const token1 = await getAuthToken(ctx.app, email1, 'password123');
+      const token2 = await getAuthToken(ctx.app, email2, 'password123');
 
       // User 1 revokes all sessions
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/auth.revokeAllSessions')
         .set('Authorization', `Bearer ${token1}`)
         .expect(200);
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
       // User 1's token should be invalid
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/auth.sessions')
         .set('Authorization', `Bearer ${token1}`)
         .expect(401);
 
       // User 2's token should still work
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/auth.sessions')
         .set('Authorization', `Bearer ${token2}`)
         .expect(200);
     });
 
     it('requires authentication', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/auth.revokeAllSessions')
         .expect(401);
     });

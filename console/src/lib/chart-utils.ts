@@ -16,28 +16,51 @@ dayjs.extend(timezone)
  */
 export function determineGranularity(preset: DatePreset): Granularity {
   const granularityMap: Record<DatePreset, Granularity> = {
-    last_30_minutes: 'hour',
+    previous_30_minutes: 'hour',
     today: 'hour',
     yesterday: 'hour',
-    last_7_days: 'day',
-    last_14_days: 'day',
-    last_28_days: 'day',
-    last_30_days: 'day',
-    last_90_days: 'week',
-    last_91_days: 'week',
+    previous_7_days: 'day',
+    previous_14_days: 'day',
+    previous_28_days: 'day',
+    previous_30_days: 'day',
+    previous_90_days: 'week',
+    previous_91_days: 'week',
     this_week: 'day',
-    last_week: 'day',
+    previous_week: 'day',
     this_month: 'day',
-    last_month: 'day',
+    previous_month: 'day',
     this_quarter: 'week',
-    last_quarter: 'week',
+    previous_quarter: 'week',
     this_year: 'month',
-    last_year: 'month',
-    last_12_months: 'month',
+    previous_year: 'month',
+    previous_12_months: 'month',
     all_time: 'month',
     custom: 'day' // Will be overridden by determineGranularityForRange for custom ranges
   }
   return granularityMap[preset]
+}
+
+/**
+ * Get available granularities based on date range span
+ * Used for the granularity selector UI
+ */
+export function getAvailableGranularities(days: number): Granularity[] {
+  if (days <= 2) return ['hour']
+  if (days <= 7) return ['hour', 'day']
+  if (days <= 30) return ['day', 'week']
+  if (days <= 90) return ['day', 'week', 'month']
+  return ['week', 'month']
+}
+
+/**
+ * Labels for granularity options in the UI
+ */
+export const GRANULARITY_LABELS: Record<Granularity, string> = {
+  hour: 'Hourly',
+  day: 'Daily',
+  week: 'Weekly',
+  month: 'Monthly',
+  year: 'Yearly',
 }
 
 /**
@@ -107,7 +130,10 @@ export function formatNumber(value: number): string {
  * Uses dayjs for reliable parsing of "YYYY-MM-DD HH:00:00" format
  */
 export function formatXAxisLabel(timestamp: string, granularity: Granularity): string {
+  if (!timestamp) return ''
+
   const date = dayjs(timestamp)
+  if (!date.isValid()) return timestamp
 
   switch (granularity) {
     case 'hour':
@@ -125,23 +151,27 @@ export function formatXAxisLabel(timestamp: string, granularity: Granularity): s
 }
 
 /**
- * Find the data point label for an annotation date.
- * Finds the first data point on or after the annotation date to ensure
+ * Find the data point label for an annotation date/time.
+ * Finds the first data point on or after the annotation datetime to ensure
  * the annotation appears at the start of the event, not at the peak.
  * This is required for ECharts category axis positioning.
  */
 function findDataPointLabelForAnnotation(
   annotationDate: string,
+  annotationTime: string,
   currentData: ChartDataPoint[],
   granularity: Granularity,
-  timezone: string
+  annotationTimezone: string,
+  workspaceTimezone: string
 ): string {
-  const annDate = dayjs.tz(annotationDate, timezone)
+  // Parse annotation in its own timezone, then convert to workspace timezone for comparison
+  const annDateTime = dayjs.tz(`${annotationDate} ${annotationTime}`, annotationTimezone)
 
-  // Find the first data point on or after the annotation date
+  // Find the first data point on or after the annotation datetime
   for (const point of currentData) {
-    const pointDate = dayjs.tz(point.timestamp, timezone)
-    if (pointDate.isSame(annDate, 'day') || pointDate.isAfter(annDate, 'day')) {
+    // Data points are in workspace timezone
+    const pointDate = dayjs.tz(point.timestamp, workspaceTimezone)
+    if (pointDate.isSame(annDateTime, 'hour') || pointDate.isAfter(annDateTime, 'hour')) {
       return formatXAxisLabel(point.timestamp, granularity)
     }
   }
@@ -155,8 +185,12 @@ function findDataPointLabelForAnnotation(
  * Uses dayjs for reliable parsing
  */
 export function formatDateRange(start: string, end: string): string {
+  if (!start || !end) return ''
+
   const startDate = dayjs(start)
   const endDate = dayjs(end)
+
+  if (!startDate.isValid() || !endDate.isValid()) return ''
 
   const startMonth = startDate.format('MMM')
   const endMonth = endDate.format('MMM')
@@ -319,7 +353,7 @@ export function createMetricChartOption(
                       <span style="color: ${bulletColor}; font-size: 14px;">●</span>
                       ${ann.title}
                     </div>
-                    <div style="color: #6b7280; font-size: 11px;">${ann.date}</div>
+                    <div style="color: #6b7280; font-size: 11px;">${ann.date} ${ann.time} (${ann.timezone})</div>
                     ${ann.description ? `<div style="margin-top: 8px;">${ann.description}</div>` : ''}
                   `
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -329,20 +363,24 @@ export function createMetricChartOption(
                 .filter((a) => {
                   // Filter annotations within the current date range
                   if (currentData.length < 2) return false
+                  const firstTimestamp = currentData[0]?.timestamp
+                  const lastTimestamp = currentData[currentData.length - 1]?.timestamp
+                  if (!firstTimestamp || !lastTimestamp) return false
                   // Use annotation's own timezone (or fallback to workspace timezone)
-                  const tz = a.timezone || workspaceTimezone || 'UTC'
+                  const tz = a.timezone || workspaceTimezone!
                   const annotationDate = dayjs.tz(a.date, tz)
-                  const dataStart = dayjs.tz(currentData[0].timestamp, tz)
-                  const dataEnd = dayjs.tz(currentData[currentData.length - 1].timestamp, tz)
+                  const dataStart = dayjs.tz(firstTimestamp, tz)
+                  const dataEnd = dayjs.tz(lastTimestamp, tz)
+                  if (!dataStart.isValid() || !dataEnd.isValid()) return false
                   return annotationDate.isBetween(dataStart, dataEnd, 'day', '[]')
                 })
                 .map((a, index) => {
-                  const tz = a.timezone || workspaceTimezone || 'UTC'
+                  const tz = a.timezone || workspaceTimezone!
                   const bulletColor = a.color || '#7763f1'
                   // Truncate long titles for the always-visible label
                   const shortTitle = a.title.length > 20 ? a.title.slice(0, 20) + '…' : a.title
                   return {
-                    xAxis: findDataPointLabelForAnnotation(a.date, currentData, granularity, tz),
+                    xAxis: findDataPointLabelForAnnotation(a.date, a.time, currentData, granularity, tz, workspaceTimezone!),
                     annotation: a,
                     lineStyle: {
                       color: '#000',

@@ -20,7 +20,7 @@ export function TimeScoreDistribution({
         workspace_id: workspaceId,
         metrics: ['sessions'],
         dimensions: ['duration'],
-        dateRange: { preset: 'last_30_days' },
+        dateRange: { preset: 'previous_30_days' },
         order: { duration: 'asc' },
         limit: 300, // Cap at 5 minutes
       }),

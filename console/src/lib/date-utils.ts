@@ -29,47 +29,65 @@ export function computeDateRange(
         start: now.subtract(1, 'day').startOf('day'),
         end: now.subtract(1, 'day').endOf('day'),
       }
-    case 'last_7_days':
-      return { start: now.subtract(6, 'day').startOf('day'), end: now }
-    case 'last_14_days':
-      return { start: now.subtract(13, 'day').startOf('day'), end: now }
-    case 'last_28_days':
-      return { start: now.subtract(27, 'day').startOf('day'), end: now }
-    case 'last_30_days':
-      return { start: now.subtract(29, 'day').startOf('day'), end: now }
-    case 'last_90_days':
-      return { start: now.subtract(89, 'day').startOf('day'), end: now }
-    case 'last_91_days':
-      return { start: now.subtract(90, 'day').startOf('day'), end: now }
+    case 'previous_7_days':
+      return {
+        start: now.subtract(7, 'day').startOf('day'),
+        end: now.subtract(1, 'day').endOf('day'),
+      }
+    case 'previous_14_days':
+      return {
+        start: now.subtract(14, 'day').startOf('day'),
+        end: now.subtract(1, 'day').endOf('day'),
+      }
+    case 'previous_28_days':
+      return {
+        start: now.subtract(28, 'day').startOf('day'),
+        end: now.subtract(1, 'day').endOf('day'),
+      }
+    case 'previous_30_days':
+      return {
+        start: now.subtract(30, 'day').startOf('day'),
+        end: now.subtract(1, 'day').endOf('day'),
+      }
+    case 'previous_90_days':
+      return {
+        start: now.subtract(90, 'day').startOf('day'),
+        end: now.subtract(1, 'day').endOf('day'),
+      }
+    case 'previous_91_days':
+      return {
+        start: now.subtract(91, 'day').startOf('day'),
+        end: now.subtract(1, 'day').endOf('day'),
+      }
     case 'this_week':
       return { start: now.startOf('week'), end: now }
-    case 'last_week':
+    case 'previous_week':
       return {
         start: now.subtract(1, 'week').startOf('week'),
         end: now.subtract(1, 'week').endOf('week'),
       }
     case 'this_month':
       return { start: now.startOf('month'), end: now }
-    case 'last_month':
+    case 'previous_month':
       return {
         start: now.subtract(1, 'month').startOf('month'),
         end: now.subtract(1, 'month').endOf('month'),
       }
     case 'this_quarter':
       return { start: now.startOf('quarter'), end: now }
-    case 'last_quarter':
+    case 'previous_quarter':
       return {
         start: now.subtract(1, 'quarter').startOf('quarter'),
         end: now.subtract(1, 'quarter').endOf('quarter'),
       }
     case 'this_year':
       return { start: now.startOf('year'), end: now }
-    case 'last_year':
+    case 'previous_year':
       return {
         start: now.subtract(1, 'year').startOf('year'),
         end: now.subtract(1, 'year').endOf('year'),
       }
-    case 'last_12_months':
+    case 'previous_12_months':
       return { start: now.subtract(12, 'month').startOf('month'), end: now }
     case 'all_time':
       return {
@@ -78,14 +96,20 @@ export function computeDateRange(
       }
     case 'custom':
       if (!customRange) {
-        return { start: now.subtract(6, 'day').startOf('day'), end: now }
+        return {
+          start: now.subtract(7, 'day').startOf('day'),
+          end: now.subtract(1, 'day').endOf('day'),
+        }
       }
       return {
         start: dayjs(customRange.start).tz(tz),
         end: dayjs(customRange.end).tz(tz),
       }
     default:
-      return { start: now.subtract(6, 'day').startOf('day'), end: now }
+      return {
+        start: now.subtract(7, 'day').startOf('day'),
+        end: now.subtract(1, 'day').endOf('day'),
+      }
   }
 }
 

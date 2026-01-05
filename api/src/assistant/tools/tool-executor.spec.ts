@@ -112,7 +112,7 @@ describe('ToolExecutor', () => {
 
       const result = (await executor.execute('get_dimension_values', {
         dimension: 'device',
-        period: 'last_7_days',
+        period: 'previous_7_days',
         limit: 10,
       })) as {
         dimension: string;
@@ -125,7 +125,7 @@ describe('ToolExecutor', () => {
           workspace_id: workspaceId,
           metrics: ['sessions'],
           dimensions: ['device'],
-          dateRange: { preset: 'last_7_days' },
+          dateRange: { preset: 'previous_7_days' },
         }),
       );
 
@@ -201,13 +201,13 @@ describe('ToolExecutor', () => {
       await expect(
         executor.execute('preview_query', {
           dimensions: ['device', 'browser', 'os', 'utm_source'],
-          period: 'last_7_days',
+          period: 'previous_7_days',
         }),
       ).rejects.toThrow(BadRequestException);
       await expect(
         executor.execute('preview_query', {
           dimensions: ['device', 'browser', 'os', 'utm_source'],
-          period: 'last_7_days',
+          period: 'previous_7_days',
         }),
       ).rejects.toThrow(/limited to 3 dimensions/);
     });
@@ -244,13 +244,13 @@ describe('ToolExecutor', () => {
       await expect(
         executor.execute('preview_query', {
           dimensions: ['invalid_dim'],
-          period: 'last_7_days',
+          period: 'previous_7_days',
         }),
       ).rejects.toThrow(BadRequestException);
       await expect(
         executor.execute('preview_query', {
           dimensions: ['invalid_dim'],
-          period: 'last_7_days',
+          period: 'previous_7_days',
         }),
       ).rejects.toThrow(/Unknown dimension/);
     });
@@ -272,7 +272,7 @@ describe('ToolExecutor', () => {
 
       const result = (await executor.execute('preview_query', {
         dimensions: ['device'],
-        period: 'last_7_days',
+        period: 'previous_7_days',
       })) as {
         row_count: number;
         sample_data: unknown[];
@@ -301,7 +301,7 @@ describe('ToolExecutor', () => {
 
       const result = (await executor.execute('preview_query', {
         dimensions: ['device'],
-        period: 'last_7_days',
+        period: 'previous_7_days',
       })) as { sample_data: unknown[] };
 
       expect(result.sample_data).toHaveLength(5);
@@ -313,13 +313,13 @@ describe('ToolExecutor', () => {
       await expect(
         executor.execute('preview_query', {
           dimensions: ['device'],
-          period: 'last_7_days',
+          period: 'previous_7_days',
         }),
       ).rejects.toThrow(BadRequestException);
       await expect(
         executor.execute('preview_query', {
           dimensions: ['device'],
-          period: 'last_7_days',
+          period: 'previous_7_days',
         }),
       ).rejects.toThrow(/Query failed/);
     });
@@ -329,7 +329,7 @@ describe('ToolExecutor', () => {
     it('returns success with config object', async () => {
       const result = (await executor.execute('configure_explore', {
         dimensions: ['device', 'browser'],
-        period: 'last_7_days',
+        period: 'previous_7_days',
         comparison: 'previous_period',
       })) as { success: boolean; config: unknown };
 

@@ -3,7 +3,7 @@
 [![Test & Coverage](https://github.com/staminads/staminads/actions/workflows/test.yml/badge.svg)](https://github.com/staminads/staminads/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/staminads/staminads/graph/badge.svg)](https://codecov.io/gh/staminads/staminads)
 
-Staminads helps you categorize your traffic source and measure the quality of each source.
+Staminads helps you categorize and measure the quality of your traffic sources.
 
 It focuses on TimeScore metric, that is the median time spent by sessions per source of traffic.
 
@@ -22,4 +22,3 @@ A source of traffic can be any dimensions or combination of dimensions such as:
 
 - docs
 - how is computed the cache key for analytics query
-- dashboard should not query current day/hour (unfinished data) ask gemini

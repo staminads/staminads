@@ -121,7 +121,7 @@ export function CountryMapView({ data, loading, onCountryClick }: CountryMapView
           const iso3 = geoNameToIso3[params.name]
           const iso2 = iso3 ? ISO3_TO_ISO2[iso3] : null
           if (iso2) {
-            onCountryClick(iso2.toLowerCase())
+            onCountryClick(iso2.toUpperCase())
           }
         }
       },

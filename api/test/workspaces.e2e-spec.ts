@@ -1,120 +1,60 @@
 // Set env vars BEFORE any imports to ensure ConfigModule picks them up
-const TEST_SYSTEM_DATABASE = 'staminads_test_system';
-process.env.NODE_ENV = 'test';
-process.env.CLICKHOUSE_SYSTEM_DATABASE = TEST_SYSTEM_DATABASE;
-process.env.JWT_SECRET = 'test-secret-key';
-process.env.ADMIN_EMAIL = 'admin@test.com';
-process.env.ADMIN_PASSWORD = 'testpass';
-process.env.ENCRYPTION_KEY = 'test-encryption-key-32-chars-ok!';
+import { setupTestEnv } from './constants/test-config';
+setupTestEnv();
 
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
-import { createClient, ClickHouseClient } from '@clickhouse/client';
 import request from 'supertest';
-import { AppModule } from '../src/app.module';
-import { generateId, hashPassword } from '../src/common/crypto';
-const TEST_WORKSPACE_DATABASE = 'staminads_test_ws';
-
-function toClickHouseDateTime(date: Date = new Date()): string {
-  return date.toISOString().replace('T', ' ').replace('Z', '');
-}
+import {
+  createTestAppWithWorkspace,
+  closeTestApp,
+  TestAppContext,
+} from './helpers/app.helper';
+import { toClickHouseDateTime } from './helpers';
+import { createUserWithToken, getAdminAuthToken } from './helpers/user.helper';
+import { truncateSystemTables } from './helpers/cleanup.helper';
+import { waitForClickHouse, waitForMutations } from './helpers/wait.helper';
+import { TEST_SYSTEM_DATABASE } from './constants/test-config';
 
 describe('Workspaces Integration', () => {
-  let app: INestApplication;
-  let systemClient: ClickHouseClient;
-  let workspaceClient: ClickHouseClient;
+  let ctx: TestAppContext;
   let authToken: string;
 
   beforeAll(async () => {
-    const moduleFixture = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+    ctx = await createTestAppWithWorkspace();
 
-    app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        transform: true,
-      }),
+    // Create test user for this test suite (uses default TEST_PASSWORD)
+    const { token } = await createUserWithToken(
+      ctx.app,
+      ctx.systemClient,
+      'workspaces-test@test.com',
+      undefined,
+      { name: 'Workspaces Test User', isSuperAdmin: true },
     );
-    await app.init();
-
-    // Direct ClickHouse clients for verification
-    systemClient = createClient({
-      url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
-      database: TEST_SYSTEM_DATABASE,
-    });
-
-    workspaceClient = createClient({
-      url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
-      database: TEST_WORKSPACE_DATABASE,
-    });
-
-    // Create test user for this test suite
-    const testEmail = 'workspaces-test@test.com';
-    const testPassword = 'password123';
-    const passwordHash = await hashPassword(testPassword);
-    const now = toClickHouseDateTime();
-
-    await systemClient.insert({
-      table: 'users',
-      values: [
-        {
-          id: generateId(),
-          email: testEmail,
-          password_hash: passwordHash,
-          name: 'Workspaces Test User',
-          type: 'user',
-          status: 'active',
-          is_super_admin: 1,
-          failed_login_attempts: 0,
-          created_at: now,
-          updated_at: now,
-        },
-      ],
-      format: 'JSONEachRow',
-    });
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // Get auth token
-    const loginRes = await request(app.getHttpServer())
-      .post('/api/auth.login')
-      .send({ email: testEmail, password: testPassword });
-
-    expect(loginRes.status).toBe(201);
-    expect(loginRes.body.access_token).toBeDefined();
-    authToken = loginRes.body.access_token;
+    authToken = token;
   });
 
   afterAll(async () => {
-    await systemClient.close();
-    await workspaceClient.close();
-    await app.close();
+    await closeTestApp(ctx);
   });
-
-  // Helper to get fresh auth token (needed after table truncation)
-  async function getAuthToken(): Promise<string> {
-    const loginRes = await request(app.getHttpServer())
-      .post('/api/auth.login')
-      .send({
-        email: process.env.ADMIN_EMAIL,
-        password: process.env.ADMIN_PASSWORD,
-      });
-    return loginRes.body.access_token;
-  }
 
   beforeEach(async () => {
     // Clean system tables before each test
-    await systemClient.command({ query: 'TRUNCATE TABLE workspaces' });
-    await systemClient.command({ query: 'TRUNCATE TABLE workspace_memberships' });
-    await systemClient.command({ query: 'TRUNCATE TABLE invitations' });
-    await systemClient.command({ query: 'TRUNCATE TABLE users' });
-    await systemClient.command({ query: 'TRUNCATE TABLE sessions' });
-    // Wait for mutations to complete
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await truncateSystemTables(ctx.systemClient, [
+      'workspaces',
+      'workspace_memberships',
+      'invitations',
+      'users',
+      'sessions',
+    ]);
 
-    // Get fresh auth token after truncation (re-creates admin user via legacy flow)
-    authToken = await getAuthToken();
+    // Create test user for each test
+    const { token } = await createUserWithToken(
+      ctx.app,
+      ctx.systemClient,
+      'test-user@test.com',
+      undefined,
+      { name: 'Test User', isSuperAdmin: true },
+    );
+    authToken = token;
   });
 
   describe('POST /api/workspaces.create', () => {
@@ -128,7 +68,7 @@ describe('Workspaces Integration', () => {
         logo_url: 'https://example.com/logo.png',
       };
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/workspaces.create')
         .set('Authorization', `Bearer ${authToken}`)
         .send(dto)
@@ -152,10 +92,10 @@ describe('Workspaces Integration', () => {
       expect(response.body.updated_at).toBeDefined();
 
       // Wait for insert to be visible
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
       // Verify persisted in ClickHouse system database
-      const result = await systemClient.query({
+      const result = await ctx.systemClient.query({
         query: 'SELECT * FROM workspaces WHERE id = {id:String}',
         query_params: { id: dto.id },
         format: 'JSONEachRow',
@@ -190,7 +130,7 @@ describe('Workspaces Integration', () => {
         },
       };
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/workspaces.create')
         .set('Authorization', `Bearer ${authToken}`)
         .send(dto)
@@ -208,7 +148,7 @@ describe('Workspaces Integration', () => {
         currency: 'USD',
       };
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/workspaces.create')
         .set('Authorization', `Bearer ${authToken}`)
         .send(dto)
@@ -227,7 +167,7 @@ describe('Workspaces Integration', () => {
         currency: 'USD',
       };
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/workspaces.create')
         .set('Authorization', `Bearer ${authToken}`)
         .send(dto)
@@ -241,7 +181,7 @@ describe('Workspaces Integration', () => {
         // missing website, timezone, currency
       };
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/workspaces.create')
         .set('Authorization', `Bearer ${authToken}`)
         .send(dto)
@@ -254,7 +194,7 @@ describe('Workspaces Integration', () => {
     });
 
     it('requires authentication', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/workspaces.create')
         .send({
           id: 'test',
@@ -275,17 +215,17 @@ describe('Workspaces Integration', () => {
         currency: 'USD',
       };
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/workspaces.create')
         .set('Authorization', `Bearer ${authToken}`)
         .send(dto)
         .expect(201);
 
       // Wait for insert to be visible
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
       // Verify creator is added to workspace_memberships as owner
-      const result = await systemClient.query({
+      const result = await ctx.systemClient.query({
         query: `SELECT * FROM workspace_memberships FINAL
                 WHERE workspace_id = {workspaceId:String}`,
         query_params: { workspaceId: dto.id },
@@ -302,45 +242,17 @@ describe('Workspaces Integration', () => {
     });
 
     it('rejects workspace creation by non-super_admin user', async () => {
-      const now = toClickHouseDateTime();
-      const bcrypt = require('bcrypt');
-      const passwordHash = await bcrypt.hash('password123', 10);
-
-      // Directly insert a regular user (not super_admin) into the database
-      const regularUserId = 'regular_user_id';
-      await systemClient.insert({
-        table: 'users',
-        values: [
-          {
-            id: regularUserId,
-            email: 'regular@test.com',
-            password_hash: passwordHash,
-            name: 'Regular User',
-            type: 'user',
-            status: 'active',
-            is_super_admin: 0, // NOT a super admin
-            failed_login_attempts: 0,
-            created_at: now,
-            updated_at: now,
-          },
-        ],
-        format: 'JSONEachRow',
-      });
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      // Login as regular user
-      const loginRes = await request(app.getHttpServer())
-        .post('/api/auth.login')
-        .send({
-          email: 'regular@test.com',
-          password: 'password123',
-        })
-        .expect(201);
-
-      const regularUserToken = loginRes.body.access_token;
+      // Create regular user (not super_admin)
+      const { token: regularUserToken } = await createUserWithToken(
+        ctx.app,
+        ctx.systemClient,
+        'regular@test.com',
+        undefined,
+        { name: 'Regular User', isSuperAdmin: false },
+      );
 
       // Try to create workspace as regular user (should fail with 403)
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/workspaces.create')
         .set('Authorization', `Bearer ${regularUserToken}`)
         .send({
@@ -371,14 +283,14 @@ describe('Workspaces Integration', () => {
         created_at: toClickHouseDateTime(),
         updated_at: toClickHouseDateTime(),
       };
-      await systemClient.insert({
+      await ctx.systemClient.insert({
         table: 'workspaces',
         values: [workspace],
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/workspaces.get')
         .query({ id: workspace.id })
         .set('Authorization', `Bearer ${authToken}`)
@@ -390,7 +302,7 @@ describe('Workspaces Integration', () => {
     });
 
     it('returns 404 for non-existent workspace', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/workspaces.get')
         .query({ id: 'nonexistent_id' })
         .set('Authorization', `Bearer ${authToken}`)
@@ -398,7 +310,7 @@ describe('Workspaces Integration', () => {
     });
 
     it('requires authentication', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/workspaces.get')
         .query({ id: 'some_id' })
         .expect(401);
@@ -452,14 +364,14 @@ describe('Workspaces Integration', () => {
           updated_at: toClickHouseDateTime(),
         },
       ];
-      await systemClient.insert({
+      await ctx.systemClient.insert({
         table: 'workspaces',
         values: workspaces,
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/workspaces.list')
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
@@ -472,7 +384,7 @@ describe('Workspaces Integration', () => {
     });
 
     it('returns empty array when no workspaces exist', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/workspaces.list')
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
@@ -481,7 +393,7 @@ describe('Workspaces Integration', () => {
     });
 
     it('requires authentication', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/workspaces.list')
         .expect(401);
     });
@@ -497,7 +409,7 @@ describe('Workspaces Integration', () => {
         timezone: 'UTC',
         currency: 'USD',
       };
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/workspaces.create')
         .set('Authorization', `Bearer ${authToken}`)
         .send(createDto)
@@ -509,7 +421,7 @@ describe('Workspaces Integration', () => {
         name: 'Updated Name',
         timezone: 'Europe/Paris',
       };
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/workspaces.update')
         .set('Authorization', `Bearer ${authToken}`)
         .send(updateDto)
@@ -532,7 +444,7 @@ describe('Workspaces Integration', () => {
         currency: 'EUR',
         logo_url: 'https://example.com/logo.png',
       };
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/workspaces.create')
         .set('Authorization', `Bearer ${authToken}`)
         .send(createDto)
@@ -568,7 +480,7 @@ describe('Workspaces Integration', () => {
           ],
         },
       };
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/workspaces.update')
         .set('Authorization', `Bearer ${authToken}`)
         .send(updateDto)
@@ -599,7 +511,7 @@ describe('Workspaces Integration', () => {
         timezone: 'Asia/Tokyo',
         currency: 'JPY',
       };
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/workspaces.create')
         .set('Authorization', `Bearer ${authToken}`)
         .send(createDto)
@@ -612,7 +524,7 @@ describe('Workspaces Integration', () => {
           timescore_reference: 120,
         },
       };
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/workspaces.update')
         .set('Authorization', `Bearer ${authToken}`)
         .send(updateDto)
@@ -636,14 +548,14 @@ describe('Workspaces Integration', () => {
         timezone: 'UTC',
         currency: 'USD',
       };
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/workspaces.create')
         .set('Authorization', `Bearer ${authToken}`)
         .send(createDto)
         .expect(201);
 
       // Update bounce_threshold
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/workspaces.update')
         .set('Authorization', `Bearer ${authToken}`)
         .send({ id: 'bounce_update_test', settings: { bounce_threshold: 20 } })
@@ -653,7 +565,7 @@ describe('Workspaces Integration', () => {
     });
 
     it('returns 404 for non-existent workspace', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/workspaces.update')
         .set('Authorization', `Bearer ${authToken}`)
         .send({ id: 'nonexistent_id', name: 'Test' })
@@ -661,7 +573,7 @@ describe('Workspaces Integration', () => {
     });
 
     it('requires authentication', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/workspaces.update')
         .send({ id: 'some_id', name: 'Test' })
         .expect(401);
@@ -684,24 +596,24 @@ describe('Workspaces Integration', () => {
         created_at: toClickHouseDateTime(),
         updated_at: toClickHouseDateTime(),
       };
-      await systemClient.insert({
+      await ctx.systemClient.insert({
         table: 'workspaces',
         values: [workspace],
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/workspaces.delete')
         .set('Authorization', `Bearer ${authToken}`)
         .send({ id: workspace.id })
         .expect(200);
 
       // Wait for delete mutation to complete
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await waitForMutations(ctx.systemClient, TEST_SYSTEM_DATABASE);
 
       // Verify deleted from ClickHouse system database
-      const result = await systemClient.query({
+      const result = await ctx.systemClient.query({
         query: 'SELECT * FROM workspaces WHERE id = {id:String}',
         query_params: { id: workspace.id },
         format: 'JSONEachRow',
@@ -711,7 +623,7 @@ describe('Workspaces Integration', () => {
     });
 
     it('returns 404 for non-existent workspace', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/workspaces.delete')
         .set('Authorization', `Bearer ${authToken}`)
         .send({ id: 'nonexistent_id' })
@@ -719,7 +631,7 @@ describe('Workspaces Integration', () => {
     });
 
     it('requires authentication', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/workspaces.delete')
         .send({ id: 'some_id' })
         .expect(401);
@@ -728,7 +640,7 @@ describe('Workspaces Integration', () => {
 
   describe('Table Schema Verification', () => {
     it('workspaces table has all required columns with correct types', async () => {
-      const result = await systemClient.query({
+      const result = await ctx.systemClient.query({
         query: 'DESCRIBE TABLE workspaces',
         format: 'JSONEachRow',
       });
@@ -750,7 +662,7 @@ describe('Workspaces Integration', () => {
     });
 
     it('sessions table has all required columns (in workspace database)', async () => {
-      const result = await workspaceClient.query({
+      const result = await ctx.workspaceClient!.query({
         query: 'DESCRIBE TABLE sessions',
         format: 'JSONEachRow',
       });
@@ -787,7 +699,7 @@ describe('Workspaces Integration', () => {
     });
 
     it('events table has all required columns (in workspace database)', async () => {
-      const result = await workspaceClient.query({
+      const result = await ctx.workspaceClient!.query({
         query: 'DESCRIBE TABLE events',
         format: 'JSONEachRow',
       });

@@ -1,118 +1,57 @@
 // Set env vars BEFORE any imports to ensure ConfigModule picks them up
-const TEST_SYSTEM_DATABASE = 'staminads_test_system';
-process.env.NODE_ENV = 'test';
-process.env.CLICKHOUSE_SYSTEM_DATABASE = TEST_SYSTEM_DATABASE;
-process.env.JWT_SECRET = 'test-secret-key';
-process.env.ADMIN_EMAIL = 'admin@test.com';
-process.env.ADMIN_PASSWORD = 'testpass';
-process.env.ENCRYPTION_KEY = 'test-encryption-key-32-chars-ok!';
+import { setupTestEnv } from './constants/test-config';
+setupTestEnv();
 
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
-import { createClient, ClickHouseClient } from '@clickhouse/client';
+import { ClickHouseClient } from '@clickhouse/client';
 import request from 'supertest';
-import { AppModule } from '../src/app.module';
-import { generateId, hashPassword } from '../src/common/crypto';
-// Workspace ID used in tests - must match what's inserted into workspaces table
-const testWorkspaceId = 'analytics_test_ws';
-// DB name = staminads_ws_<workspace_id> (matches what ClickHouseService.getWorkspaceDatabaseName returns)
-const TEST_WORKSPACE_DATABASE = `staminads_ws_${testWorkspaceId}`;
+import {
+  toClickHouseDateTime,
+  createUserWithToken,
+  createTestWorkspace,
+  truncateSystemTables,
+  truncateWorkspaceTables,
+  createTestApp,
+  closeTestApp,
+  waitForClickHouse,
+  TestAppContext,
+} from './helpers';
 
-function toClickHouseDateTime(date: Date = new Date()): string {
-  return date.toISOString().replace('T', ' ').replace('Z', '');
-}
+// Workspace ID used in tests
+const testWorkspaceId = 'analytics_test_ws';
 
 describe('Analytics E2E', () => {
-  let app: INestApplication;
+  let ctx: TestAppContext;
   let systemClient: ClickHouseClient;
   let workspaceClient: ClickHouseClient;
   let authToken: string;
   let workspaceId: string;
 
   beforeAll(async () => {
-    const moduleFixture = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        transform: true,
-      }),
-    );
-    await app.init();
-
-    systemClient = createClient({
-      url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
-      database: TEST_SYSTEM_DATABASE,
-    });
-
-    workspaceClient = createClient({
-      url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
-      database: TEST_WORKSPACE_DATABASE,
-    });
-
-    // Create test user for this test suite
-    const testEmail = 'analytics-test@test.com';
-    const testPassword = 'password123';
-    const passwordHash = await hashPassword(testPassword);
-    const now = toClickHouseDateTime();
+    ctx = await createTestApp({ workspaceId: testWorkspaceId });
+    systemClient = ctx.systemClient;
+    workspaceClient = ctx.workspaceClient!;
 
     // Clean users table first to avoid duplicates
-    await systemClient.command({ query: 'TRUNCATE TABLE users' });
+    await truncateSystemTables(systemClient, ['users']);
 
-    await systemClient.insert({
-      table: 'users',
-      values: [
-        {
-          id: generateId(),
-          email: testEmail,
-          password_hash: passwordHash,
-          name: 'Analytics Test User',
-          type: 'user',
-          status: 'active',
-          is_super_admin: 1,
-          failed_login_attempts: 0,
-          created_at: now,
-          updated_at: now,
-        },
-      ],
-      format: 'JSONEachRow',
-    });
-
-    // Force ClickHouse to merge parts and make data visible
-    await systemClient.command({ query: 'OPTIMIZE TABLE users FINAL' });
-    await new Promise((resolve) => setTimeout(resolve, 200));
-
-    // Get auth token
-    const loginRes = await request(app.getHttpServer())
-      .post('/api/auth.login')
-      .send({ email: testEmail, password: testPassword });
-
-    expect(loginRes.status).toBe(201);
-    authToken = loginRes.body.access_token;
+    // Create test user for this test suite (uses default TEST_PASSWORD)
+    const { token } = await createUserWithToken(
+      ctx.app,
+      systemClient,
+      'analytics-test@test.com',
+      undefined,
+      { name: 'Analytics Test User', isSuperAdmin: true },
+    );
+    authToken = token;
 
     // Create test workspace in system database
     workspaceId = testWorkspaceId;
-    await systemClient.command({ query: 'TRUNCATE TABLE workspaces' });
-    await workspaceClient.command({ query: 'TRUNCATE TABLE sessions' });
-    await systemClient.insert({
-      table: 'workspaces',
-      values: [
-        {
-          id: workspaceId,
-          name: 'Analytics Test Workspace',
-          website: 'https://test.com',
-          timezone: 'UTC',
-          currency: 'USD',
-          status: 'active',
-          timescore_reference: 60,
-          created_at: toClickHouseDateTime(),
-          updated_at: toClickHouseDateTime(),
-        },
-      ],
-      format: 'JSONEachRow',
+    await truncateSystemTables(systemClient, ['workspaces'], 0);
+    await truncateWorkspaceTables(workspaceClient, ['sessions'], 0);
+
+    await createTestWorkspace(systemClient, workspaceId, {
+      name: 'Analytics Test Workspace',
+      website: 'https://test.com',
     });
 
     // Seed test sessions in workspace database
@@ -182,18 +121,16 @@ describe('Analytics E2E', () => {
       format: 'JSONEachRow',
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await waitForClickHouse(200);
   });
 
   afterAll(async () => {
-    await systemClient.close();
-    await workspaceClient.close();
-    await app.close();
+    await closeTestApp(ctx);
   });
 
   describe('POST /api/analytics.query', () => {
     it('returns sessions count with no dimensions', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -209,7 +146,7 @@ describe('Analytics E2E', () => {
     });
 
     it('includes multiple metrics', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -225,7 +162,7 @@ describe('Analytics E2E', () => {
     });
 
     it('groups by dimension', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -248,7 +185,7 @@ describe('Analytics E2E', () => {
     });
 
     it('groups by multiple dimensions', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -264,7 +201,7 @@ describe('Analytics E2E', () => {
     });
 
     it('applies filters correctly', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -281,7 +218,7 @@ describe('Analytics E2E', () => {
     });
 
     it('applies in filter correctly', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -298,7 +235,7 @@ describe('Analytics E2E', () => {
     });
 
     it('returns time series with granularity', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -317,7 +254,7 @@ describe('Analytics E2E', () => {
     });
 
     it('fills gaps with zeros', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -342,13 +279,13 @@ describe('Analytics E2E', () => {
     });
 
     it('resolves date preset', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           workspace_id: workspaceId,
           metrics: ['sessions'],
-          dateRange: { preset: 'last_30_days' },
+          dateRange: { preset: 'previous_30_days' },
         })
         .expect(200);
 
@@ -356,7 +293,7 @@ describe('Analytics E2E', () => {
     });
 
     it('respects custom order', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -375,7 +312,7 @@ describe('Analytics E2E', () => {
     });
 
     it('respects limit', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -391,7 +328,7 @@ describe('Analytics E2E', () => {
     });
 
     it('returns comparison data', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -409,7 +346,7 @@ describe('Analytics E2E', () => {
     });
 
     it('validates unknown metric', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -421,7 +358,7 @@ describe('Analytics E2E', () => {
     });
 
     it('validates unknown dimension', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -434,7 +371,7 @@ describe('Analytics E2E', () => {
     });
 
     it('validates unknown workspace', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -446,7 +383,7 @@ describe('Analytics E2E', () => {
     });
 
     it('requires authentication', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .send({
           workspace_id: workspaceId,
@@ -457,7 +394,7 @@ describe('Analytics E2E', () => {
     });
 
     it('returns SQL in response for debugging', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -476,7 +413,7 @@ describe('Analytics E2E', () => {
 
   describe('GET /api/analytics.metrics', () => {
     it('returns available metrics', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/analytics.metrics')
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
@@ -496,7 +433,7 @@ describe('Analytics E2E', () => {
 
   describe('GET /api/analytics.dimensions', () => {
     it('returns available dimensions', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/analytics.dimensions')
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
@@ -512,7 +449,7 @@ describe('Analytics E2E', () => {
 
   describe('POST /api/analytics.extremes', () => {
     it('returns min and max values', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/analytics.extremes')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -534,7 +471,7 @@ describe('Analytics E2E', () => {
     });
 
     it('returns extremes for sessions metric', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/analytics.extremes')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -550,7 +487,7 @@ describe('Analytics E2E', () => {
     });
 
     it('applies filters correctly', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/analytics.extremes')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -569,14 +506,14 @@ describe('Analytics E2E', () => {
     });
 
     it('resolves date preset', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/analytics.extremes')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           workspace_id: workspaceId,
           metric: 'median_duration',
           groupBy: ['channel'],
-          dateRange: { preset: 'last_30_days' },
+          dateRange: { preset: 'previous_30_days' },
         })
         .expect(200);
 
@@ -585,7 +522,7 @@ describe('Analytics E2E', () => {
     });
 
     it('handles multiple groupBy dimensions', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/analytics.extremes')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -602,7 +539,7 @@ describe('Analytics E2E', () => {
     });
 
     it('returns 0 for empty result', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/analytics.extremes')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -619,7 +556,7 @@ describe('Analytics E2E', () => {
     });
 
     it('rejects unknown metric', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/analytics.extremes')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -632,7 +569,7 @@ describe('Analytics E2E', () => {
     });
 
     it('rejects unknown dimension in groupBy', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/analytics.extremes')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -645,7 +582,7 @@ describe('Analytics E2E', () => {
     });
 
     it('rejects empty groupBy array', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/analytics.extremes')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -658,7 +595,7 @@ describe('Analytics E2E', () => {
     });
 
     it('requires authentication', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/analytics.extremes')
         .send({
           workspace_id: workspaceId,
@@ -679,14 +616,14 @@ describe('Analytics E2E', () => {
       };
 
       // First request - should hit database
-      const response1 = await request(app.getHttpServer())
+      const response1 = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send(query)
         .expect(200);
 
       // Second identical request - should return cached response
-      const response2 = await request(app.getHttpServer())
+      const response2 = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send(query)
@@ -710,13 +647,13 @@ describe('Analytics E2E', () => {
         dateRange: { start: '2025-12-01', end: '2025-12-10' },
       };
 
-      const response1 = await request(app.getHttpServer())
+      const response1 = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send(query1)
         .expect(200);
 
-      const response2 = await request(app.getHttpServer())
+      const response2 = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send(query2)
@@ -734,13 +671,13 @@ describe('Analytics E2E', () => {
         dateRange: { start: '2025-12-01', end: '2025-12-10' },
       };
 
-      const response1 = await request(app.getHttpServer())
+      const response1 = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send({ ...baseQuery, metrics: ['sessions'] })
         .expect(200);
 
-      const response2 = await request(app.getHttpServer())
+      const response2 = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send({ ...baseQuery, metrics: ['avg_duration'] })
@@ -758,7 +695,7 @@ describe('Analytics E2E', () => {
         dateRange: { start: '2025-12-01', end: '2025-12-31' },
       };
 
-      const response1 = await request(app.getHttpServer())
+      const response1 = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -769,7 +706,7 @@ describe('Analytics E2E', () => {
         })
         .expect(200);
 
-      const response2 = await request(app.getHttpServer())
+      const response2 = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -795,23 +732,23 @@ describe('Analytics E2E', () => {
 
       // Fire 5 identical requests concurrently
       const responses = await Promise.all([
-        request(app.getHttpServer())
+        request(ctx.app.getHttpServer())
           .post('/api/analytics.query')
           .set('Authorization', `Bearer ${authToken}`)
           .send(query),
-        request(app.getHttpServer())
+        request(ctx.app.getHttpServer())
           .post('/api/analytics.query')
           .set('Authorization', `Bearer ${authToken}`)
           .send(query),
-        request(app.getHttpServer())
+        request(ctx.app.getHttpServer())
           .post('/api/analytics.query')
           .set('Authorization', `Bearer ${authToken}`)
           .send(query),
-        request(app.getHttpServer())
+        request(ctx.app.getHttpServer())
           .post('/api/analytics.query')
           .set('Authorization', `Bearer ${authToken}`)
           .send(query),
-        request(app.getHttpServer())
+        request(ctx.app.getHttpServer())
           .post('/api/analytics.query')
           .set('Authorization', `Bearer ${authToken}`)
           .send(query),
@@ -835,14 +772,14 @@ describe('Analytics E2E', () => {
         },
       };
 
-      const response1 = await request(app.getHttpServer())
+      const response1 = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send(query)
         .expect(200);
 
       // Same query should return cached result
-      const response2 = await request(app.getHttpServer())
+      const response2 = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
         .send(query)

@@ -1,129 +1,48 @@
 // Set env vars BEFORE any imports to ensure ConfigModule picks them up
-const TEST_SYSTEM_DATABASE = 'staminads_test_system';
-process.env.NODE_ENV = 'test';
-process.env.CLICKHOUSE_SYSTEM_DATABASE = TEST_SYSTEM_DATABASE;
-process.env.JWT_SECRET = 'test-secret-key';
-process.env.ADMIN_EMAIL = 'admin@test.com';
-process.env.ADMIN_PASSWORD = 'testpass';
-process.env.ENCRYPTION_KEY = 'test-encryption-key-32-chars-ok!';
+import { setupTestEnv } from './constants/test-config';
+setupTestEnv();
 
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
-import { createClient, ClickHouseClient } from '@clickhouse/client';
+import { ClickHouseClient } from '@clickhouse/client';
 import request from 'supertest';
-import { AppModule } from '../src/app.module';
-import { generateId, hashPassword } from '../src/common/crypto';
+import {
+  toClickHouseDateTime,
+  createTestApp,
+  closeTestApp,
+  createUserWithToken,
+  truncateSystemTables,
+  truncateWorkspaceTables,
+  waitForClickHouse,
+  waitForBackfillsToComplete,
+  TestAppContext,
+} from './helpers';
+
 // Workspace ID must not contain hyphens since they're replaced with underscores in DB name
 const testWorkspaceId = 'backfill_test_ws';
-// DB name = staminads_ws_<workspace_id> (matches what ClickHouseService.getWorkspaceDatabaseName returns)
-const TEST_WORKSPACE_DATABASE = `staminads_ws_${testWorkspaceId}`;
-
-function toClickHouseDateTime(date: Date = new Date()): string {
-  return date.toISOString().replace('T', ' ').replace('Z', '');
-}
-
-function toClickHouseDate(date: Date): string {
-  return date.toISOString().split('T')[0];
-}
-
-/**
- * Wait for all running backfill tasks to complete.
- * This ensures test isolation when async processors are still running.
- */
-async function waitForBackfillsToComplete(
-  client: ClickHouseClient,
-  timeoutMs = 10000,
-): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const result = await client.query({
-      query: `SELECT count() as count FROM backfill_tasks FINAL
-              WHERE status IN ('pending', 'running')`,
-      format: 'JSONEachRow',
-    });
-    const rows = (await result.json()) as Record<string, unknown>[];
-    if (parseInt(String(rows[0]?.count ?? '0'), 10) === 0) {
-      return;
-    }
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  // Don't throw - just log and continue, allowing truncate to clean up
-  console.warn(
-    'Timeout waiting for backfills to complete, proceeding with cleanup',
-  );
-}
 
 describe('Backfill Integration', () => {
-  let app: INestApplication;
+  let ctx: TestAppContext;
   let systemClient: ClickHouseClient;
   let workspaceClient: ClickHouseClient;
   let authToken: string;
 
   beforeAll(async () => {
-    const moduleFixture = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        transform: true,
-      }),
-    );
-    await app.init();
-
-    // Direct ClickHouse clients for verification
-    systemClient = createClient({
-      url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
-      database: TEST_SYSTEM_DATABASE,
-    });
-
-    workspaceClient = createClient({
-      url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
-      database: TEST_WORKSPACE_DATABASE,
-    });
+    ctx = await createTestApp({ workspaceId: testWorkspaceId });
+    systemClient = ctx.systemClient;
+    workspaceClient = ctx.workspaceClient!;
 
     // Create test user for this test suite
-    const testEmail = 'backfill-test@test.com';
-    const testPassword = 'password123';
-    const passwordHash = await hashPassword(testPassword);
-    const now = toClickHouseDateTime();
-
-    await systemClient.insert({
-      table: 'users',
-      values: [
-        {
-          id: generateId(),
-          email: testEmail,
-          password_hash: passwordHash,
-          name: 'Backfill Test User',
-          type: 'user',
-          status: 'active',
-          is_super_admin: 1,
-          failed_login_attempts: 0,
-          created_at: now,
-          updated_at: now,
-        },
-      ],
-      format: 'JSONEachRow',
-    });
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // Get auth token
-    const loginRes = await request(app.getHttpServer())
-      .post('/api/auth.login')
-      .send({ email: testEmail, password: testPassword });
-
-    expect(loginRes.status).toBe(201);
-    expect(loginRes.body.access_token).toBeDefined();
-    authToken = loginRes.body.access_token;
+    const { token } = await createUserWithToken(
+      ctx.app,
+      systemClient,
+      'backfill-test@test.com',
+      undefined,
+      { name: 'Backfill Test User', isSuperAdmin: true },
+    );
+    authToken = token;
   });
 
   afterAll(async () => {
-    await systemClient.close();
-    await workspaceClient.close();
-    await app.close();
+    await closeTestApp(ctx);
   });
 
   beforeEach(async () => {
@@ -131,11 +50,9 @@ describe('Backfill Integration', () => {
     await waitForBackfillsToComplete(systemClient);
 
     // Clean tables before each test
-    await systemClient.command({ query: 'TRUNCATE TABLE workspaces' });
-    await workspaceClient.command({ query: 'TRUNCATE TABLE sessions' });
-    await workspaceClient.command({ query: 'TRUNCATE TABLE events' });
-    await systemClient.command({ query: 'TRUNCATE TABLE backfill_tasks' });
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await truncateSystemTables(systemClient, ['workspaces', 'backfill_tasks'], 0);
+    await truncateWorkspaceTables(workspaceClient, ['sessions', 'events'], 0);
+    await waitForClickHouse();
 
     // Create test workspace with filters in system database
     const filters = [
@@ -203,12 +120,12 @@ describe('Backfill Integration', () => {
       ],
       format: 'JSONEachRow',
     });
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await waitForClickHouse();
   });
 
   describe('POST /api/filters.backfillStart', () => {
     it('creates a backfill task and returns task_id', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillStart')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -222,7 +139,7 @@ describe('Backfill Integration', () => {
       expect(response.body.task_id.length).toBeGreaterThan(0);
 
       // Verify task was created in ClickHouse system database
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
       const result = await systemClient.query({
         query: 'SELECT * FROM backfill_tasks FINAL WHERE id = {id:String}',
         query_params: { id: response.body.task_id },
@@ -238,7 +155,7 @@ describe('Backfill Integration', () => {
     });
 
     it('snapshots filters at task creation', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillStart')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -247,7 +164,7 @@ describe('Backfill Integration', () => {
         })
         .expect(201);
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
       const result = await systemClient.query({
         query:
           'SELECT filters_snapshot FROM backfill_tasks FINAL WHERE id = {id:String}',
@@ -265,7 +182,7 @@ describe('Backfill Integration', () => {
 
     it('rejects concurrent backfill for same workspace', async () => {
       // Start first backfill
-      const firstResponse = await request(app.getHttpServer())
+      const firstResponse = await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillStart')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -277,7 +194,7 @@ describe('Backfill Integration', () => {
       expect(firstResponse.body.task_id).toBeDefined();
 
       // Try to start second backfill
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillStart')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -289,7 +206,7 @@ describe('Backfill Integration', () => {
 
     it('validates lookback_days range', async () => {
       // Too small
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillStart')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -299,7 +216,7 @@ describe('Backfill Integration', () => {
         .expect(400);
 
       // Too large
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillStart')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -310,7 +227,7 @@ describe('Backfill Integration', () => {
     });
 
     it('rejects non-existent workspace', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillStart')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -321,7 +238,7 @@ describe('Backfill Integration', () => {
     });
 
     it('accepts optional chunk_size_days and batch_size', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillStart')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -332,7 +249,7 @@ describe('Backfill Integration', () => {
         })
         .expect(201);
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
       const result = await systemClient.query({
         query:
           'SELECT chunk_size_days, batch_size FROM backfill_tasks FINAL WHERE id = {id:String}',
@@ -346,7 +263,7 @@ describe('Backfill Integration', () => {
     });
 
     it('requires authentication', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillStart')
         .send({
           workspace_id: testWorkspaceId,
@@ -361,7 +278,7 @@ describe('Backfill Integration', () => {
 
     beforeEach(async () => {
       // Create a task
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillStart')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -372,7 +289,7 @@ describe('Backfill Integration', () => {
     });
 
     it('returns task progress', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/filters.backfillStatus')
         .query({ task_id: taskId })
         .set('Authorization', `Bearer ${authToken}`)
@@ -389,7 +306,7 @@ describe('Backfill Integration', () => {
     });
 
     it('returns 404 for non-existent task', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/filters.backfillStatus')
         .query({ task_id: 'non-existent-task' })
         .set('Authorization', `Bearer ${authToken}`)
@@ -397,14 +314,14 @@ describe('Backfill Integration', () => {
     });
 
     it('requires task_id parameter', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/filters.backfillStatus')
         .set('Authorization', `Bearer ${authToken}`)
         .expect(400);
     });
 
     it('requires authentication', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/filters.backfillStatus')
         .query({ task_id: taskId })
         .expect(401);
@@ -415,7 +332,7 @@ describe('Backfill Integration', () => {
     let taskId: string;
 
     beforeEach(async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillStart')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -428,7 +345,7 @@ describe('Backfill Integration', () => {
     // Task may complete before cancel is processed (no data = instant completion)
     // Test accepts both success (201) and already completed (400) responses
     it('cancels a running task or handles already completed', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillCancel')
         .query({ task_id: taskId })
         .set('Authorization', `Bearer ${authToken}`);
@@ -462,7 +379,7 @@ describe('Backfill Integration', () => {
     });
 
     it('returns 404 for non-existent task', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillCancel')
         .query({ task_id: 'non-existent-task' })
         .set('Authorization', `Bearer ${authToken}`)
@@ -470,7 +387,7 @@ describe('Backfill Integration', () => {
     });
 
     it('requires authentication', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillCancel')
         .query({ task_id: taskId })
         .expect(401);
@@ -481,7 +398,7 @@ describe('Backfill Integration', () => {
     // Task may complete before cancel takes effect, so we accept multiple valid states
     it('returns all tasks for workspace', async () => {
       // Create first task
-      const response1 = await request(app.getHttpServer())
+      const response1 = await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillStart')
         .set('Authorization', `Bearer ${authToken}`)
         .send({ workspace_id: testWorkspaceId, lookback_days: 7 })
@@ -490,10 +407,10 @@ describe('Backfill Integration', () => {
       expect(response1.body.task_id).toBeDefined();
 
       // Wait for first task to complete (no data = fast completion)
-      await waitForBackfillsToComplete(systemClient, 15000);
+      await waitForBackfillsToComplete(systemClient, { timeoutMs: 15000 });
 
       // Create second task
-      const response2 = await request(app.getHttpServer())
+      const response2 = await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillStart')
         .set('Authorization', `Bearer ${authToken}`)
         .send({ workspace_id: testWorkspaceId, lookback_days: 30 })
@@ -502,9 +419,9 @@ describe('Backfill Integration', () => {
       expect(response2.body.task_id).toBeDefined();
 
       // Wait for second task to complete
-      await waitForBackfillsToComplete(systemClient, 15000);
+      await waitForBackfillsToComplete(systemClient, { timeoutMs: 15000 });
 
-      const listResponse = await request(app.getHttpServer())
+      const listResponse = await request(ctx.app.getHttpServer())
         .get('/api/filters.backfillList')
         .query({ workspace_id: testWorkspaceId })
         .set('Authorization', `Bearer ${authToken}`)
@@ -521,7 +438,7 @@ describe('Backfill Integration', () => {
       await systemClient.command({ query: 'TRUNCATE TABLE backfill_tasks' });
       await new Promise((resolve) => setTimeout(resolve, 200));
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/filters.backfillList')
         .query({ workspace_id: testWorkspaceId })
         .set('Authorization', `Bearer ${authToken}`)
@@ -531,14 +448,14 @@ describe('Backfill Integration', () => {
     });
 
     it('requires workspace_id parameter', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/filters.backfillList')
         .set('Authorization', `Bearer ${authToken}`)
         .expect(400);
     });
 
     it('requires authentication', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/filters.backfillList')
         .query({ workspace_id: testWorkspaceId })
         .expect(401);
@@ -547,7 +464,7 @@ describe('Backfill Integration', () => {
 
   describe('GET /api/filters.backfillSummary', () => {
     it('returns summary with needsBackfill=true when no tasks', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/filters.backfillSummary')
         .query({ workspace_id: testWorkspaceId })
         .set('Authorization', `Bearer ${authToken}`)
@@ -563,14 +480,14 @@ describe('Backfill Integration', () => {
 
     it('returns activeTask when task is running', async () => {
       // Start a backfill task
-      const startResponse = await request(app.getHttpServer())
+      const startResponse = await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillStart')
         .set('Authorization', `Bearer ${authToken}`)
         .send({ workspace_id: testWorkspaceId, lookback_days: 7 });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/filters.backfillSummary')
         .query({ workspace_id: testWorkspaceId })
         .set('Authorization', `Bearer ${authToken}`)
@@ -584,7 +501,7 @@ describe('Backfill Integration', () => {
 
     it('returns needsBackfill=false after task completes with same filter version', async () => {
       // Start and wait for task to complete
-      const startResponse = await request(app.getHttpServer())
+      const startResponse = await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillStart')
         .set('Authorization', `Bearer ${authToken}`)
         .send({ workspace_id: testWorkspaceId, lookback_days: 1 });
@@ -593,7 +510,7 @@ describe('Backfill Integration', () => {
       let taskStatus = 'pending';
       for (let i = 0; i < 20; i++) {
         await new Promise((resolve) => setTimeout(resolve, 500));
-        const statusResponse = await request(app.getHttpServer())
+        const statusResponse = await request(ctx.app.getHttpServer())
           .get('/api/filters.backfillStatus')
           .query({ task_id: startResponse.body.task_id })
           .set('Authorization', `Bearer ${authToken}`);
@@ -603,7 +520,7 @@ describe('Backfill Integration', () => {
 
       expect(taskStatus).toBe('completed');
 
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .get('/api/filters.backfillSummary')
         .query({ workspace_id: testWorkspaceId })
         .set('Authorization', `Bearer ${authToken}`)
@@ -618,21 +535,21 @@ describe('Backfill Integration', () => {
     });
 
     it('requires workspace_id parameter', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/filters.backfillSummary')
         .set('Authorization', `Bearer ${authToken}`)
         .expect(400);
     });
 
     it('requires authentication', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/filters.backfillSummary')
         .query({ workspace_id: testWorkspaceId })
         .expect(401);
     });
 
     it('returns 404 for non-existent workspace', async () => {
-      await request(app.getHttpServer())
+      await request(ctx.app.getHttpServer())
         .get('/api/filters.backfillSummary')
         .query({ workspace_id: 'non-existent-workspace' })
         .set('Authorization', `Bearer ${authToken}`)
@@ -745,7 +662,7 @@ describe('Backfill Integration', () => {
         values: sessions,
         format: 'JSONEachRow',
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await waitForClickHouse();
     });
 
     it('verifies sessions exist before backfill', async () => {
@@ -767,7 +684,7 @@ describe('Backfill Integration', () => {
     });
 
     it('creates task with correct total counts', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillStart')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -780,7 +697,7 @@ describe('Backfill Integration', () => {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Check task status shows correct counts
-      const statusResponse = await request(app.getHttpServer())
+      const statusResponse = await request(ctx.app.getHttpServer())
         .get('/api/filters.backfillStatus')
         .query({ task_id: response.body.task_id })
         .set('Authorization', `Bearer ${authToken}`)
@@ -792,7 +709,7 @@ describe('Backfill Integration', () => {
 
     it('applies filters correctly to sessions after backfill', async () => {
       // Start backfill
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillStart')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -805,7 +722,7 @@ describe('Backfill Integration', () => {
       let taskStatus = 'pending';
       for (let i = 0; i < 30; i++) {
         await new Promise((resolve) => setTimeout(resolve, 500));
-        const statusResponse = await request(app.getHttpServer())
+        const statusResponse = await request(ctx.app.getHttpServer())
           .get('/api/filters.backfillStatus')
           .query({ task_id: response.body.task_id })
           .set('Authorization', `Bearer ${authToken}`);
@@ -848,7 +765,7 @@ describe('Backfill Integration', () => {
   describe('Error Handling and Recovery', () => {
     it('task status transitions correctly', async () => {
       // Start a backfill that will complete successfully
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillStart')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -858,7 +775,7 @@ describe('Backfill Integration', () => {
         .expect(201);
 
       // Initial status should be pending or running
-      const initialStatus = await request(app.getHttpServer())
+      const initialStatus = await request(ctx.app.getHttpServer())
         .get('/api/filters.backfillStatus')
         .query({ task_id: response.body.task_id })
         .set('Authorization', `Bearer ${authToken}`)
@@ -872,7 +789,7 @@ describe('Backfill Integration', () => {
       let taskStatus = 'pending';
       for (let i = 0; i < 20; i++) {
         await new Promise((resolve) => setTimeout(resolve, 500));
-        const statusRes = await request(app.getHttpServer())
+        const statusRes = await request(ctx.app.getHttpServer())
           .get('/api/filters.backfillStatus')
           .query({ task_id: response.body.task_id })
           .set('Authorization', `Bearer ${authToken}`);
@@ -885,7 +802,7 @@ describe('Backfill Integration', () => {
 
     it('task error_message field exists in database', async () => {
       // Start a backfill
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillStart')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -970,7 +887,7 @@ describe('Backfill Integration', () => {
 
     it('completed tasks have completed_at timestamp', async () => {
       // Start a backfill that will complete successfully
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillStart')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -983,7 +900,7 @@ describe('Backfill Integration', () => {
       let taskStatus = 'pending';
       for (let i = 0; i < 20; i++) {
         await new Promise((resolve) => setTimeout(resolve, 500));
-        const statusResponse = await request(app.getHttpServer())
+        const statusResponse = await request(ctx.app.getHttpServer())
           .get('/api/filters.backfillStatus')
           .query({ task_id: response.body.task_id })
           .set('Authorization', `Bearer ${authToken}`);
@@ -1009,7 +926,7 @@ describe('Backfill Integration', () => {
 
     it('final state tasks have completed_at timestamp', async () => {
       // Start a backfill that will complete
-      const response = await request(app.getHttpServer())
+      const response = await request(ctx.app.getHttpServer())
         .post('/api/filters.backfillStart')
         .set('Authorization', `Bearer ${authToken}`)
         .send({

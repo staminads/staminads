@@ -45,7 +45,7 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
         period: {
           type: 'string',
           enum: [...DATE_PRESETS],
-          description: 'Date range preset (e.g., last_7_days, this_month)',
+          description: 'Date range preset (e.g., previous_7_days, this_month)',
         },
         comparison: {
           type: 'string',
@@ -102,7 +102,7 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
         period: {
           type: 'string',
           enum: [...DATE_PRESETS],
-          description: 'Date range to search within (default: last_30_days)',
+          description: 'Date range to search within (default: previous_30_days)',
         },
         search: {
           type: 'string',

@@ -49,9 +49,10 @@ function generateDemoAnnotations(endDate: Date): Annotation[] {
     {
       id: randomUUID(),
       date: launchDateStr,
-      timezone: 'America/New_York',
+      time: '10:00',
+      timezone: 'America/Los_Angeles',
       title: 'iPhone 16 Launch',
-      description: 'Official launch day with keynote and product availability',
+      description: 'Apple keynote and product availability',
       color: '#22c55e', // Green (positive events)
     },
   ];

@@ -1,14 +1,15 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { Alert } from 'antd'
 import { getDeviceIcon } from '../../lib/device-icons'
 import { analyticsQueryOptions } from '../../lib/queries'
-import { determineGranularity } from '../../lib/chart-utils'
+import { determineGranularity, getAvailableGranularities } from '../../lib/chart-utils'
 import { determineGranularityForRange, computeDateRange } from '../../lib/date-utils'
 import { useDashboardParams } from '../../hooks/useDashboardParams'
 import { DashboardProvider } from '../../hooks/useDashboardContext'
 import { MetricSummary } from './MetricSummary'
 import { MetricChart } from './MetricChart'
+import { GranularitySelector } from './GranularitySelector'
 import { DimensionTableWidget } from './DimensionTableWidget'
 import { TrafficHeatmapWidget, type HeatmapDataPoint } from './TrafficHeatmapWidget'
 import {
@@ -30,7 +31,7 @@ interface DashboardGridProps {
   customEnd?: string
   annotations?: Annotation[]
   globalFilters?: Filter[]
-  onAddFilter?: (filter: Filter) => void
+  onAddFilter?: (filter: Filter | Filter[]) => void
 }
 
 export function DashboardGrid({
@@ -45,16 +46,34 @@ export function DashboardGrid({
   onAddFilter
 }: DashboardGridProps) {
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>('sessions')
+  const [granularityOverride, setGranularityOverride] = useState<Granularity | null>(null)
   const { period, timezone } = useDashboardParams(workspaceTimezone)
 
-  // Determine granularity - for custom ranges, compute dynamically
-  let granularity: Granularity
-  if (period === 'custom' && customStart && customEnd) {
-    const range = computeDateRange('custom', timezone, { start: customStart, end: customEnd })
-    granularity = determineGranularityForRange(range.start, range.end)
-  } else {
-    granularity = determineGranularity(period as DatePreset)
-  }
+  // Compute date range to get the number of days
+  const dateRangeForGranularity = useMemo(() => {
+    if (period === 'custom' && customStart && customEnd) {
+      return computeDateRange('custom', timezone, { start: customStart, end: customEnd })
+    }
+    return computeDateRange(period as DatePreset, timezone)
+  }, [period, timezone, customStart, customEnd])
+
+  const dateRangeDays = dateRangeForGranularity.end.diff(dateRangeForGranularity.start, 'day')
+  const availableGranularities = getAvailableGranularities(dateRangeDays)
+
+  // Determine default granularity
+  const defaultGranularity = period === 'custom' && customStart && customEnd
+    ? determineGranularityForRange(dateRangeForGranularity.start, dateRangeForGranularity.end)
+    : determineGranularity(period as DatePreset)
+
+  // Use override if valid, otherwise default
+  const granularity = granularityOverride && availableGranularities.includes(granularityOverride)
+    ? granularityOverride
+    : defaultGranularity
+
+  // Reset override when period changes
+  useEffect(() => {
+    setGranularityOverride(null)
+  }, [period, customStart, customEnd])
 
   const showComparison = comparison !== 'none'
 
@@ -293,21 +312,14 @@ export function DashboardGrid({
     })
   }, [onAddFilter, tabKeyToDimension])
 
-  // Heatmap cell click handler - adds filters for day_of_week and hour
+  // Heatmap cell click handler - adds filters for day_of_week and hour atomically
   const handleHeatmapCellClick = useCallback((dayOfWeek: number, hour: number) => {
     if (!onAddFilter) return
-    // Add day_of_week filter
-    onAddFilter({
-      dimension: 'day_of_week',
-      operator: 'equals',
-      values: [dayOfWeek]
-    })
-    // Add hour filter
-    onAddFilter({
-      dimension: 'hour',
-      operator: 'equals',
-      values: [hour]
-    })
+    // Add both filters in a single call for atomic URL update
+    onAddFilter([
+      { dimension: 'day_of_week', operator: 'equals', values: [dayOfWeek] },
+      { dimension: 'hour', operator: 'equals', values: [hour] }
+    ])
   }, [onAddFilter])
 
   if (isError) {
@@ -344,6 +356,15 @@ export function DashboardGrid({
             showComparison={showComparison}
           />
           <div className="pl-2 pr-4 pt-4 pb-3">
+            {availableGranularities.length > 1 && (
+              <div className="flex justify-end mb-2">
+                <GranularitySelector
+                  value={granularity}
+                  onChange={setGranularityOverride}
+                  availableGranularities={availableGranularities}
+                />
+              </div>
+            )}
             <MetricChart
               metric={metric}
               currentData={metricData?.current ?? []}

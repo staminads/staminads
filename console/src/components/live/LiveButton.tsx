@@ -15,7 +15,7 @@ export function LiveButton({ workspaceId, workspaceTimezone }: LiveButtonProps) 
     liveAnalyticsQueryOptions({
       workspace_id: workspaceId,
       metrics: ['sessions'],
-      dateRange: { preset: 'last_30_minutes' },
+      dateRange: { preset: 'previous_30_minutes' },
       timezone,
     })
   )

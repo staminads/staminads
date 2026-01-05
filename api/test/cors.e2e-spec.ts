@@ -1,12 +1,7 @@
 // Set env vars BEFORE any imports to ensure ConfigModule picks them up
-process.env.NODE_ENV = 'test';
-process.env.CLICKHOUSE_SYSTEM_DATABASE = 'staminads_test_system';
-process.env.JWT_SECRET = 'test-secret-key';
-process.env.ADMIN_EMAIL = 'admin@test.com';
-process.env.ADMIN_PASSWORD = 'testpass';
-process.env.ENCRYPTION_KEY = 'test-encryption-key-32-chars-ok!';
+import { setupTestEnv } from './constants/test-config';
 const ALLOWED_ORIGINS = ['http://localhost:5173', 'https://console.example.com'];
-process.env.CORS_ALLOWED_ORIGINS = ALLOWED_ORIGINS.join(',');
+setupTestEnv({ corsOrigins: ALLOWED_ORIGINS });
 
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { CorsOptionsDelegate } from '@nestjs/common/interfaces/external/cors-options.interface';
@@ -166,8 +161,6 @@ describe('CORS with no CORS_ALLOWED_ORIGINS (default permissive)', () => {
   beforeAll(async () => {
     // Clear CORS env var to test default behavior
     delete process.env.CORS_ALLOWED_ORIGINS;
-    process.env.CLICKHOUSE_SYSTEM_DATABASE = 'staminads_test_system';
-    process.env.JWT_SECRET = 'test-secret-key';
 
     const moduleFixture = await Test.createTestingModule({
       imports: [AppModule],

@@ -68,7 +68,7 @@ describe('buildSystemPrompt', () => {
     const workspace = createWorkspace();
     const currentState: ExploreStateDto = {
       dimensions: ['country', 'device'],
-      period: 'last_7_days',
+      period: 'previous_7_days',
       comparison: 'previous_period',
       minSessions: 10,
       filters: [{ dimension: 'country', operator: 'equals', values: ['US'] }],
@@ -78,7 +78,7 @@ describe('buildSystemPrompt', () => {
 
     expect(prompt).toContain('Current Explore Configuration');
     expect(prompt).toContain('Dimensions: country, device');
-    expect(prompt).toContain('Period: last_7_days');
+    expect(prompt).toContain('Period: previous_7_days');
     expect(prompt).toContain('Comparison: previous_period');
     expect(prompt).toContain('Min Sessions: 10');
     expect(prompt).toContain('country');
@@ -91,7 +91,7 @@ describe('buildSystemPrompt', () => {
     const prompt = buildSystemPrompt(workspace, currentState);
 
     expect(prompt).toContain('Dimensions: None');
-    expect(prompt).toContain('Period: last_7_days');
+    expect(prompt).toContain('Period: previous_7_days');
     expect(prompt).toContain('Comparison: previous_period');
     expect(prompt).toContain('Filters: None');
     expect(prompt).toContain('Min Sessions: 1');

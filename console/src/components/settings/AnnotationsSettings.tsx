@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Table, Button, Modal, Form, Input, DatePicker, Select, message, Popconfirm } from 'antd'
+import { Table, Button, Modal, Form, Input, DatePicker, TimePicker, Select, message, Popconfirm } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { nanoid } from 'nanoid'
@@ -11,15 +11,13 @@ interface AnnotationsSettingsProps {
   workspace: Workspace
 }
 
-const DEFAULT_COLOR = '#7763f1'
+const DEFAULT_COLOR = '#3b82f6'
 
 const PRESET_COLORS = [
-  '#7763f1', // Purple (primary)
   '#22c55e', // Green (positive events)
   '#ef4444', // Red (incidents/issues)
   '#f59e0b', // Orange (warnings)
   '#3b82f6', // Blue (informational)
-  '#6b7280', // Gray (neutral)
 ]
 
 const COMMON_TIMEZONES = [
@@ -78,6 +76,7 @@ export function AnnotationsSettings({ workspace }: AnnotationsSettingsProps) {
     form.resetFields()
     form.setFieldsValue({
       timezone: workspace.timezone,
+      time: dayjs('12:00', 'HH:mm'),
     })
     setSelectedColor(DEFAULT_COLOR)
     setIsModalOpen(true)
@@ -87,6 +86,7 @@ export function AnnotationsSettings({ workspace }: AnnotationsSettingsProps) {
     setEditingAnnotation(annotation)
     form.setFieldsValue({
       date: dayjs(annotation.date),
+      time: dayjs(annotation.time, 'HH:mm'),
       timezone: annotation.timezone || workspace.timezone,
       title: annotation.title,
       description: annotation.description,
@@ -108,6 +108,7 @@ export function AnnotationsSettings({ workspace }: AnnotationsSettingsProps) {
       const annotation: Annotation = {
         id: editingAnnotation?.id ?? nanoid(),
         date: values.date.format('YYYY-MM-DD'),
+        time: values.time.format('HH:mm'),
         timezone: values.timezone,
         title: values.title,
         description: values.description || undefined,
@@ -136,10 +137,10 @@ export function AnnotationsSettings({ workspace }: AnnotationsSettingsProps) {
       title: 'Date',
       dataIndex: 'date',
       key: 'date',
-      width: 140,
+      width: 160,
       render: (_: string, record: Annotation) => (
         <div>
-          <div className="font-semibold">{dayjs(record.date).format('MMM D, YYYY')}</div>
+          <div className="font-semibold">{dayjs(record.date).format('MMM D, YYYY')} {record.time}</div>
           <div className="text-xs text-gray-400">{record.timezone}</div>
         </div>
       ),
@@ -235,9 +236,17 @@ export function AnnotationsSettings({ workspace }: AnnotationsSettingsProps) {
               name="date"
               label="Date"
               rules={[{ required: true, message: 'Date is required' }]}
-              className="flex-1"
+              style={{ minWidth: 160 }}
             >
               <DatePicker className="w-full" />
+            </Form.Item>
+
+            <Form.Item
+              name="time"
+              label="Time"
+              rules={[{ required: true, message: 'Time is required' }]}
+            >
+              <TimePicker format="HH:mm" />
             </Form.Item>
 
             <Form.Item label="Color">
