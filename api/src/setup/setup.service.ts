@@ -4,10 +4,7 @@ import { ClickHouseService } from '../database/clickhouse.service';
 import { UsersService } from '../users/users.service';
 import { generateId, hashPassword } from '../common/crypto';
 import { User } from '../common/entities';
-
-function toClickHouseDateTime(date: Date = new Date()): string {
-  return date.toISOString().replace('T', ' ').replace('Z', '');
-}
+import { toClickHouseDateTime } from '../common/utils/datetime.util';
 
 @Injectable()
 export class SetupService {

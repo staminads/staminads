@@ -7,6 +7,7 @@ import {
   Request,
   UseGuards,
   Headers,
+  HttpCode,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -34,7 +35,7 @@ export class AuthController {
   @AuthThrottle()
   @ApiOperation({ summary: 'Login with email and password' })
   @ApiResponse({
-    status: 200,
+    status: 201,
     description: 'Login successful',
     schema: {
       properties: {
@@ -65,7 +66,7 @@ export class AuthController {
   @AuthThrottle()
   @ApiOperation({ summary: 'Request password reset email' })
   @ApiResponse({
-    status: 200,
+    status: 201,
     description: 'Reset email sent (if email exists)',
     schema: {
       properties: {
@@ -83,6 +84,7 @@ export class AuthController {
   }
 
   @Post('auth.resetPassword')
+  @HttpCode(200)
   @Public()
   @AuthThrottle()
   @ApiOperation({ summary: 'Reset password with token' })
@@ -134,6 +136,7 @@ export class AuthController {
   }
 
   @Post('auth.revokeSession')
+  @HttpCode(200)
   @UseGuards(JwtAuthGuard)
   @ApiSecurity('jwt-auth')
   @ApiOperation({ summary: 'Revoke a specific session' })
@@ -156,6 +159,7 @@ export class AuthController {
   }
 
   @Post('auth.revokeAllSessions')
+  @HttpCode(200)
   @UseGuards(JwtAuthGuard)
   @ApiSecurity('jwt-auth')
   @ApiOperation({ summary: 'Logout from all devices' })

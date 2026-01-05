@@ -6,6 +6,7 @@ import { compileFiltersToSQL, CompiledFilters } from '../lib/filter-compiler';
 
 // Import type only to avoid circular dependency
 import type { FilterBackfillService } from './backfill.service';
+import { toClickHouseDateTime } from '../../common/utils/datetime.util';
 
 const EVENTS_TTL_DAYS = 7;
 
@@ -19,10 +20,6 @@ const SEMAPHORE_TIMEOUT_MS = 60000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function toClickHouseDateTime(date: Date = new Date()): string {
-  return date.toISOString().replace('T', ' ').replace('Z', '');
 }
 
 function toClickHouseDate(date: Date): string {
@@ -317,8 +314,8 @@ export class FilterBackfillProcessor {
     }>(
       task.workspace_id,
       `SELECT
-         (SELECT count() FROM sessions WHERE created_at >= {start_date:DateTime64(3)}) as total_sessions,
-         (SELECT count() FROM events WHERE created_at >= {start_date:DateTime64(3)}) as total_events`,
+         (SELECT count() FROM sessions WHERE created_at >= toDateTime64({start_date:String}, 3)) as total_sessions,
+         (SELECT count() FROM events WHERE created_at >= toDateTime64({start_date:String}, 3)) as total_events`,
       {
         start_date: toClickHouseDateTime(startDate),
       },

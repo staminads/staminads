@@ -163,8 +163,10 @@ export class Sender {
         continue;
       }
 
-      // Exponential backoff
-      const backoff = Math.min(1000 * Math.pow(2, item.attempts), 30000);
+      // Exponential backoff: 0s, 2s, 4s, 8s, 16s, 30s (capped)
+      // attempts=0 (first retry): no backoff, try immediately
+      // attempts=1: 2s backoff, attempts=2: 4s, attempts=3: 8s, etc.
+      const backoff = item.attempts === 0 ? 0 : Math.min(1000 * Math.pow(2, item.attempts), 30000);
       if (item.last_attempt && Date.now() - item.last_attempt < backoff) {
         remaining.push(item);
         continue;

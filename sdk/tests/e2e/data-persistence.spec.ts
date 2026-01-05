@@ -191,7 +191,7 @@ test.describe('Data Persistence', () => {
 
     // Wait and trigger activity
     await page.waitForTimeout(1000);
-    await page.evaluate(() => Staminads.track('activity'));
+    await page.evaluate(() => Staminads.trackEvent('activity'));
     await page.waitForTimeout(500);
 
     // Get updated timestamp

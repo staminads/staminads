@@ -138,7 +138,7 @@ describe('DemoService', () => {
         (a) => a.title === 'iPhone 16 Launch',
       );
       expect(launchAnnotation).toBeDefined();
-      expect(launchAnnotation!.timezone).toBe('America/New_York');
+      expect(launchAnnotation!.timezone).toBe('America/Los_Angeles');
       expect(launchAnnotation!.color).toBe('#22c55e');
     });
 

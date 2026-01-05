@@ -94,7 +94,7 @@ test.describe('Mobile Emulation', () => {
     // Wait a bit more focused
     await page.waitForTimeout(500);
 
-    await page.evaluate(() => Staminads.track('freeze_check'));
+    await page.evaluate(() => Staminads.trackEvent('freeze_check'));
     await page.waitForTimeout(500);
 
     const response = await request.get('/api/test/events/freeze_check');

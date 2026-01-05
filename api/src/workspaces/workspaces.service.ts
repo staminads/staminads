@@ -17,16 +17,13 @@ import {
   AnthropicIntegration,
 } from './entities/integration.entity';
 import { encryptApiKey, generateId } from '../common/crypto';
+import { toClickHouseDateTime } from '../common/utils/datetime.util';
 
 interface CurrentUser {
   id: string;
   email: string;
   name: string;
   isSuperAdmin: boolean;
-}
-
-function toClickHouseDateTime(date: Date = new Date()): string {
-  return date.toISOString().replace('T', ' ').replace('Z', '');
 }
 
 interface WorkspaceRow extends Omit<Workspace, 'settings'> {

@@ -16,13 +16,7 @@ import {
 import { METRICS, MetricContext } from './constants/metrics';
 import { DIMENSIONS } from './constants/dimensions';
 import { Workspace } from '../workspaces/entities/workspace.entity';
-
-// Convert ISO date string to ClickHouse DateTime64 format
-function toClickHouseDateTime(isoDate: string): string {
-  // ClickHouse expects: 2025-12-01 00:00:00.000
-  // ISO format is: 2025-12-01T00:00:00.000Z
-  return isoDate.replace('T', ' ').replace('Z', '');
-}
+import { isoToClickHouseDateTime } from '../common/utils/datetime.util';
 
 const GRANULARITY_COLUMNS: Record<string, string> = {
   hour: 'date_hour',
@@ -131,10 +125,10 @@ export class AnalyticsService {
 
     // Convert ISO dates to ClickHouse format if they contain 'T'
     if (resolvedDateRange.start?.includes('T')) {
-      resolvedDateRange.start = toClickHouseDateTime(resolvedDateRange.start);
+      resolvedDateRange.start = isoToClickHouseDateTime(resolvedDateRange.start)!;
     }
     if (resolvedDateRange.end?.includes('T')) {
-      resolvedDateRange.end = toClickHouseDateTime(resolvedDateRange.end);
+      resolvedDateRange.end = isoToClickHouseDateTime(resolvedDateRange.end)!;
     }
 
     // Build query with resolved dates
@@ -221,10 +215,10 @@ export class AnalyticsService {
 
     // Convert ISO dates to ClickHouse format if they contain 'T'
     if (compareDateRange.start?.includes('T')) {
-      compareDateRange.start = toClickHouseDateTime(compareDateRange.start);
+      compareDateRange.start = isoToClickHouseDateTime(compareDateRange.start)!;
     }
     if (compareDateRange.end?.includes('T')) {
-      compareDateRange.end = toClickHouseDateTime(compareDateRange.end);
+      compareDateRange.end = isoToClickHouseDateTime(compareDateRange.end)!;
     }
 
     // Build current period query (pass timezone for granularity grouping)
@@ -348,10 +342,10 @@ export class AnalyticsService {
 
     // Convert ISO dates to ClickHouse format
     if (resolvedDateRange.start?.includes('T')) {
-      resolvedDateRange.start = toClickHouseDateTime(resolvedDateRange.start);
+      resolvedDateRange.start = isoToClickHouseDateTime(resolvedDateRange.start)!;
     }
     if (resolvedDateRange.end?.includes('T')) {
-      resolvedDateRange.end = toClickHouseDateTime(resolvedDateRange.end);
+      resolvedDateRange.end = isoToClickHouseDateTime(resolvedDateRange.end)!;
     }
 
     // Build metric context from workspace settings

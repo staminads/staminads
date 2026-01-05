@@ -672,10 +672,12 @@ describe('UsersService', () => {
     });
 
     it('returns true when locked_until is in the future', async () => {
-      const futureDate = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      const futureDate = new Date(Date.now() + 10 * 60 * 1000);
+      // ClickHouse format: YYYY-MM-DD HH:MM:SS.SSS (no T, no Z)
+      const clickhouseDate = futureDate.toISOString().replace('T', ' ').slice(0, -1);
       const lockedUser = {
         ...mockUser,
-        locked_until: futureDate,
+        locked_until: clickhouseDate,
       };
       clickhouse.querySystem.mockResolvedValue([lockedUser]);
 
@@ -685,10 +687,12 @@ describe('UsersService', () => {
     });
 
     it('returns false when locked_until is in the past', async () => {
-      const pastDate = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      const pastDate = new Date(Date.now() - 10 * 60 * 1000);
+      // ClickHouse format: YYYY-MM-DD HH:MM:SS.SSS (no T, no Z)
+      const clickhouseDate = pastDate.toISOString().replace('T', ' ').slice(0, -1);
       const expiredLockUser = {
         ...mockUser,
-        locked_until: pastDate,
+        locked_until: clickhouseDate,
       };
       clickhouse.querySystem.mockResolvedValue([expiredLockUser]);
 

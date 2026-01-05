@@ -214,6 +214,7 @@ export interface QueuedPayload {
 
 // Public API
 export interface StaminadsAPI {
+  init(config: StaminadsConfig): Promise<void>;
   getSessionId(): Promise<string>;
   getVisitorId(): Promise<string>;
   getConfig(): Readonly<StaminadsConfig> | null;

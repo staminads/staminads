@@ -110,10 +110,12 @@ describe('API Keys Integration', () => {
         workspace_id: 'test_ws_2',
         name: 'Full Access Key',
         scopes: [
+          'events.track',
           'analytics.view',
           'analytics.export',
           'workspace.read',
-          'workspace.manage',
+          'filters.manage',
+          'annotations.manage',
         ],
       };
 
@@ -123,13 +125,15 @@ describe('API Keys Integration', () => {
         .send(dto)
         .expect(201);
 
-      expect(response.body.apiKey.scopes).toHaveLength(4);
+      expect(response.body.apiKey.scopes).toHaveLength(6);
       expect(response.body.apiKey.scopes).toEqual(
         expect.arrayContaining([
+          'events.track',
           'analytics.view',
           'analytics.export',
           'workspace.read',
-          'workspace.manage',
+          'filters.manage',
+          'annotations.manage',
         ]),
       );
     });

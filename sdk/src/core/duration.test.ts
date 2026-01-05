@@ -235,6 +235,38 @@ describe('DurationTracker', () => {
       // Total: 1000 + 500 + 300 = 1800ms
       expect(tracker.getFocusDurationMs()).toBe(1800);
     });
+
+    it('BLURRED -> HIDDEN does not accumulate additional time', () => {
+      initializeTracker();
+
+      // Focus for 1000ms then pause (FOCUSED -> BLURRED)
+      mockPerformanceNow.mockReturnValue(1000);
+      tracker.pauseFocus();
+      expect(tracker.getFocusDurationMs()).toBe(1000);
+
+      // Time passes while blurred
+      mockPerformanceNow.mockReturnValue(5000);
+
+      // Hide (BLURRED -> HIDDEN) - should NOT accumulate the 4000ms
+      tracker.hideFocus();
+      expect(tracker.getFocusDurationMs()).toBe(1000); // Still 1000ms, not 5000ms
+    });
+
+    it('HIDDEN -> HIDDEN does not accumulate time', () => {
+      initializeTracker();
+
+      // Focus for 1000ms then hide
+      mockPerformanceNow.mockReturnValue(1000);
+      tracker.hideFocus();
+      expect(tracker.getFocusDurationMs()).toBe(1000);
+
+      // Time passes while hidden
+      mockPerformanceNow.mockReturnValue(5000);
+
+      // Hide again (no-op, should not accumulate)
+      tracker.hideFocus();
+      expect(tracker.getFocusDurationMs()).toBe(1000);
+    });
   });
 
   describe('tick callback', () => {

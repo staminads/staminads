@@ -332,8 +332,29 @@ describe('Sender', () => {
         expect(storedQueue[0].attempts).toBe(attempts); // Not incremented
       };
 
-      it('respects 1s backoff for attempts=0', async () => {
-        await testBackoff(0, 1000);
+      it('has no backoff for attempts=0 (immediate retry)', async () => {
+        // attempts=0 should retry immediately with no backoff
+        const item: QueuedPayload = {
+          id: 'immediate-retry-item',
+          payload: createPayload(),
+          created_at: Date.now() - 1000,
+          attempts: 0,
+          last_attempt: Date.now() - 100, // Very recent, but should still retry
+        };
+        mockLocalStorage._store['stm_pending'] = JSON.stringify([item]);
+
+        storage = new Storage();
+        sender = new Sender('https://api.example.com', storage);
+
+        mockSendBeacon.mockReturnValue(false);
+        mockFetch.mockResolvedValue({ ok: false }); // Force failure to increment attempts
+
+        await sender.flushQueue();
+
+        // Should have attempted (attempts incremented)
+        const storedQueue = JSON.parse(mockLocalStorage._store['stm_pending'] || '[]');
+        expect(storedQueue.length).toBe(1);
+        expect(storedQueue[0].attempts).toBe(1); // Incremented from 0 to 1
       });
 
       it('respects 2s backoff for attempts=1', async () => {

@@ -6,6 +6,7 @@ import {
   Query,
   UseGuards,
   BadRequestException,
+  HttpCode,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -21,6 +22,10 @@ import { CreateFilterDto } from './dto/create-filter.dto';
 import { UpdateFilterDto } from './dto/update-filter.dto';
 import { ReorderFiltersDto } from './dto/reorder-filters.dto';
 import { StartBackfillDto } from './backfill/dto/start-backfill.dto';
+import {
+  BackfillSuccessResponseDto,
+  BackfillStartResponseDto,
+} from './backfill/dto/backfill-response.dto';
 import { BackfillTaskProgress } from './backfill/backfill-task.entity';
 import { BackfillSummary } from './backfill/backfill.service';
 import { WorkspaceAuthGuard } from '../common/guards/workspace.guard';
@@ -75,6 +80,7 @@ export class FiltersController {
   }
 
   @Post('filters.update')
+  @HttpCode(200)
   @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Update filter' })
   @ApiResponse({ status: 200, description: 'Updated filter' })
@@ -87,11 +93,11 @@ export class FiltersController {
   @ApiOperation({ summary: 'Delete filter' })
   @ApiQuery({ name: 'workspace_id', type: String, required: true })
   @ApiQuery({ name: 'id', type: String, required: true })
-  @ApiResponse({ status: 200, description: 'Filter deleted' })
+  @ApiResponse({ status: 200, type: BackfillSuccessResponseDto })
   async delete(
     @Query('workspace_id') workspaceId: string,
     @Query('id') id: string,
-  ): Promise<{ success: boolean }> {
+  ): Promise<BackfillSuccessResponseDto> {
     await this.service.delete(workspaceId, id);
     return { success: true };
   }
@@ -99,8 +105,8 @@ export class FiltersController {
   @Post('filters.reorder')
   @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Reorder filters' })
-  @ApiResponse({ status: 200, description: 'Filters reordered' })
-  async reorder(@Body() dto: ReorderFiltersDto): Promise<{ success: boolean }> {
+  @ApiResponse({ status: 200, type: BackfillSuccessResponseDto })
+  async reorder(@Body() dto: ReorderFiltersDto): Promise<BackfillSuccessResponseDto> {
     await this.service.reorder(dto);
     return { success: true };
   }
@@ -119,10 +125,10 @@ export class FiltersController {
   @Post('filters.backfillStart')
   @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Start background backfill for all filters' })
-  @ApiResponse({ status: 201, description: 'Task created' })
+  @ApiResponse({ status: 201, type: BackfillStartResponseDto })
   async backfillStart(
     @Body() dto: StartBackfillDto,
-  ): Promise<{ task_id: string }> {
+  ): Promise<BackfillStartResponseDto> {
     return this.backfillService.startBackfill(dto);
   }
 
@@ -140,12 +146,13 @@ export class FiltersController {
   }
 
   @Post('filters.backfillCancel')
+  @HttpCode(200)
   @ApiOperation({ summary: 'Cancel running backfill task' })
   @ApiQuery({ name: 'task_id', type: String, required: true })
-  @ApiResponse({ status: 200, description: 'Task cancelled' })
+  @ApiResponse({ status: 200, type: BackfillSuccessResponseDto })
   async backfillCancel(
     @Query('task_id') taskId: string,
-  ): Promise<{ success: boolean }> {
+  ): Promise<BackfillSuccessResponseDto> {
     return this.backfillService.cancelTask(taskId);
   }
 

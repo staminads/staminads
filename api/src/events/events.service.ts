@@ -11,10 +11,7 @@ import {
   extractFieldValues,
   applyFilterResults,
 } from '../filters/lib/filter-evaluator';
-
-function toClickHouseDateTime(date: Date = new Date()): string {
-  return date.toISOString().replace('T', ' ').replace('Z', '');
-}
+import { toClickHouseDateTime } from '../common/utils/datetime.util';
 
 function parseUrl(urlString: string | undefined): {
   domain: string | null;

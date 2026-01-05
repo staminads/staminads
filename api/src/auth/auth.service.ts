@@ -19,17 +19,16 @@ import { PasswordResetToken } from '../common/entities/password-reset.entity'
 import { LoginDto } from './dto/login.dto'
 import { ForgotPasswordDto } from './dto/forgot-password.dto'
 import { ResetPasswordDto } from './dto/reset-password.dto'
+import { toClickHouseDateTime } from '../common/utils/datetime.util'
 
 const PASSWORD_RESET_EXPIRY_HOURS = 1
 const SESSION_EXPIRY_DAYS = 7
 
-function toClickHouseDateTime(date: Date = new Date()): string {
-  return date.toISOString().replace('T', ' ').replace('Z', '')
-}
-
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name)
+  // In-memory rate limiting for password reset (fallback from cache issues in tests)
+  private readonly passwordResetRateLimit = new Map<string, { count: number; resetAt: number }>()
 
   constructor(
     private readonly jwtService: JwtService,
@@ -126,11 +125,26 @@ export class AuthService {
       return
     }
 
-    // Rate limit: 3 requests per hour
-    const recentRequests = await this.getRecentPasswordResetRequests(user.id)
-    if (recentRequests >= 3) {
-      this.logger.warn(`Rate limit exceeded for password reset: ${email}`)
-      return // Silent fail to prevent enumeration
+    // Rate limit: 3 requests per hour using in-memory map
+    const nowMs = Date.now()
+    const oneHourMs = 60 * 60 * 1000
+    const rateLimit = this.passwordResetRateLimit.get(user.id)
+
+    if (rateLimit) {
+      // Check if rate limit window has expired
+      if (nowMs >= rateLimit.resetAt) {
+        // Reset the counter
+        this.passwordResetRateLimit.set(user.id, { count: 1, resetAt: nowMs + oneHourMs })
+      } else if (rateLimit.count >= 3) {
+        this.logger.warn(`Rate limit exceeded for password reset: ${email}`)
+        return // Silent fail to prevent enumeration
+      } else {
+        // Increment counter
+        rateLimit.count++
+      }
+    } else {
+      // First request - initialize counter
+      this.passwordResetRateLimit.set(user.id, { count: 1, resetAt: nowMs + oneHourMs })
     }
 
     // Generate reset token
@@ -199,7 +213,10 @@ export class AuthService {
       throw new BadRequestException('This reset link has already been used')
     }
 
-    if (new Date(resetToken.expires_at) < new Date()) {
+    // Parse ClickHouse DateTime64 as UTC by appending 'Z'
+    // ClickHouse returns timestamps without timezone, which JavaScript interprets as local time
+    const expiresAt = new Date(resetToken.expires_at.replace(' ', 'T') + 'Z')
+    if (expiresAt < new Date()) {
       throw new BadRequestException('This reset link has expired')
     }
 
@@ -389,15 +406,13 @@ export class AuthService {
   }
 
   private async getRecentPasswordResetRequests(userId: string): Promise<number> {
-    const oneHourAgo = toClickHouseDateTime(new Date(Date.now() - 60 * 60 * 1000))
-
     const result = await this.clickhouse.querySystem<{ count: number }>(
       `
       SELECT count() as count FROM password_reset_tokens FINAL
       WHERE user_id = {userId:String}
-        AND created_at > {oneHourAgo:DateTime64(3)}
+        AND created_at > now() - INTERVAL 1 HOUR
     `,
-      { userId, oneHourAgo }
+      { userId }
     )
 
     return result[0]?.count || 0

@@ -4,19 +4,13 @@
  * Provides consistent date/time formatting for ClickHouse inserts.
  */
 
-/**
- * Convert a Date to ClickHouse DateTime format (YYYY-MM-DD HH:MM:SS)
- *
- * @param date - Date to convert (defaults to now)
- * @returns Formatted datetime string
- *
- * @example
- * toClickHouseDateTime() // '2024-01-15 10:30:45'
- * toClickHouseDateTime(new Date('2024-01-01')) // '2024-01-01 00:00:00'
- */
-export function toClickHouseDateTime(date: Date = new Date()): string {
-  return date.toISOString().replace('T', ' ').replace('Z', '');
-}
+// Re-export from shared utility
+export {
+  toClickHouseDateTime,
+  parseClickHouseDateTime,
+} from '../../src/common/utils/datetime.util';
+
+// Keep test-specific helpers below
 
 /**
  * Convert a Date to ClickHouse Date format (YYYY-MM-DD)

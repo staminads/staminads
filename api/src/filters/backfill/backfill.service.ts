@@ -11,20 +11,21 @@ import { randomUUID } from 'crypto';
 import { ClickHouseService } from '../../database/clickhouse.service';
 import { WorkspacesService } from '../../workspaces/workspaces.service';
 import { StartBackfillDto } from './dto/start-backfill.dto';
+import {
+  BackfillSuccessResponseDto,
+  BackfillStartResponseDto,
+} from './dto/backfill-response.dto';
 import { BackfillTask, BackfillTaskProgress } from './backfill-task.entity';
 import { FilterBackfillProcessor } from './backfill.processor';
 import { FilterDefinition } from '../entities/filter.entity';
 import { computeFilterVersion } from '../lib/filter-evaluator';
+import { toClickHouseDateTime } from '../../common/utils/datetime.util';
 
 export interface BackfillSummary {
   needsBackfill: boolean;
   currentFilterVersion: string;
   lastCompletedFilterVersion: string | null;
   activeTask: BackfillTaskProgress | null;
-}
-
-function toClickHouseDateTime(date: Date = new Date()): string {
-  return date.toISOString().replace('T', ' ').replace('Z', '');
 }
 
 @Injectable()
@@ -152,7 +153,7 @@ export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
    * Start a new backfill task for a workspace.
    * Returns immediately with a task_id for polling.
    */
-  async startBackfill(dto: StartBackfillDto): Promise<{ task_id: string }> {
+  async startBackfill(dto: StartBackfillDto): Promise<BackfillStartResponseDto> {
     // Validate workspace exists
     const workspace = await this.workspacesService.get(dto.workspace_id);
 
@@ -366,7 +367,7 @@ export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
   /**
    * Cancel a running backfill task.
    */
-  async cancelTask(taskId: string): Promise<{ success: boolean }> {
+  async cancelTask(taskId: string): Promise<BackfillSuccessResponseDto> {
     const tasks = await this.clickhouse.querySystem<BackfillTask>(
       `SELECT * FROM backfill_tasks FINAL WHERE id = {id:String}`,
       { id: taskId },

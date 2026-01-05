@@ -665,8 +665,7 @@ describe('MembersService', () => {
           },
         ]);
 
-      // The check for "Cannot promote a member to your role or higher" happens before
-      // the check for "Only owners can promote members to owner"
+      // Non-owners cannot promote to owner role
       await expect(
         service.updateRole(
           {
@@ -676,7 +675,7 @@ describe('MembersService', () => {
           },
           adminId,
         ),
-      ).rejects.toThrow('Cannot promote a member to your role or higher');
+      ).rejects.toThrow('Only owners can promote members to owner');
     });
 
     it('should throw NotFoundException when target member not found', async () => {
@@ -864,12 +863,11 @@ describe('MembersService', () => {
           },
           adminId,
         ),
-      ).rejects.toThrow('Cannot remove a member with equal or higher role');
+      ).rejects.toThrow('Only owners can remove other owners');
     });
 
-    it('should throw ForbiddenException when owner tries to remove another owner', async () => {
-      // Owners cannot remove other owners (equal role hierarchy)
-      // They must use transferOwnership instead
+    it('should throw ForbiddenException when owner tries to remove last owner', async () => {
+      // Owners cannot remove the last owner - there must always be at least one
       const owner2Id = 'user_owner2';
       const owner2Membership = {
         ...ownerMembership,
@@ -893,7 +891,9 @@ describe('MembersService', () => {
             user_id: owner2Id,
             invited_by: null,
           },
-        ]);
+        ])
+        // Mock countOwners to return 1 (only one owner)
+        .mockResolvedValueOnce([{ count: '1' }]);
 
       await expect(
         service.remove(
@@ -903,7 +903,7 @@ describe('MembersService', () => {
           },
           ownerId,
         ),
-      ).rejects.toThrow('Cannot remove a member with equal or higher role');
+      ).rejects.toThrow('Cannot remove the last owner. Transfer ownership first');
     });
 
     it('should throw NotFoundException when target member not found', async () => {

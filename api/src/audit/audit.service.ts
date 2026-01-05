@@ -5,10 +5,7 @@ import { LogAuditDto } from './dto/log-audit.dto';
 import { ListAuditDto } from './dto/list-audit.dto';
 import { GetAuditByTargetDto } from './dto/get-audit-by-target.dto';
 import { randomUUID } from 'crypto';
-
-function toClickHouseDateTime(date: Date = new Date()): string {
-  return date.toISOString().replace('T', ' ').replace('Z', '');
-}
+import { toClickHouseDateTime } from '../common/utils/datetime.util';
 
 interface AuditLogRow extends Omit<AuditLog, 'metadata'> {
   metadata: string; // JSON string from ClickHouse

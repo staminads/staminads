@@ -33,8 +33,12 @@ export class ApiKeyStrategy extends PassportStrategy(Strategy, 'api-key') {
       throw new UnauthorizedException(`API key is ${apiKey.status}`);
     }
 
-    if (apiKey.expires_at && new Date(apiKey.expires_at) < new Date()) {
-      throw new UnauthorizedException('API key has expired');
+    if (apiKey.expires_at) {
+      // Parse ClickHouse DateTime64 as UTC
+      const expiresAt = new Date(apiKey.expires_at.replace(' ', 'T') + 'Z');
+      if (expiresAt < new Date()) {
+        throw new UnauthorizedException('API key has expired');
+      }
     }
 
     if (!apiKey.workspace_id) {

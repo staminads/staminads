@@ -38,8 +38,9 @@ import type {
 // Create singleton instance
 const sdk = new StaminadsSDK();
 
-// Public API wrapper (no init method - uses global config)
+// Public API wrapper with both auto-init and manual init support
 const Staminads: StaminadsAPI = {
+  init: (config: StaminadsConfig) => sdk.init(config),
   getSessionId: () => sdk.getSessionId(),
   getVisitorId: () => sdk.getVisitorId(),
   getConfig: () => sdk.getConfig(),

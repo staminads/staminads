@@ -19,15 +19,10 @@ import {
 } from '../common/entities/api-key.entity';
 import { generateId, generateApiKeyToken, hashToken } from '../common/crypto';
 import { hasPermission } from '../common/permissions';
-
-function toClickHouseDateTime(date: Date = new Date()): string {
-  return date.toISOString().replace('T', ' ').replace('Z', '');
-}
-
-function isoToClickHouseDateTime(isoString: string | null): string | null {
-  if (!isoString) return null;
-  return isoString.replace('T', ' ').replace('Z', '');
-}
+import {
+  toClickHouseDateTime,
+  isoToClickHouseDateTime,
+} from '../common/utils/datetime.util';
 
 interface ApiKeyRow extends Omit<ApiKey, 'scopes'> {
   scopes: string; // JSON string from ClickHouse
@@ -231,7 +226,9 @@ export class ApiKeysService {
     if (!apiKey.expires_at) {
       return false;
     }
-    return new Date(apiKey.expires_at) < new Date();
+    // Parse ClickHouse DateTime64 as UTC
+    const expiresAt = new Date(apiKey.expires_at.replace(' ', 'T') + 'Z');
+    return expiresAt < new Date();
   }
 
   /**

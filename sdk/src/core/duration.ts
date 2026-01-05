@@ -73,9 +73,14 @@ export class DurationTracker {
   hideFocus(): void {
     if (this.state === 'HIDDEN') return;
 
+    const previousState = this.state;
     this.state = 'HIDDEN';
-    this.accumulateFocusTime();
-    this.stopTicking();
+
+    // Only accumulate time if we were focused
+    if (previousState === 'FOCUSED') {
+      this.accumulateFocusTime();
+      this.stopTicking();
+    }
 
     if (this.debug) {
       console.log('[Staminads] Focus hidden, accumulated:', this.accumulatedFocusMs);

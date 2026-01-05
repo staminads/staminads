@@ -336,9 +336,8 @@ describe('AuthService', () => {
 
       it('should send password reset email for valid user', async () => {
         // Mock workspace query
-        clickhouse.querySystem
-          .mockResolvedValueOnce([{ count: 0 }]) // Recent requests count
-          .mockResolvedValueOnce([{ workspace_id: 'ws-123' }]); // First workspace
+        // Service uses in-memory rate limiting, only queries for workspace
+        clickhouse.querySystem.mockResolvedValueOnce([{ workspace_id: 'ws-123' }]);
 
         await service.forgotPassword({ email: 'test@example.com' }, '192.168.1.1');
 
@@ -353,9 +352,8 @@ describe('AuthService', () => {
       });
 
       it('should normalize email to lowercase', async () => {
-        clickhouse.querySystem
-          .mockResolvedValueOnce([{ count: 0 }])
-          .mockResolvedValueOnce([{ workspace_id: 'ws-123' }]);
+        // Service uses in-memory rate limiting, only queries for workspace
+        clickhouse.querySystem.mockResolvedValueOnce([{ workspace_id: 'ws-123' }]);
 
         await service.forgotPassword({ email: 'TEST@EXAMPLE.COM' });
 
@@ -363,9 +361,8 @@ describe('AuthService', () => {
       });
 
       it('should create password reset token in database', async () => {
-        clickhouse.querySystem
-          .mockResolvedValueOnce([{ count: 0 }])
-          .mockResolvedValueOnce([{ workspace_id: 'ws-123' }]);
+        // Service uses in-memory rate limiting, only queries for workspace
+        clickhouse.querySystem.mockResolvedValueOnce([{ workspace_id: 'ws-123' }]);
 
         await service.forgotPassword({ email: 'test@example.com' });
 
@@ -418,23 +415,32 @@ describe('AuthService', () => {
     describe('rate limiting (3 per hour)', () => {
       beforeEach(() => {
         usersService.findByEmail.mockResolvedValue(mockUser);
+        // Service uses in-memory rate limiting
+        clickhouse.querySystem.mockResolvedValue([{ workspace_id: 'ws-123' }]);
+        clickhouse.insertSystem.mockResolvedValue(undefined);
+        mailService.sendPasswordReset.mockResolvedValue(undefined);
       });
 
       it('should allow request if under rate limit', async () => {
-        clickhouse.querySystem
-          .mockResolvedValueOnce([{ count: 2 }]) // 2 recent requests
-          .mockResolvedValueOnce([{ workspace_id: 'ws-123' }]);
-        clickhouse.insertSystem.mockResolvedValue(undefined);
-        mailService.sendPasswordReset.mockResolvedValue(undefined);
-
+        // First request should succeed
         await service.forgotPassword({ email: 'test@example.com' });
+        expect(mailService.sendPasswordReset).toHaveBeenCalledTimes(1);
 
-        expect(mailService.sendPasswordReset).toHaveBeenCalled();
+        // Second request should also succeed
+        await service.forgotPassword({ email: 'test@example.com' });
+        expect(mailService.sendPasswordReset).toHaveBeenCalledTimes(2);
       });
 
       it('should silently fail if rate limit exceeded', async () => {
-        clickhouse.querySystem.mockResolvedValueOnce([{ count: 3 }]); // 3 recent requests
+        // Make 3 requests (the limit)
+        await service.forgotPassword({ email: 'test@example.com' });
+        await service.forgotPassword({ email: 'test@example.com' });
+        await service.forgotPassword({ email: 'test@example.com' });
+        expect(mailService.sendPasswordReset).toHaveBeenCalledTimes(3);
 
+        // 4th request should be rate limited (silent fail)
+        mailService.sendPasswordReset.mockClear();
+        clickhouse.insertSystem.mockClear();
         await service.forgotPassword({ email: 'test@example.com' });
 
         expect(mailService.sendPasswordReset).not.toHaveBeenCalled();
@@ -442,8 +448,12 @@ describe('AuthService', () => {
       });
 
       it('should not throw error when rate limited', async () => {
-        clickhouse.querySystem.mockResolvedValueOnce([{ count: 5 }]);
+        // Exhaust rate limit
+        await service.forgotPassword({ email: 'test@example.com' });
+        await service.forgotPassword({ email: 'test@example.com' });
+        await service.forgotPassword({ email: 'test@example.com' });
 
+        // Should not throw even when rate limited
         await expect(
           service.forgotPassword({ email: 'test@example.com' }),
         ).resolves.toBeUndefined();
@@ -497,14 +507,18 @@ describe('AuthService', () => {
   });
 
   describe('resetPassword', () => {
+    // Helper to convert to ClickHouse format
+    const toClickHouseDate = (date: Date): string =>
+      date.toISOString().replace('T', ' ').slice(0, -1);
+
     const validToken: PasswordResetToken = {
       id: 'reset-123',
       user_id: 'user-123',
       token_hash: 'hashed-valid-token',
       status: 'pending',
-      expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      expires_at: toClickHouseDate(new Date(Date.now() + 60 * 60 * 1000)),
+      created_at: toClickHouseDate(new Date()),
+      updated_at: toClickHouseDate(new Date()),
     };
 
     describe('success', () => {
@@ -629,11 +643,15 @@ describe('AuthService', () => {
 
     describe('expired token', () => {
       it('should throw BadRequestException for expired token', async () => {
+        const pastDate = new Date(Date.now() - 60 * 60 * 1000);
+        // ClickHouse format: YYYY-MM-DD HH:MM:SS.SSS (no T, no Z)
+        const clickhouseDate = pastDate.toISOString().replace('T', ' ').slice(0, -1);
         const expiredToken = {
           ...validToken,
-          expires_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+          expires_at: clickhouseDate,
         };
         clickhouse.querySystem.mockResolvedValue([expiredToken]);
+        usersService.findById.mockResolvedValue(mockUser);
 
         await expect(
           service.resetPassword({

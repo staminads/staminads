@@ -636,11 +636,16 @@ describe('InvitationsService', () => {
     });
 
     it('throws BadRequestException for expired invitation', async () => {
+      const pastDate = new Date(Date.now() - 1000);
+      // ClickHouse format: YYYY-MM-DD HH:MM:SS.SSS (no T, no Z)
+      const clickhouseDate = pastDate.toISOString().replace('T', ' ').slice(0, -1);
       const expiredInvitation = {
         ...mockInvitation,
-        expires_at: new Date(Date.now() - 1000).toISOString(),
+        expires_at: clickhouseDate,
       };
-      clickhouse.querySystem.mockResolvedValue([expiredInvitation]);
+      clickhouse.querySystem
+        .mockResolvedValueOnce([expiredInvitation])
+        .mockResolvedValueOnce([expiredInvitation]);
 
       await expect(service.getByToken('raw-token-123')).rejects.toThrow(
         BadRequestException,
@@ -944,16 +949,25 @@ describe('InvitationsService', () => {
     });
 
     it('throws BadRequestException for expired invitation', async () => {
+      const pastDate = new Date(Date.now() - 1000);
+      // ClickHouse format: YYYY-MM-DD HH:MM:SS.SSS (no T, no Z)
+      const clickhouseDate = pastDate.toISOString().replace('T', ' ').slice(0, -1);
       const expiredInvitation = {
         ...mockInvitation,
-        expires_at: new Date(Date.now() - 1000).toISOString(),
+        expires_at: clickhouseDate,
       };
-      clickhouse.querySystem.mockResolvedValue([expiredInvitation]);
+      clickhouse.querySystem
+        .mockResolvedValueOnce([expiredInvitation])
+        .mockResolvedValueOnce([expiredInvitation]);
+      // Mock no existing user
+      usersService.findByEmail.mockResolvedValue(null);
 
       await expect(
         service.accept(
           {
             token: 'raw-token-123',
+            name: 'New User',
+            password: 'password123',
           },
           undefined,
         ),
@@ -962,6 +976,8 @@ describe('InvitationsService', () => {
         service.accept(
           {
             token: 'raw-token-123',
+            name: 'New User',
+            password: 'password123',
           },
           undefined,
         ),

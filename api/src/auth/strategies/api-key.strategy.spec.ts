@@ -134,11 +134,14 @@ describe('ApiKeyStrategy', () => {
     it('throws UnauthorizedException for API key past expiry date', async () => {
       const pastDate = new Date();
       pastDate.setDate(pastDate.getDate() - 1);
+      // ClickHouse format: YYYY-MM-DD HH:MM:SS.SSS (no T, no Z)
+      const clickhouseDate = pastDate.toISOString().replace('T', ' ').slice(0, -1);
 
       apiKeysService.findByToken.mockResolvedValue({
         ...mockApiKey,
-        expires_at: pastDate.toISOString(),
+        expires_at: clickhouseDate,
       });
+      apiKeysService.updateLastUsed.mockResolvedValue(undefined);
 
       await expect(
         strategy.validate('stam_live_expired_date'),

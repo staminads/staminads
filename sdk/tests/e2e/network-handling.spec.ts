@@ -88,7 +88,7 @@ test.describe('Network Handling', () => {
     await page.evaluate(() => window.SDK_READY);
 
     // Track event (first attempt fails, gets queued)
-    await page.evaluate(() => Staminads.track('retry_test'));
+    await page.evaluate(() => Staminads.trackEvent('retry_test'));
     await page.waitForTimeout(500);
 
     // Queue flush is triggered by visibility changes, not automatic timers

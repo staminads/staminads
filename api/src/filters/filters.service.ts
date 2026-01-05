@@ -22,10 +22,7 @@ import {
   computeFilterVersion,
   evaluateConditions,
 } from './lib/filter-evaluator';
-
-function toClickHouseDateTime(date: Date = new Date()): string {
-  return date.toISOString().replace('T', ' ').replace('Z', '');
-}
+import { toClickHouseDateTime } from '../common/utils/datetime.util';
 
 @Injectable()
 export class FiltersService {

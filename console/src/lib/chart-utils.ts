@@ -151,6 +151,26 @@ export function formatXAxisLabel(timestamp: string, granularity: Granularity): s
 }
 
 /**
+ * Map granularity to dayjs comparison unit.
+ * For daily/weekly granularity, compare by day since data points represent whole days.
+ */
+function granularityToUnit(granularity: Granularity): dayjs.OpUnitType {
+  switch (granularity) {
+    case 'hour':
+      return 'hour'
+    case 'day':
+    case 'week':
+      return 'day'
+    case 'month':
+      return 'month'
+    case 'year':
+      return 'year'
+    default:
+      return 'day'
+  }
+}
+
+/**
  * Find the data point label for an annotation date/time.
  * Finds the first data point on or after the annotation datetime to ensure
  * the annotation appears at the start of the event, not at the peak.
@@ -166,12 +186,13 @@ function findDataPointLabelForAnnotation(
 ): string {
   // Parse annotation in its own timezone, then convert to workspace timezone for comparison
   const annDateTime = dayjs.tz(`${annotationDate} ${annotationTime}`, annotationTimezone)
+  const unit = granularityToUnit(granularity)
 
   // Find the first data point on or after the annotation datetime
   for (const point of currentData) {
     // Data points are in workspace timezone
     const pointDate = dayjs.tz(point.timestamp, workspaceTimezone)
-    if (pointDate.isSame(annDateTime, 'hour') || pointDate.isAfter(annDateTime, 'hour')) {
+    if (pointDate.isSame(annDateTime, unit) || pointDate.isAfter(annDateTime, unit)) {
       return formatXAxisLabel(point.timestamp, granularity)
     }
   }
@@ -310,7 +331,7 @@ export function createMetricChartOption(
       {
         name: currentLabel,
         type: 'line',
-        smooth: 0.3,
+        smooth: false,
         symbol: 'none',
         areaStyle: {
           color: {
@@ -419,7 +440,7 @@ export function createMetricChartOption(
             {
               name: previousLabel,
               type: 'line' as const,
-              smooth: 0.3,
+              smooth: false,
               symbol: 'none' as const,
               areaStyle: {
                 color: {

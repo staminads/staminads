@@ -35,7 +35,7 @@ export class UsersController {
 
   @Post('auth.updateProfile')
   @ApiOperation({ summary: 'Update current user profile' })
-  @ApiResponse({ status: 200, description: 'Updated user profile' })
+  @ApiResponse({ status: 201, description: 'Updated user profile' })
   async updateProfile(
     @Req() req: any,
     @Body() dto: UpdateProfileDto,
@@ -45,7 +45,7 @@ export class UsersController {
 
   @Post('auth.changePassword')
   @ApiOperation({ summary: 'Change current user password' })
-  @ApiResponse({ status: 200, description: 'Password changed successfully' })
+  @ApiResponse({ status: 201, description: 'Password changed successfully' })
   async changePassword(
     @Req() req: any,
     @Body() dto: ChangePasswordDto,

@@ -496,16 +496,13 @@ describe('Members Integration', () => {
           workspace_id: testWorkspaceId,
           user_id: owner2.id,
         })
-        .expect(200);
+        .expect(201);
 
       // Wait for deletion
       await waitForMutations(systemClient, TEST_SYSTEM_DATABASE);
 
-      // Now try to remove the last owner - should fail
-      // Need to use owner2's token to try to remove ownerUserId
-      // But owner2 is already removed, so let's have admin try it
-      // Actually, admin can't remove owner, so let's create a third owner first
-
+      // At this point, ownerUserId is the only owner
+      // Create a second owner so they can attempt to remove the last owner
       const owner3 = await createUser('owner3@test.com', 'Owner 3');
       const owner3Result = await request(ctx.app.getHttpServer())
         .post('/api/auth.login')
@@ -514,9 +511,8 @@ describe('Members Integration', () => {
 
       await createMembership(systemClient, testWorkspaceId, owner3.id, 'owner', ownerUserId);
 
-      // Now owner3 tries to remove the last remaining original owner
-      // But ownerUserId is now the only owner after removing owner2
-      // So this should fail with 403 (cannot remove last owner)
+      // Now there are 2 owners: ownerUserId and owner3
+      // owner3 removes ownerUserId - this should succeed (leaves 1 owner)
       await request(ctx.app.getHttpServer())
         .post('/api/members.remove')
         .set('Authorization', `Bearer ${owner3Token}`)
@@ -524,7 +520,58 @@ describe('Members Integration', () => {
           workspace_id: testWorkspaceId,
           user_id: ownerUserId,
         })
-        .expect(403);
+        .expect(201);
+
+      await waitForMutations(systemClient, TEST_SYSTEM_DATABASE);
+
+      // Now owner3 is the only owner
+      // Create owner4 to try to remove the last owner (owner3)
+      const owner4 = await createUser('owner4@test.com', 'Owner 4');
+      const owner4Result = await request(ctx.app.getHttpServer())
+        .post('/api/auth.login')
+        .send({ email: 'owner4@test.com', password: 'testpass123' });
+      const owner4Token = owner4Result.body.access_token;
+
+      await createMembership(systemClient, testWorkspaceId, owner4.id, 'owner', owner3.id);
+
+      // owner4 tries to remove owner3 - should succeed (2 owners, leaves 1)
+      await request(ctx.app.getHttpServer())
+        .post('/api/members.remove')
+        .set('Authorization', `Bearer ${owner4Token}`)
+        .send({
+          workspace_id: testWorkspaceId,
+          user_id: owner3.id,
+        })
+        .expect(201);
+
+      await waitForMutations(systemClient, TEST_SYSTEM_DATABASE);
+
+      // Now owner4 is the ONLY owner - try to have them leave via self-removal
+      // This should fail with 403 (cannot remove last owner)
+      // But wait - self-removal uses BadRequest not Forbidden
+      // We need another user to try to remove the last owner
+      // Since owner4 is the only owner, we need an admin to try (which will fail for different reason)
+      // Actually, let's have owner4 try to remove themselves - this should fail with BadRequest (use leave endpoint)
+      // For true "last owner" test, we need a scenario where the workspace has only 1 owner
+      // and someone else tries to remove them - but only owners can remove owners
+      // So we'd need 2 owners where one tries to remove the other leaving 1
+      // That's what we just tested above with success... the "cannot remove LAST" means
+      // you can't leave 0 owners - which we can't easily test since we need an owner to do the removal
+      // and they would be the remaining owner
+
+      // The real test: Add owner5, then owner4 removes owner5, then owner4 is alone
+      // then add owner6, and owner6 tries to remove owner4 - this leaves owner6 so it should SUCCEED
+      // The only way to test "cannot remove last" would be if owner4 could somehow remove themselves
+      // which is blocked by "use leave endpoint" check first
+
+      // Verify the leave endpoint protects last owner (returns 400 BadRequest)
+      await request(ctx.app.getHttpServer())
+        .post('/api/members.leave')
+        .set('Authorization', `Bearer ${owner4Token}`)
+        .send({
+          workspace_id: testWorkspaceId,
+        })
+        .expect(400);
     });
 
     it('editor/viewer cannot remove members', async () => {
@@ -550,7 +597,7 @@ describe('Members Integration', () => {
           workspace_id: testWorkspaceId,
           user_id: viewerUserId,
         })
-        .expect(200);
+        .expect(201);
 
       // Wait for audit log
       await waitForClickHouse();

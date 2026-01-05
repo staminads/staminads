@@ -351,10 +351,10 @@ describe('Backfill Integration', () => {
         .set('Authorization', `Bearer ${authToken}`);
 
       // Task may complete before cancel is processed (no data = instant completion)
-      // Accept either success (201) or already completed (400)
-      expect([201, 400]).toContain(response.status);
+      // Accept either success (200) or already completed (400)
+      expect([200, 400]).toContain(response.status);
 
-      if (response.status === 201) {
+      if (response.status === 200) {
         expect(response.body).toEqual({ success: true });
 
         // Verify task reaches a final state (wait for processor to finish)

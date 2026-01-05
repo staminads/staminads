@@ -40,6 +40,7 @@ import {
   computeFilterVersion,
 } from '../../filters/lib/filter-evaluator';
 import { getDemoFilters } from './demo-filters';
+import { toClickHouseDateTime } from '../../common/utils/datetime.util';
 
 // Base session duration categories (in seconds)
 const DURATION_CATEGORIES = [
@@ -70,10 +71,6 @@ function randomBetween(min: number, max: number): number {
 function generateBaseDuration(): number {
   const category = weightedRandom(DURATION_CATEGORIES, 100);
   return randomBetween(category.min, category.max);
-}
-
-function toClickHouseDateTime(date: Date): string {
-  return date.toISOString().replace('T', ' ').replace('Z', '');
 }
 
 // SDK version - current version
@@ -161,15 +158,24 @@ function generateViewport(
   };
 }
 
+// Keynote hour in workspace timezone (America/New_York)
+// 10am Pacific = 1pm Eastern = 13:00
+const KEYNOTE_HOUR_EASTERN = 13;
+
 function isIPhoneLaunchPeriod(
   date: Date,
   launchDate: Date,
+  hour: number,
 ): 'launch' | 'post' | 'normal' {
   const diff = date.getTime() - launchDate.getTime();
   const daysDiff = diff / (1000 * 60 * 60 * 24);
 
   if (daysDiff >= 0 && daysDiff < 1) {
-    return 'launch'; // Launch day: 3x traffic
+    // Launch day: only spike after keynote starts (1pm Eastern = 10am Pacific)
+    if (hour >= KEYNOTE_HOUR_EASTERN) {
+      return 'launch'; // 5x traffic after keynote
+    }
+    return 'normal'; // Normal traffic before keynote
   } else if (daysDiff >= 1 && daysDiff < 4) {
     return 'post'; // Post-launch: 2x traffic
   }
@@ -213,13 +219,12 @@ export function generateEvents(config: GenerationConfig): TrackingEvent[] {
 
   for (const [dateKey, count] of Object.entries(dailySessionCounts)) {
     const dayDate = new Date(dateKey);
-    const launchPeriod = isIPhoneLaunchPeriod(dayDate, launchDate);
 
     for (let i = 0; i < count; i++) {
       const sessionEvents = generateSessionEvents(
         workspaceId,
         dayDate,
-        launchPeriod,
+        launchDate,
         sessionIndex,
       );
       allEvents.push(...sessionEvents);
@@ -259,14 +264,13 @@ export function* generateEventsByDay(
 
   for (const [dateKey, count] of Object.entries(dailySessionCounts)) {
     const dayDate = new Date(dateKey);
-    const launchPeriod = isIPhoneLaunchPeriod(dayDate, launchDate);
     const dayEvents: TrackingEvent[] = [];
 
     for (let i = 0; i < count; i++) {
       const sessionEvents = generateSessionEvents(
         workspaceId,
         dayDate,
-        launchPeriod,
+        launchDate,
         sessionIndex,
       );
       dayEvents.push(...sessionEvents);
@@ -310,12 +314,15 @@ function calculateDailySessionCounts(
     const growthMultiplier = 0.85 + (dayIndex / daysTotal) * 0.3;
     weight *= growthMultiplier;
 
-    // Apply launch multipliers
-    const launchPeriod = isIPhoneLaunchPeriod(current, launchDate);
-    if (launchPeriod === 'launch') {
-      weight *= 3;
-    } else if (launchPeriod === 'post') {
-      weight *= 1.5;
+    // Apply launch multipliers (daily average)
+    // For launch day: use 2.5x as average (normal morning + 5x afternoon)
+    // Per-session launch behavior is determined by hour in generateSessionEvents
+    const diff = current.getTime() - launchDate.getTime();
+    const daysDiff = diff / (1000 * 60 * 60 * 24);
+    if (daysDiff >= 0 && daysDiff < 1) {
+      weight *= 2.5; // Launch day average (morning normal, afternoon 5x)
+    } else if (daysDiff >= 1 && daysDiff < 4) {
+      weight *= 1.5; // Post-launch
     }
 
     weights[dateKey] = weight;
@@ -346,7 +353,7 @@ function calculateDailySessionCounts(
 function generateSessionEvents(
   workspaceId: string,
   dayDate: Date,
-  launchPeriod: 'launch' | 'post' | 'normal',
+  launchDate: Date,
   sessionIndex: number,
 ): TrackingEvent[] {
   const events: TrackingEvent[] = [];
@@ -359,6 +366,9 @@ function generateSessionEvents(
 
   // Generate random hour with distribution
   const hour = generateHour();
+
+  // Determine launch period based on actual hour
+  const launchPeriod = isIPhoneLaunchPeriod(dayDate, launchDate, hour);
 
   // Create timestamp
   const sessionStart = new Date(dayDate);

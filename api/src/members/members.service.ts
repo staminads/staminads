@@ -27,10 +27,7 @@ import { UpdateRoleDto } from './dto/update-role.dto';
 import { RemoveMemberDto } from './dto/remove-member.dto';
 import { LeaveWorkspaceDto } from './dto/leave-workspace.dto';
 import { TransferOwnershipDto } from './dto/transfer-ownership.dto';
-
-function toClickHouseDateTime(date: Date = new Date()): string {
-  return date.toISOString().replace('T', ' ').replace('Z', '');
-}
+import { toClickHouseDateTime } from '../common/utils/datetime.util';
 
 interface MembershipRow {
   id: string;
@@ -193,16 +190,20 @@ export class MembersService {
       );
     }
 
-    // Cannot promote someone to a role higher than or equal to your own
-    if (ROLE_HIERARCHY[dto.role] >= ROLE_HIERARCHY[actorMembership.role]) {
+    // Only owners can promote to owner role
+    if (dto.role === 'owner' && actorMembership.role !== 'owner') {
+      throw new ForbiddenException('Only owners can promote members to owner');
+    }
+
+    // Cannot promote someone to a role higher than your own (but owners can promote to owner)
+    if (
+      ROLE_HIERARCHY[dto.role] > ROLE_HIERARCHY[actorMembership.role] ||
+      (dto.role !== 'owner' &&
+        ROLE_HIERARCHY[dto.role] >= ROLE_HIERARCHY[actorMembership.role])
+    ) {
       throw new ForbiddenException(
         'Cannot promote a member to your role or higher',
       );
-    }
-
-    // Only owners can create other owners
-    if (dto.role === 'owner' && actorMembership.role !== 'owner') {
-      throw new ForbiddenException('Only owners can promote members to owner');
     }
 
     // Update the membership
@@ -278,21 +279,29 @@ export class MembersService {
       );
     }
 
-    // Check role hierarchy - can only remove members with lower role
-    if (!canModifyMember(actorMembership.role, targetMembership.role)) {
-      throw new ForbiddenException(
-        'Cannot remove a member with equal or higher role',
-      );
+    // Only owners can remove other owners
+    if (targetMembership.role === 'owner' && actorMembership.role !== 'owner') {
+      throw new ForbiddenException('Only owners can remove other owners');
     }
 
-    // Check if target is the last owner
+    // Prevent removing the last owner - workspace must always have at least one owner
     if (targetMembership.role === 'owner') {
       const ownerCount = await this.countOwners(dto.workspace_id);
       if (ownerCount <= 1) {
-        throw new BadRequestException(
+        throw new ForbiddenException(
           'Cannot remove the last owner. Transfer ownership first',
         );
       }
+    }
+
+    // Check role hierarchy for non-owner targets - can only remove members with lower role
+    if (
+      targetMembership.role !== 'owner' &&
+      !canModifyMember(actorMembership.role, targetMembership.role)
+    ) {
+      throw new ForbiddenException(
+        'Cannot remove a member with equal or higher role',
+      );
     }
 
     // Delete the membership

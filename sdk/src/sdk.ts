@@ -85,10 +85,18 @@ export class StaminadsSDK {
   private flushed = false;
 
   /**
-   * Initialize the SDK (called by index.ts from global config)
+   * Initialize the SDK (called by index.ts from global config or manual init)
    * Returns the init promise so callers can await if needed
    */
   init(userConfig: StaminadsConfig): Promise<void> {
+    // If already initialized or initializing, return existing promise
+    if (this.isInitialized) {
+      return Promise.resolve();
+    }
+    if (this.initPromise) {
+      return this.initPromise;
+    }
+
     // Store the promise for ensureInitialized to await
     this.initPromise = this.initializeAsync(userConfig);
     return this.initPromise;

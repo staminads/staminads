@@ -15,6 +15,7 @@ import {
   WorkspaceSettings,
   DEFAULT_WORKSPACE_SETTINGS,
 } from '../workspaces/entities/workspace.entity';
+import { toClickHouseDateTime } from '../common/utils/datetime.util';
 
 const DEMO_WORKSPACE_ID = 'demo-apple';
 const DEMO_WORKSPACE_NAME = 'Apple Demo';
@@ -56,10 +57,6 @@ function generateDemoAnnotations(endDate: Date): Annotation[] {
       color: '#22c55e', // Green (positive events)
     },
   ];
-}
-
-function toClickHouseDateTime(date: Date = new Date()): string {
-  return date.toISOString().replace('T', ' ').replace('Z', '');
 }
 
 @Injectable()

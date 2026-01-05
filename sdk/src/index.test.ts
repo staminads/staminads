@@ -48,7 +48,7 @@ describe('Staminads SDK - Global Config Pattern', () => {
       expect(typeof Staminads.trackEvent).toBe('function');
     });
 
-    it('should not have init method on public API', async () => {
+    it('should have init method on public API', async () => {
       window.StaminadsConfig = {
         workspace_id: 'test-ws',
         endpoint: 'https://test.com',
@@ -56,8 +56,31 @@ describe('Staminads SDK - Global Config Pattern', () => {
 
       const { default: Staminads } = await import('./index');
 
-      // init should not exist on the public API
-      expect((Staminads as Record<string, unknown>).init).toBeUndefined();
+      // init should exist on the public API
+      expect(typeof Staminads.init).toBe('function');
+    });
+
+    it('init should be idempotent (calling twice returns same promise)', async () => {
+      delete window.StaminadsConfig;
+
+      const { default: Staminads } = await import('./index');
+
+      const config = {
+        workspace_id: 'test-ws',
+        endpoint: 'https://test.com',
+      };
+
+      // Call init twice
+      const promise1 = Staminads.init(config);
+      const promise2 = Staminads.init(config);
+
+      // Should return the same promise (or both resolve without error)
+      await expect(promise1).resolves.toBeUndefined();
+      await expect(promise2).resolves.toBeUndefined();
+
+      // Config should be set
+      expect(Staminads.getConfig()).not.toBeNull();
+      expect(Staminads.getConfig()?.workspace_id).toBe('test-ws');
     });
   });
 

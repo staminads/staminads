@@ -133,8 +133,8 @@ export function buildAnalyticsQuery(
 
   // Note: workspace_id filter removed since each workspace has its own database
   const whereConditions = [
-    'created_at >= {date_start:DateTime64(3)}',
-    'created_at <= {date_end:DateTime64(3)}',
+    'created_at >= toDateTime64({date_start:String}, 3)',
+    'created_at <= toDateTime64({date_end:String}, 3)',
   ];
   if (filterSql) {
     whereConditions.push(filterSql);
@@ -184,8 +184,8 @@ export function buildExtremesQuery(
 
   // WHERE conditions
   const whereConditions = [
-    'created_at >= {date_start:DateTime64(3)}',
-    'created_at <= {date_end:DateTime64(3)}',
+    'created_at >= toDateTime64({date_start:String}, 3)',
+    'created_at <= toDateTime64({date_end:String}, 3)',
   ];
   if (filterSql) {
     whereConditions.push(filterSql);
