@@ -44,7 +44,7 @@ async function bootstrap() {
     }),
   );
   const port = process.env.PORT ?? 3000;
-  await app.listen(port, 'localapi.staminads.com');
+  await app.listen(port, '0.0.0.0');
   console.log(`Staminads API v${APP_VERSION} running on port ${port}`);
 }
 bootstrap();
