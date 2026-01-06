@@ -20,6 +20,9 @@ WORKDIR /app
 COPY --from=sdk-builder /app/sdk/dist ./sdk/dist
 COPY --from=sdk-builder /app/sdk/package.json ./sdk/package.json
 
+# Copy API version file (needed by vite.config.ts)
+COPY api/src/version.ts ./api/src/version.ts
+
 WORKDIR /app/console
 
 # Copy frontend package files
