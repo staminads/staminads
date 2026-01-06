@@ -16,6 +16,7 @@ import {
 } from './dto/smtp-settings.dto';
 import { WorkspaceAuthGuard } from '../common/guards/workspace.guard';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
+import { DemoRestricted } from '../common/decorators/demo-restricted.decorator';
 
 @ApiTags('smtp')
 @ApiSecurity('jwt-auth')
@@ -36,6 +37,7 @@ export class SmtpController {
   }
 
   @Post('smtp.update')
+  @DemoRestricted()
   @UseGuards(WorkspaceAuthGuard)
   @RequirePermission('workspace.smtp')
   @ApiOperation({ summary: 'Update SMTP settings (owner only)' })
@@ -45,6 +47,7 @@ export class SmtpController {
   }
 
   @Post('smtp.delete')
+  @DemoRestricted()
   @UseGuards(WorkspaceAuthGuard)
   @RequirePermission('workspace.smtp')
   @ApiOperation({ summary: 'Remove workspace SMTP (fall back to global)' })
@@ -55,6 +58,7 @@ export class SmtpController {
   }
 
   @Post('smtp.test')
+  @DemoRestricted()
   @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Send test email' })
   @ApiResponse({ status: 200, description: 'Test email sent' })

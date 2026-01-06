@@ -29,6 +29,7 @@ import {
 import { BackfillTaskProgress } from './backfill/backfill-task.entity';
 import { BackfillSummary } from './backfill/backfill.service';
 import { WorkspaceAuthGuard } from '../common/guards/workspace.guard';
+import { DemoRestricted } from '../common/decorators/demo-restricted.decorator';
 
 @ApiTags('filters')
 @ApiSecurity('jwt-auth')
@@ -72,6 +73,7 @@ export class FiltersController {
   }
 
   @Post('filters.create')
+  @DemoRestricted()
   @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Create filter' })
   @ApiResponse({ status: 201, description: 'Created filter' })
@@ -80,6 +82,7 @@ export class FiltersController {
   }
 
   @Post('filters.update')
+  @DemoRestricted()
   @HttpCode(200)
   @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Update filter' })
@@ -89,6 +92,7 @@ export class FiltersController {
   }
 
   @Post('filters.delete')
+  @DemoRestricted()
   @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Delete filter' })
   @ApiQuery({ name: 'workspace_id', type: String, required: true })
@@ -103,6 +107,7 @@ export class FiltersController {
   }
 
   @Post('filters.reorder')
+  @DemoRestricted()
   @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Reorder filters' })
   @ApiResponse({ status: 200, type: BackfillSuccessResponseDto })

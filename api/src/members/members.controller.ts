@@ -22,6 +22,7 @@ import { UpdateRoleDto } from './dto/update-role.dto';
 import { RemoveMemberDto } from './dto/remove-member.dto';
 import { LeaveWorkspaceDto } from './dto/leave-workspace.dto';
 import { TransferOwnershipDto } from './dto/transfer-ownership.dto';
+import { DemoRestricted } from '../common/decorators/demo-restricted.decorator';
 
 @ApiTags('members')
 @ApiSecurity('jwt-auth')
@@ -110,6 +111,7 @@ export class MembersController {
   }
 
   @Post('members.updateRole')
+  @DemoRestricted()
   @ApiOperation({ summary: "Update a member's role" })
   @ApiResponse({
     status: 200,
@@ -144,6 +146,7 @@ export class MembersController {
   }
 
   @Post('members.remove')
+  @DemoRestricted()
   @HttpCode(200)
   @ApiOperation({ summary: 'Remove a member from a workspace' })
   @ApiResponse({
@@ -163,6 +166,7 @@ export class MembersController {
   }
 
   @Post('members.leave')
+  @DemoRestricted()
   @HttpCode(200)
   @ApiOperation({ summary: 'Leave a workspace voluntarily' })
   @ApiBody({
@@ -190,6 +194,7 @@ export class MembersController {
   }
 
   @Post('members.transferOwnership')
+  @DemoRestricted()
   @ApiOperation({ summary: 'Transfer workspace ownership to another member' })
   @ApiResponse({
     status: 200,

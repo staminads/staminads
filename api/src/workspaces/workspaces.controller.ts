@@ -20,6 +20,7 @@ import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { WorkspacesService } from './workspaces.service';
 import { WorkspaceAuthGuard } from '../common/guards/workspace.guard';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
+import { DemoRestricted } from '../common/decorators/demo-restricted.decorator';
 
 @ApiTags('workspaces')
 @ApiSecurity('jwt-auth')
@@ -42,12 +43,14 @@ export class WorkspacesController {
   }
 
   @Post('workspaces.create')
+  @DemoRestricted()
   @ApiOperation({ summary: 'Create a new workspace' })
   create(@Req() req: any, @Body() dto: CreateWorkspaceDto) {
     return this.workspacesService.create(dto, req.user);
   }
 
   @Post('workspaces.update')
+  @DemoRestricted()
   @UseGuards(WorkspaceAuthGuard)
   @RequirePermission('workspace.settings')
   @ApiOperation({ summary: 'Update an existing workspace' })
@@ -56,6 +59,7 @@ export class WorkspacesController {
   }
 
   @Post('workspaces.delete')
+  @DemoRestricted()
   @HttpCode(200)
   @UseGuards(WorkspaceAuthGuard)
   @RequirePermission('workspace.delete')

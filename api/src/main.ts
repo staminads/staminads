@@ -3,6 +3,7 @@ import { CorsOptionsDelegate } from '@nestjs/common/interfaces/external/cors-opt
 import { NestFactory } from '@nestjs/core';
 import { Request } from 'express';
 import { AppModule } from './app.module';
+import { APP_VERSION } from './version';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -42,6 +43,8 @@ async function bootstrap() {
       transform: true,
     }),
   );
-  await app.listen(process.env.PORT ?? 3000, 'localapi.staminads.com');
+  const port = process.env.PORT ?? 3000;
+  await app.listen(port, 'localapi.staminads.com');
+  console.log(`Staminads API v${APP_VERSION} running on port ${port}`);
 }
 bootstrap();

@@ -26,6 +26,7 @@ import { InvitationIdDto } from './dto/invitation-id.dto';
 import { InvitationWithInviter } from '../common/entities';
 import { WorkspaceAuthGuard } from '../common/guards/workspace.guard';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
+import { DemoRestricted } from '../common/decorators/demo-restricted.decorator';
 
 @ApiTags('invitations')
 @Controller('api')
@@ -45,6 +46,7 @@ export class InvitationsController {
   }
 
   @Post('invitations.create')
+  @DemoRestricted()
   @ApiSecurity('jwt-auth')
   @UseGuards(WorkspaceAuthGuard)
   @RequirePermission('members.invite')
@@ -58,6 +60,7 @@ export class InvitationsController {
   }
 
   @Post('invitations.resend')
+  @DemoRestricted()
   @HttpCode(200)
   @ApiSecurity('jwt-auth')
   @ApiOperation({ summary: 'Resend invitation email' })
@@ -72,6 +75,7 @@ export class InvitationsController {
   }
 
   @Post('invitations.revoke')
+  @DemoRestricted()
   @HttpCode(200)
   @ApiSecurity('jwt-auth')
   @ApiOperation({ summary: 'Revoke pending invitation' })

@@ -23,6 +23,7 @@ import { RevokeApiKeyDto } from './dto/revoke-api-key.dto';
 import { CreateApiKeyResponseDto } from './dto/create-api-key-response.dto';
 import { WorkspaceAuthGuard } from '../common/guards/workspace.guard';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
+import { DemoRestricted } from '../common/decorators/demo-restricted.decorator';
 
 @ApiTags('api-keys')
 @ApiSecurity('jwt-auth')
@@ -31,6 +32,7 @@ export class ApiKeysController {
   constructor(private readonly apiKeysService: ApiKeysService) {}
 
   @Post('apiKeys.create')
+  @DemoRestricted()
   @UseGuards(WorkspaceAuthGuard)
   @RequirePermission('apiKeys.manage')
   @ApiOperation({ summary: 'Create a new API key' })
@@ -95,6 +97,7 @@ export class ApiKeysController {
   }
 
   @Post('apiKeys.revoke')
+  @DemoRestricted()
   @HttpCode(200)
   @ApiOperation({ summary: 'Revoke an API key' })
   @ApiBody({

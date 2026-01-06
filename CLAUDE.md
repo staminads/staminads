@@ -39,6 +39,9 @@ PORT=3000
 # Demo fixtures (optional)
 DEMO_SECRET=<optional, required for demo endpoints>
 
+# Demo mode - disable write operations when true
+IS_DEMO=false
+
 # ClickHouse
 CLICKHOUSE_HOST=http://localhost:8123
 CLICKHOUSE_DATABASE=staminads
@@ -118,6 +121,13 @@ The `npm run lint` command runs both ESLint and TypeScript compiler:
 - **TypeScript** (`tsc --noEmit`): Checks all type errors (same errors shown in VSCode)
 
 This ensures CLI linting catches the same errors as your IDE.
+
+## Versioning
+
+Version is defined in `api/src/version.ts` and used by both API and console.
+
+- **Major (X.0.0)**: Database schema changes (requires migration)
+- **Minor (0.X.0)**: Features and fixes without schema changes
 
 ## Development Guidelines
 

@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { createFileRoute, Outlet, Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { Select, Button, Avatar, Spin, Space, Popover, Tooltip, App } from 'antd'
+import { Select, Button, Avatar, Spin, Space, Popover, Tooltip, App, Dropdown } from 'antd'
 import type { RefSelectProps } from 'antd/es/select'
-import { LogoutOutlined, PlusOutlined, GlobalOutlined } from '@ant-design/icons'
+import { LogoutOutlined, PlusOutlined, GlobalOutlined, QuestionCircleOutlined } from '@ant-design/icons'
 import { workspacesQueryOptions, workspaceQueryOptions, backfillSummaryQueryOptions } from '../../../lib/queries'
 import { SyncStatusIcon } from '../../../components/layout/SyncStatusIcon'
 import { useAuth } from '../../../lib/useAuth'
@@ -223,6 +223,41 @@ function WorkspaceLayout() {
                 </Tooltip>
               </>
             )}
+            <Dropdown
+              menu={{
+                items: [
+                  {
+                    key: 'documentation',
+                    label: (
+                      <a href="https://docs.staminads.com" target="_blank" rel="noopener noreferrer">
+                        Documentation
+                      </a>
+                    ),
+                  },
+                  {
+                    key: 'report-issue',
+                    label: (
+                      <a href="https://github.com/staminads/staminads/issues" target="_blank" rel="noopener noreferrer">
+                        Report an issue
+                      </a>
+                    ),
+                  },
+                  { type: 'divider' },
+                  {
+                    key: 'version',
+                    label: `v${__APP_VERSION__}`,
+                    disabled: true,
+                  },
+                ],
+              }}
+              placement="bottomRight"
+            >
+              <Button
+                type="text"
+                icon={<QuestionCircleOutlined />}
+                className="!text-gray-500 hover:!text-gray-800 hover:!bg-gray-100"
+              />
+            </Dropdown>
             <Tooltip title="Logout" placement="left">
               <Button
                 type="text"

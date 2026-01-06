@@ -21,4 +21,3 @@ A source of traffic can be any dimensions or combination of dimensions such as:
 ## Roadmap
 
 - docs
-- how is computed the cache key for analytics query
