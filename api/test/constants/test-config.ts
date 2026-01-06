@@ -17,7 +17,7 @@ export const CLICKHOUSE_PASSWORD = '';
 
 // Auth constants
 export const JWT_SECRET = 'test-secret-key';
-export const ADMIN_EMAIL = 'admin@test.com';
+export const ADMIN_EMAIL = 'super-admin@test.com';
 export const ADMIN_PASSWORD = 'testpass';
 export const ENCRYPTION_KEY = 'test-encryption-key-32-chars-ok!';
 
