@@ -19,6 +19,11 @@ export class SetupMiddleware implements NestMiddleware {
       return next();
     }
 
+    // Allow static files (console frontend) - anything not starting with /api
+    if (!path.startsWith('/api')) {
+      return next();
+    }
+
     // Check if setup is complete
     const isComplete = await this.setupService.isSetupComplete();
     if (!isComplete) {
