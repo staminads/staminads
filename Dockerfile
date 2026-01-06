@@ -1,5 +1,23 @@
-# Stage 1: Build frontend
+# Stage 1: Build SDK
+FROM node:22-alpine AS sdk-builder
+
+WORKDIR /app/sdk
+
+# Copy SDK package files
+COPY sdk/package*.json ./
+RUN npm ci
+
+# Copy SDK source and build
+COPY sdk/ ./
+RUN npm run build
+
+# Stage 2: Build frontend
 FROM node:22-alpine AS frontend-builder
+
+WORKDIR /app
+
+# Copy SDK build output (needed by console prebuild)
+COPY --from=sdk-builder /app/sdk/dist ./sdk/dist
 
 WORKDIR /app/console
 
@@ -11,7 +29,7 @@ RUN npm ci
 COPY console/ ./
 RUN npm run build
 
-# Stage 2: Build API
+# Stage 3: Build API
 FROM node:22-alpine AS api-builder
 
 WORKDIR /app/api
@@ -24,14 +42,14 @@ RUN npm ci
 COPY api/ ./
 RUN npm run build
 
-# Stage 3: Production image
+# Stage 4: Production image
 FROM node:22-alpine AS production
 
 WORKDIR /app
 
 # Install production dependencies only
 COPY api/package*.json ./
-RUN npm ci --only=production
+RUN npm ci --omit=dev
 
 # Copy built API
 COPY --from=api-builder /app/api/dist ./dist
