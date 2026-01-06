@@ -8,7 +8,7 @@ services:
       - clickhouse_data:/var/lib/clickhouse
       - ./clickhouse-users.xml:/etc/clickhouse-server/users.d/users.xml:ro
     environment:
-      CLICKHOUSE_DB: staminads
+      CLICKHOUSE_DB: staminads_system
     healthcheck:
       test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
       interval: 5s
