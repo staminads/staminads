@@ -130,7 +130,7 @@ export function CountryMapView({ data, loading, onCountryClick }: CountryMapView
 
   if (loading && data.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[290px]">
+      <div className="flex items-center justify-center aspect-[2/1]">
         <Spin />
       </div>
     )
@@ -147,11 +147,13 @@ export function CountryMapView({ data, loading, onCountryClick }: CountryMapView
   }
 
   return (
-    <ReactECharts
-      option={option}
-      style={{ height: 290, width: '100%' }}
-      opts={{ renderer: 'svg' }}
-      onEvents={onEvents}
-    />
+    <div className="aspect-[2/1]">
+      <ReactECharts
+        option={option}
+        style={{ height: '100%', width: '100%' }}
+        opts={{ renderer: 'svg' }}
+        onEvents={onEvents}
+      />
+    </div>
   )
 }

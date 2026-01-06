@@ -1,4 +1,3 @@
-import { Space } from 'antd'
 import { DateRangePicker } from './DateRangePicker'
 import { ComparisonPicker } from './ComparisonPicker'
 import { ExploreFilterBuilder } from '../explore/ExploreFilterBuilder'
@@ -40,24 +39,28 @@ export function DashboardFilters({
   hideFilterBuilder = false,
 }: DashboardFiltersProps) {
   return (
-    <Space size="small" className={isPending ? 'opacity-75 transition-opacity' : ''}>
+    <div className={`flex flex-col md:flex-row md:items-center gap-2 ${isPending ? 'opacity-75 transition-opacity' : ''}`}>
       {!hideFilterBuilder && (
-        <ExploreFilterBuilder
-          value={filters}
-          onChange={onFiltersChange}
-          customDimensionLabels={customDimensionLabels}
-        />
+        <div className="order-2 md:order-1">
+          <ExploreFilterBuilder
+            value={filters}
+            onChange={onFiltersChange}
+            customDimensionLabels={customDimensionLabels}
+          />
+        </div>
       )}
-      <DateRangePicker
-        period={period}
-        timezone={timezone}
-        workspaceCreatedAt={workspaceCreatedAt}
-        customStart={customStart}
-        customEnd={customEnd}
-        onPeriodChange={onPeriodChange}
-        onCustomRangeChange={onCustomRangeChange}
-      />
-      <ComparisonPicker value={comparison} onChange={onComparisonChange} />
-    </Space>
+      <div className="flex items-center gap-2 mb-2 md:mb-0 order-1 md:order-2">
+        <DateRangePicker
+          period={period}
+          timezone={timezone}
+          workspaceCreatedAt={workspaceCreatedAt}
+          customStart={customStart}
+          customEnd={customEnd}
+          onPeriodChange={onPeriodChange}
+          onCustomRangeChange={onCustomRangeChange}
+        />
+        <ComparisonPicker value={comparison} onChange={onComparisonChange} />
+      </div>
+    </div>
   )
 }

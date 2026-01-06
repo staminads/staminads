@@ -3,7 +3,7 @@ import { createFileRoute, Outlet, Link, useNavigate, useRouterState } from '@tan
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { Select, Button, Avatar, Spin, Space, Popover, Tooltip, App, Dropdown } from 'antd'
 import type { RefSelectProps } from 'antd/es/select'
-import { LogoutOutlined, PlusOutlined, GlobalOutlined, QuestionCircleOutlined } from '@ant-design/icons'
+import { LogoutOutlined, PlusOutlined, GlobalOutlined, QuestionCircleOutlined, MenuOutlined, CloseOutlined } from '@ant-design/icons'
 import { workspacesQueryOptions, workspaceQueryOptions, backfillSummaryQueryOptions } from '../../../lib/queries'
 import { SyncStatusIcon } from '../../../components/layout/SyncStatusIcon'
 import { useAuth } from '../../../lib/useAuth'
@@ -50,6 +50,7 @@ function WorkspaceLayout() {
   const routerState = useRouterState()
   const currentPath = routerState.location.pathname
   const [timezonePopoverOpen, setTimezonePopoverOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const timezoneSelectRef = useRef<RefSelectProps>(null)
 
   // Focus the Select search input when popover opens
@@ -102,8 +103,14 @@ function WorkspaceLayout() {
   return (
     <div className="flex-1 flex flex-col bg-[var(--background)]">
       <header className="bg-[var(--background)]">
-        <div className="h-16 max-w-7xl mx-auto px-6 flex items-center justify-between border-b border-gray-200">
-          {/* Left: Logo + Workspace Selector + Navigation */}
+        <div className="h-16 max-w-7xl mx-auto px-4 md:px-6 flex items-center justify-between border-b border-gray-200">
+          {/* Mobile: Logo only */}
+          <div className="flex md:hidden items-center">
+            <img src="/logo.svg" alt="Staminads" className="h-6" />
+          </div>
+
+          {/* Desktop: Logo + Workspace Selector + Navigation */}
+          <div className="hidden md:block">
           <Space size="large">
             <img src="/logo.svg" alt="Staminads" className="h-6" />
             <Select
@@ -178,8 +185,21 @@ function WorkspaceLayout() {
               </div>
             )}
           </Space>
+          </div>
 
-          {/* Right: Sync Status + Timezone + Logout */}
+          {/* Mobile: Sync + Hamburger */}
+          <div className="flex md:hidden items-center gap-2">
+            {isWorkspaceActive && <SyncStatusIcon workspaceId={workspaceId} />}
+            <Button
+              type="text"
+              icon={<MenuOutlined />}
+              onClick={() => setMobileMenuOpen(true)}
+              className="!text-gray-600"
+            />
+          </div>
+
+          {/* Desktop: Sync Status + Timezone + Logout */}
+          <div className="hidden md:block">
           <Space>
             {isWorkspaceActive && (
               <>
@@ -267,8 +287,174 @@ function WorkspaceLayout() {
               />
             </Tooltip>
           </Space>
+          </div>
         </div>
       </header>
+
+      {/* Mobile Menu Overlay */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Mobile Menu Panel */}
+      <div
+        className={`fixed inset-y-0 left-[calc(100vw-18rem)] w-72 bg-white z-50 transform transition-transform duration-300 ease-in-out md:hidden overflow-y-auto ${
+          mobileMenuOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        {/* Close button */}
+        <div className="flex justify-end p-4 border-b border-gray-200">
+          <Button
+            type="text"
+            icon={<CloseOutlined />}
+            onClick={() => setMobileMenuOpen(false)}
+          />
+        </div>
+
+        {/* Workspace Selector */}
+          <div className="p-4 border-b border-gray-200">
+            <Select
+              value={workspaceId}
+              onChange={(id) => {
+                handleWorkspaceChange(id)
+                setMobileMenuOpen(false)
+              }}
+              variant="filled"
+              className="w-full"
+              popupMatchSelectWidth={false}
+              labelRender={() => (
+                <div className="flex items-center gap-2">
+                  <Avatar src={workspace.logo_url} shape="square" size={20}>
+                    {workspace.name[0]}
+                  </Avatar>
+                  <span className="text-gray-800">{workspace.name}</span>
+                </div>
+              )}
+              options={[
+                ...workspaces.map((ws) => ({
+                  value: ws.id,
+                  label: (
+                    <div className="flex items-center gap-2">
+                      <Avatar src={ws.logo_url} shape="square" size={20}>
+                        {ws.name[0]}
+                      </Avatar>
+                      <span>{ws.name}</span>
+                    </div>
+                  ),
+                })),
+                ...(user?.isSuperAdmin ? [{
+                  value: 'new',
+                  label: (
+                    <div className="flex items-center gap-2 text-[var(--primary)]">
+                      <PlusOutlined />
+                      <span>New workspace</span>
+                    </div>
+                  ),
+                }] : []),
+              ]}
+            />
+          </div>
+
+          {/* Navigation Links */}
+          {isWorkspaceActive && (
+            <nav className="flex flex-col py-2">
+              {[
+                { to: '/workspaces/$workspaceId', label: 'Dashboard', exact: true },
+                { to: '/workspaces/$workspaceId/explore', label: 'Explore' },
+                { to: '/workspaces/$workspaceId/filters', label: 'Filters' },
+                { to: '/workspaces/$workspaceId/annotations', label: 'Annotations' },
+                { to: '/workspaces/$workspaceId/settings', label: 'Settings' },
+              ].map(({ to, label, exact }) => {
+                const resolvedPath = to.replace('$workspaceId', workspaceId)
+                const isActive = exact
+                  ? currentPath === resolvedPath
+                  : currentPath.startsWith(resolvedPath)
+                return (
+                  <Link
+                    key={to}
+                    to={to}
+                    params={{ workspaceId }}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`px-4 py-3 transition-colors ${
+                      isActive
+                        ? '!text-[var(--primary)] bg-purple-50'
+                        : '!text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {label}
+                  </Link>
+                )
+              })}
+            </nav>
+          )}
+
+          {/* Divider */}
+          <div className="border-t border-gray-200" />
+
+          {/* Timezone Picker */}
+          {isWorkspaceActive && (
+            <div className="p-4">
+              <div className="text-xs text-gray-500 mb-2">Timezone</div>
+              <Select
+                value={timezone}
+                onChange={(value) => {
+                  setTimezone(value)
+                  message.success(`Timezone set to ${value}`)
+                }}
+                variant="filled"
+                className="w-full"
+                showSearch
+                optionFilterProp="label"
+                options={timezoneOptions}
+              />
+            </div>
+          )}
+
+          {/* Divider */}
+          <div className="border-t border-gray-200" />
+
+          {/* Help Links */}
+          <div className="py-2">
+            <a
+              href="https://docs.staminads.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50"
+            >
+              <QuestionCircleOutlined />
+              Documentation
+            </a>
+            <a
+              href="https://github.com/staminads/staminads/issues"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50"
+            >
+              Report an issue
+            </a>
+            <div className="px-4 py-2 text-xs text-gray-400">
+              v{__APP_VERSION__}
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="border-t border-gray-200" />
+
+          {/* Logout */}
+          <button
+            onClick={() => {
+              setMobileMenuOpen(false)
+              handleLogout()
+            }}
+            className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 w-full text-left"
+          >
+            <LogoutOutlined />
+            Logout
+          </button>
+      </div>
 
       <div className="flex-1">
         <div className="max-w-7xl mx-auto">

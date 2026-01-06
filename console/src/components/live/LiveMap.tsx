@@ -88,7 +88,7 @@ export function LiveMap({ data, loading }: LiveMapProps) {
 
   if (loading && data.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[400px]">
+      <div className="flex items-center justify-center aspect-[2/1]">
         <Spin />
       </div>
     )
@@ -96,10 +96,10 @@ export function LiveMap({ data, loading }: LiveMapProps) {
 
   // Always render the map, even with no sessions (scatterData can be empty)
   return (
-    <div className="overflow-hidden">
+    <div className="overflow-hidden aspect-[2/1]">
       <ReactECharts
         option={option}
-        style={{ height: 400, width: '100%' }}
+        style={{ height: '100%', width: '100%' }}
         opts={{ renderer: 'svg' }}
       />
     </div>

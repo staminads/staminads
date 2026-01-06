@@ -355,9 +355,9 @@ export function DashboardGrid({
             onMetricSelect={setSelectedMetric}
             showComparison={showComparison}
           />
-          <div className="pl-2 pr-4 pt-4 pb-3">
+          <div className="pl-2 pr-4 pt-4 pb-3 relative">
             {availableGranularities.length > 1 && (
-              <div className="flex justify-end mb-2">
+              <div className="absolute top-4 right-4 z-10">
                 <GranularitySelector
                   value={granularity}
                   onChange={setGranularityOverride}
