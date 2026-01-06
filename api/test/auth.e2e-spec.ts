@@ -247,7 +247,15 @@ describe('Auth Integration', () => {
       expect(response.body.message).toBeDefined();
     });
 
-    it('logs in with legacy admin credentials from env', async () => {
+    it('logs in with admin credentials from env', async () => {
+      // Create admin user in database with credentials from env
+      await createTestUser(
+        systemClient,
+        process.env.ADMIN_EMAIL!,
+        process.env.ADMIN_PASSWORD!,
+        { isSuperAdmin: true },
+      );
+
       const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.login')
         .send({
@@ -258,6 +266,7 @@ describe('Auth Integration', () => {
 
       expect(response.body.access_token).toBeDefined();
       expect(response.body.user.email).toBe(process.env.ADMIN_EMAIL);
+      expect(response.body.user.is_super_admin).toBeTruthy();
     });
   });
 
@@ -628,17 +637,20 @@ describe('Auth Integration', () => {
 
       expect(sessionsResponse.body.length).toBe(2);
 
-      // Revoke first session
-      const sessionId = sessionsResponse.body[0].id;
+      // Sessions are returned by created_at DESC, so:
+      // body[0] = token2's session (newest)
+      // body[1] = token1's session (oldest)
+      // Revoke token1's session using token2
+      const sessionToRevoke = sessionsResponse.body[1].id; // token1's session
       const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.revokeSession')
-        .query({ sessionId })
+        .query({ sessionId: sessionToRevoke })
         .set('Authorization', `Bearer ${token2}`)
-        .expect(201);
+        .expect(200);
 
       expect(response.body.success).toBe(true);
 
-      // Verify only one session remains
+      // Verify only one session remains (token2's)
       await waitForClickHouse();
       const updatedSessions = await request(ctx.app.getHttpServer())
         .get('/api/auth.sessions')
@@ -646,7 +658,7 @@ describe('Auth Integration', () => {
         .expect(200);
 
       expect(updatedSessions.body.length).toBe(1);
-      expect(updatedSessions.body[0].id).not.toBe(sessionId);
+      expect(updatedSessions.body[0].id).not.toBe(sessionToRevoke);
     });
 
     it('fails when revoking another user\'s session', async () => {

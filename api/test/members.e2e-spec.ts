@@ -421,7 +421,7 @@ describe('Members Integration', () => {
           workspace_id: testWorkspaceId,
           user_id: viewerUserId,
         })
-        .expect(201);
+        .expect(200);
 
       expect(response.body.success).toBe(true);
 
@@ -452,7 +452,7 @@ describe('Members Integration', () => {
           workspace_id: testWorkspaceId,
           user_id: editorUserId,
         })
-        .expect(201);
+        .expect(200);
     });
 
     it('admin cannot remove owner', async () => {
@@ -496,7 +496,7 @@ describe('Members Integration', () => {
           workspace_id: testWorkspaceId,
           user_id: owner2.id,
         })
-        .expect(201);
+        .expect(200);
 
       // Wait for deletion
       await waitForMutations(systemClient, TEST_SYSTEM_DATABASE);
@@ -520,7 +520,7 @@ describe('Members Integration', () => {
           workspace_id: testWorkspaceId,
           user_id: ownerUserId,
         })
-        .expect(201);
+        .expect(200);
 
       await waitForMutations(systemClient, TEST_SYSTEM_DATABASE);
 
@@ -542,7 +542,7 @@ describe('Members Integration', () => {
           workspace_id: testWorkspaceId,
           user_id: owner3.id,
         })
-        .expect(201);
+        .expect(200);
 
       await waitForMutations(systemClient, TEST_SYSTEM_DATABASE);
 
@@ -597,7 +597,7 @@ describe('Members Integration', () => {
           workspace_id: testWorkspaceId,
           user_id: viewerUserId,
         })
-        .expect(201);
+        .expect(200);
 
       // Wait for audit log
       await waitForClickHouse();

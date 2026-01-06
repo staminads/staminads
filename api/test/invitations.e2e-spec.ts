@@ -609,7 +609,7 @@ describe('Invitations Integration', () => {
           name: 'New User',
           password: 'password123',
         })
-        .expect(201);
+        .expect(200);
 
       expect(response.body).toMatchObject({
         workspaceId,
@@ -701,7 +701,7 @@ describe('Invitations Integration', () => {
           token,
           // No name/password needed for existing user
         })
-        .expect(201);
+        .expect(200);
 
       expect(response.body.userId).toBe(viewerUserId);
       expect(response.body.workspaceId).toBe(workspaceId);
@@ -874,7 +874,7 @@ describe('Invitations Integration', () => {
           name: 'Public User',
           password: 'password123',
         })
-        .expect(201);
+        .expect(200);
 
       expect(response.body.userId).toBeDefined();
     });
@@ -913,7 +913,7 @@ describe('Invitations Integration', () => {
         .post('/api/invitations.resend')
         .set('Authorization', `Bearer ${ownerAuthToken}`)
         .send({ id: invitation.id })
-        .expect(201);
+        .expect(200);
 
       expect(response.body.success).toBe(true);
 
@@ -1022,7 +1022,7 @@ describe('Invitations Integration', () => {
         .post('/api/invitations.revoke')
         .set('Authorization', `Bearer ${ownerAuthToken}`)
         .send({ id: invitation.id })
-        .expect(201);
+        .expect(200);
 
       expect(response.body.success).toBe(true);
 
