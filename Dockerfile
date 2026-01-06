@@ -16,8 +16,9 @@ FROM node:22-alpine AS frontend-builder
 
 WORKDIR /app
 
-# Copy SDK build output (needed by console prebuild)
+# Copy SDK build output and package.json (needed by console prebuild)
 COPY --from=sdk-builder /app/sdk/dist ./sdk/dist
+COPY --from=sdk-builder /app/sdk/package.json ./sdk/package.json
 
 WORKDIR /app/console
 
