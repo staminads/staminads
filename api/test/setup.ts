@@ -73,7 +73,7 @@ export async function setup(): Promise<void> {
     values: [
       {
         id: generateId(),
-        email: 'admin@test.com',
+        email: 'super-admin@test.com',
         password_hash: adminPasswordHash,
         name: 'Test Admin',
         type: 'user',
