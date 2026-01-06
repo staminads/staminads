@@ -8,6 +8,8 @@ services:
       - ./clickhouse-users.xml:/etc/clickhouse-server/users.d/users.xml:ro
     environment:
       CLICKHOUSE_DB: staminads_system
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
     healthcheck:
       test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
       interval: 5s
@@ -27,7 +29,7 @@ services:
       CLICKHOUSE_HOST: http://clickhouse:8123
       CLICKHOUSE_DATABASE: staminads
       CLICKHOUSE_USER: default
-      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
     depends_on:
       clickhouse:
         condition: service_healthy
