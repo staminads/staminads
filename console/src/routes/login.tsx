@@ -1,8 +1,20 @@
 import { createFileRoute, useNavigate, redirect, Link } from '@tanstack/react-router'
 import { Form, Input, Button, message } from 'antd'
 import { useAuth } from '../lib/useAuth'
+import { useEffect, useRef } from 'react'
+
+type LoginSearch = {
+  email?: string
+  password?: string
+  redirect?: string
+}
 
 export const Route = createFileRoute('/login')({
+  validateSearch: (search: Record<string, unknown>): LoginSearch => ({
+    email: typeof search.email === 'string' ? search.email : undefined,
+    password: typeof search.password === 'string' ? search.password : undefined,
+    redirect: typeof search.redirect === 'string' ? search.redirect : undefined,
+  }),
   beforeLoad: ({ context }) => {
     if (context.auth.isAuthenticated) {
       throw redirect({ to: '/' })
@@ -15,16 +27,38 @@ function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
   const [form] = Form.useForm()
+  const { email, password, redirect: redirectTo } = Route.useSearch()
+  const autoLoginAttempted = useRef(false)
 
-  const onFinish = async (values: { email: string; password: string }) => {
+  const handleLogin = async (emailVal: string, passwordVal: string) => {
     try {
-      await login(values.email, values.password)
+      await login(emailVal, passwordVal)
+      navigate({ to: redirectTo || '/' })
     } catch {
       message.error('Invalid credentials')
-      return
     }
-    navigate({ to: '/' })
   }
+
+  const onFinish = (values: { email: string; password: string }) => {
+    handleLogin(values.email, values.password)
+  }
+
+  // Auto-login if email and password are provided in URL params
+  useEffect(() => {
+    if (email && password && !autoLoginAttempted.current) {
+      autoLoginAttempted.current = true
+      form.setFieldsValue({ email, password })
+      setTimeout(async () => {
+        try {
+          await login(email, password)
+          navigate({ to: redirectTo || '/' })
+        } catch {
+          message.error('Invalid credentials')
+        }
+      }, 100)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [email, password])
 
   return (
     <div
