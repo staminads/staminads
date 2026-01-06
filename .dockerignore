@@ -1,0 +1,38 @@
+# Dependencies
+node_modules
+*/node_modules
+
+# Build outputs (will be created in Docker)
+api/dist
+console/dist
+
+# Development files
+.git
+.github
+.claude
+*.md
+!README.md
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test files
+coverage
+*.spec.ts
+*.test.ts
+
+# Environment files (use compose environment instead)
+.env
+.env.*
+!.env.example

@@ -2,7 +2,9 @@ import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { join } from 'path';
 import { validate } from './config/env.validation';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { ApiKeysModule } from './api-keys/api-keys.module';
@@ -29,6 +31,10 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     ConfigModule.forRoot({
       isGlobal: true,
       validate,
+    }),
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, 'public'),
+      exclude: ['/api/{*path}', '/health'],
     }),
     CacheModule.register({
       isGlobal: true,
