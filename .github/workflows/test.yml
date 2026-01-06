@@ -36,7 +36,6 @@ jobs:
       CLICKHOUSE_DATABASE: staminads_test
       CLICKHOUSE_USER: default
       CLICKHOUSE_PASSWORD: ""
-      JWT_SECRET: test-secret-key
       ADMIN_EMAIL: super-admin@test.com
       ADMIN_PASSWORD: testpass
       ENCRYPTION_KEY: test-encryption-key-32-chars-ok!

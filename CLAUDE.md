@@ -30,7 +30,7 @@ NestJS application with RPC-style endpoints.
 ### Environment Variables
 
 ```
-JWT_SECRET=<required>
+ENCRYPTION_KEY=<required, 32+ chars>
 JWT_EXPIRES_IN=7d
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=<required>

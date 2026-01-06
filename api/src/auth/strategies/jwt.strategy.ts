@@ -25,9 +25,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly clickhouse: ClickHouseService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {
-    const secret = configService.get<string>('JWT_SECRET');
+    const secret = configService.get<string>('ENCRYPTION_KEY');
     if (!secret) {
-      throw new Error('JWT_SECRET environment variable is required');
+      throw new Error('ENCRYPTION_KEY environment variable is required');
     }
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),

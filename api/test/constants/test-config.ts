@@ -16,7 +16,6 @@ export const CLICKHOUSE_USER = 'default';
 export const CLICKHOUSE_PASSWORD = '';
 
 // Auth constants
-export const JWT_SECRET = 'test-secret-key';
 export const ADMIN_EMAIL = 'super-admin@test.com';
 export const ADMIN_PASSWORD = 'testpass';
 export const ENCRYPTION_KEY = 'test-encryption-key-32-chars-ok!';
@@ -47,7 +46,6 @@ export function setupTestEnv(options: { corsOrigins?: string[] } = {}): void {
   process.env.CLICKHOUSE_HOST = CLICKHOUSE_HOST;
   process.env.CLICKHOUSE_USER = CLICKHOUSE_USER;
   process.env.CLICKHOUSE_PASSWORD = CLICKHOUSE_PASSWORD;
-  process.env.JWT_SECRET = JWT_SECRET;
   process.env.ADMIN_EMAIL = ADMIN_EMAIL;
   process.env.ADMIN_PASSWORD = ADMIN_PASSWORD;
   process.env.ENCRYPTION_KEY = ENCRYPTION_KEY;

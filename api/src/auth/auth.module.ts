@@ -16,9 +16,9 @@ import { ApiKeysModule } from '../api-keys/api-keys.module';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
-        const secret = configService.get<string>('JWT_SECRET');
+        const secret = configService.get<string>('ENCRYPTION_KEY');
         if (!secret) {
-          throw new Error('JWT_SECRET environment variable is required');
+          throw new Error('ENCRYPTION_KEY environment variable is required');
         }
         return {
           secret,
