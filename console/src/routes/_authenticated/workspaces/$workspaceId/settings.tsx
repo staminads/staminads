@@ -430,12 +430,12 @@ function Settings() {
   const versionParam = sdkVersion ? `?v=${sdkVersion}` : ''
   const sdkSnippet = `<!-- Staminads -->
 <script>
-(function(w,d,s,e,n){
-  w.Staminads=w.Staminads||{_queue:[],init:function(){this._queue.push(['init',arguments])}};
-  var js=d.createElement(s);js.async=1;js.src=e;d.head.appendChild(js);
-  w.Staminads.init({workspace_id:'${workspaceId}',endpoint:n});
-})(window,document,'script','${window.location.origin}/sdk/staminads.min.js${versionParam}','${window.location.origin}');
-</script>`
+window.StaminadsConfig = {
+  workspace_id: '${workspaceId}',
+  endpoint: '${window.location.origin}'
+};
+</script>
+<script async src="${window.location.origin}/sdk/staminads.min.js${versionParam}"></script>`
 
   const sdkContent = (
     <div className="max-w-xl">
