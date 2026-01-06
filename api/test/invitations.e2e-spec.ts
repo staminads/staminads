@@ -29,31 +29,30 @@ describe('Invitations Integration', () => {
   let viewerUserId: string;
   let editorAuthToken: string;
   let viewerAuthToken: string;
+  let adminUserId: string;
+  let adminAuthToken: string;
+  let inviteTestUserId: string;
   let workspaceId: string;
   let mailService: MailService;
+  const coreUserIds: string[] = [];
 
   beforeAll(async () => {
     ctx = await createTestApp({ mockMailService: true });
     systemClient = ctx.systemClient;
     mailService = ctx.mailService!;
-  });
 
-  afterAll(async () => {
-    await closeTestApp(ctx);
-  });
-
-  beforeEach(async () => {
-    // Clean tables before each test
-    await truncateSystemTables(systemClient, ['workspaces', 'users', 'workspace_memberships', 'invitations']);
-
-    // Create test workspace
+    // Create workspace ONCE
     workspaceId = 'test_ws_inv';
     await createTestWorkspace(systemClient, workspaceId, { name: 'Test Workspace' });
 
-    // Create test users with tokens
+    // Create 5 users ONCE
     const owner = await createUserWithToken(ctx.app, systemClient, 'owner@test.com', undefined, { name: 'Owner User' });
     ownerUserId = owner.id;
     ownerAuthToken = owner.token;
+
+    const admin = await createUserWithToken(ctx.app, systemClient, 'admin@test.com', undefined, { name: 'Admin User' });
+    adminUserId = admin.id;
+    adminAuthToken = admin.token;
 
     const editor = await createUserWithToken(ctx.app, systemClient, 'editor@test.com', undefined, { name: 'Editor User' });
     editorUserId = editor.id;
@@ -63,10 +62,42 @@ describe('Invitations Integration', () => {
     viewerUserId = viewer.id;
     viewerAuthToken = viewer.token;
 
-    // Create memberships
+    // User with no membership for "existing user joins workspace" test
+    const inviteTest = await createUserWithToken(ctx.app, systemClient, 'invitetest@test.com', undefined, { name: 'Invite Test User' });
+    inviteTestUserId = inviteTest.id;
+
+    // Create memberships ONCE (inviteTestUserId has NO membership)
     await createMembership(systemClient, workspaceId, ownerUserId, 'owner');
+    await createMembership(systemClient, workspaceId, adminUserId, 'admin', ownerUserId);
     await createMembership(systemClient, workspaceId, editorUserId, 'editor', ownerUserId);
     await createMembership(systemClient, workspaceId, viewerUserId, 'viewer', ownerUserId);
+
+    // Track core user IDs for cleanup (used in beforeEach)
+    coreUserIds.push(ownerUserId, adminUserId, editorUserId, viewerUserId, inviteTestUserId);
+  });
+
+  afterAll(async () => {
+    await closeTestApp(ctx);
+  });
+
+  beforeEach(async () => {
+    // Truncate invitations (fast)
+    await truncateSystemTables(systemClient, ['invitations'], 0);
+
+    // Delete test-created users (from invitation.accept tests)
+    await systemClient.command({
+      query: `ALTER TABLE users DELETE WHERE id NOT IN (${coreUserIds.map((id) => `'${id}'`).join(', ')})`,
+    });
+
+    // Delete test-created memberships (keep only core 4)
+    await systemClient.command({
+      query: `ALTER TABLE workspace_memberships DELETE WHERE user_id NOT IN (${coreUserIds.slice(0, 4).map((id) => `'${id}'`).join(', ')})`,
+    });
+
+    // Wait for DELETE mutations to complete
+    await waitForMutations(systemClient, TEST_SYSTEM_DATABASE);
+
+    jest.clearAllMocks();
   });
 
   describe('POST /api/invitations.create', () => {
@@ -118,25 +149,6 @@ describe('Invitations Integration', () => {
     });
 
     it('creates invitation as workspace admin', async () => {
-      // First, promote editor to admin
-      await systemClient.insert({
-        table: 'workspace_memberships',
-        values: [
-          {
-            id: generateId(),
-            workspace_id: workspaceId,
-            user_id: editorUserId,
-            role: 'admin',
-            invited_by: ownerUserId,
-            joined_at: toClickHouseDateTime(),
-            created_at: toClickHouseDateTime(),
-            updated_at: toClickHouseDateTime(),
-          },
-        ],
-        format: 'JSONEachRow',
-      });
-      await waitForClickHouse();
-
       const dto = {
         workspace_id: workspaceId,
         email: 'newadmin@test.com',
@@ -145,7 +157,7 @@ describe('Invitations Integration', () => {
 
       const response = await request(ctx.app.getHttpServer())
         .post('/api/invitations.create')
-        .set('Authorization', `Bearer ${editorAuthToken}`)
+        .set('Authorization', `Bearer ${adminAuthToken}`)
         .send(dto)
         .expect(201);
 
@@ -665,11 +677,11 @@ describe('Invitations Integration', () => {
       const tokenHash = hashToken(token);
       const now = new Date();
 
-      // Create invitation for existing user
+      // Create invitation for existing user (inviteTestUser has no membership)
       const invitation = {
         id: generateId(),
         workspace_id: workspaceId,
-        email: 'viewer@test.com', // Existing user
+        email: 'invitetest@test.com', // Existing user with no membership
         role: 'admin',
         token_hash: tokenHash,
         invited_by: ownerUserId,
@@ -681,12 +693,6 @@ describe('Invitations Integration', () => {
         created_at: toClickHouseDateTime(now),
         updated_at: toClickHouseDateTime(now),
       };
-
-      // Remove existing membership first (viewer was already a member)
-      await systemClient.command({
-        query: `ALTER TABLE workspace_memberships DELETE WHERE workspace_id = '${workspaceId}' AND user_id = '${viewerUserId}'`,
-      });
-      await waitForMutations(systemClient, TEST_SYSTEM_DATABASE);
 
       await systemClient.insert({
         table: 'invitations',
@@ -703,7 +709,7 @@ describe('Invitations Integration', () => {
         })
         .expect(200);
 
-      expect(response.body.userId).toBe(viewerUserId);
+      expect(response.body.userId).toBe(inviteTestUserId);
       expect(response.body.workspaceId).toBe(workspaceId);
 
       // Verify membership was created with new role
@@ -711,7 +717,7 @@ describe('Invitations Integration', () => {
       const memberResult = await systemClient.query({
         query:
           'SELECT * FROM workspace_memberships FINAL WHERE workspace_id = {ws:String} AND user_id = {uid:String}',
-        query_params: { ws: workspaceId, uid: viewerUserId },
+        query_params: { ws: workspaceId, uid: inviteTestUserId },
         format: 'JSONEachRow',
       });
       const members = (await memberResult.json()) as Record<string, unknown>[];

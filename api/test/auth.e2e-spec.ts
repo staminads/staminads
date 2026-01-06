@@ -394,7 +394,7 @@ describe('Auth Integration', () => {
       expect(response.body.success).toBe(true);
 
       // Verify can login with new password
-      await waitForClickHouse(200);
+      await waitForClickHouse();
       const loginResponse = await request(ctx.app.getHttpServer())
         .post('/api/auth.login')
         .send({ email, password: newPassword })
@@ -449,7 +449,7 @@ describe('Auth Integration', () => {
         .send({ token: resetToken, newPassword: 'newpassword123' })
         .expect(200);
 
-      await waitForClickHouse(200);
+      await waitForClickHouse();
 
       // Verify old token no longer works
       await request(ctx.app.getHttpServer())
@@ -737,7 +737,7 @@ describe('Auth Integration', () => {
 
       expect(response.body.success).toBe(true);
 
-      await waitForClickHouse(200);
+      await waitForClickHouse();
 
       // Verify all tokens are now invalid
       await request(ctx.app.getHttpServer())

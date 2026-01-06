@@ -9,6 +9,7 @@ import { ClickHouseClient } from '@clickhouse/client';
 import request from 'supertest';
 import { generateId, hashPassword } from '../../src/common/crypto';
 import { toClickHouseDateTime } from './datetime.helper';
+import { waitForData } from './wait.helper';
 import {
   TEST_PASSWORD,
   TEST_PASSWORD_HASH,
@@ -84,7 +85,9 @@ export async function createTestUser(
     format: 'JSONEachRow',
   });
 
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  // Poll until user is visible (faster than fixed 100ms delay)
+  await waitForData(client, 'users', 'id = {id:String}', { id: userId }, { timeoutMs: 2000, intervalMs: 10 });
+
   return userId;
 }
 
@@ -193,7 +196,9 @@ export async function createMembership(
     format: 'JSONEachRow',
   });
 
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  // Poll until membership is visible (faster than fixed 100ms delay)
+  await waitForData(client, 'workspace_memberships', 'id = {id:String}', { id: membershipId }, { timeoutMs: 2000, intervalMs: 10 });
+
   return membershipId;
 }
 
@@ -215,12 +220,13 @@ export async function createPasswordResetToken(
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
   const now = new Date();
   const expiresAt = new Date(now.getTime() + expiresInMs);
+  const tokenId = generateId();
 
   await client.insert({
     table: 'password_reset_tokens',
     values: [
       {
-        id: generateId(),
+        id: tokenId,
         user_id: userId,
         token_hash: tokenHash,
         status: 'pending',
@@ -232,7 +238,9 @@ export async function createPasswordResetToken(
     format: 'JSONEachRow',
   });
 
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  // Poll until token is visible (faster than fixed 100ms delay)
+  await waitForData(client, 'password_reset_tokens', 'id = {id:String}', { id: tokenId }, { timeoutMs: 2000, intervalMs: 10 });
+
   return token;
 }
 
@@ -267,25 +275,21 @@ export async function setupMembersTestScenario(
   client: ClickHouseClient,
   workspaceId: string,
 ): Promise<TestScenarioUsers> {
-  // Create users
-  const owner = await createUserWithToken(app, client, 'owner@test.com', undefined, {
-    name: 'Owner User',
-  });
-  const admin = await createUserWithToken(app, client, 'admin-role@test.com', undefined, {
-    name: 'Admin Role User',
-  });
-  const editor = await createUserWithToken(app, client, 'editor@test.com', undefined, {
-    name: 'Editor User',
-  });
-  const viewer = await createUserWithToken(app, client, 'viewer@test.com', undefined, {
-    name: 'Viewer User',
-  });
+  // Create users in parallel (each has unique email/ID, so no conflicts)
+  const [owner, admin, editor, viewer] = await Promise.all([
+    createUserWithToken(app, client, 'owner@test.com', undefined, { name: 'Owner User' }),
+    createUserWithToken(app, client, 'admin-role@test.com', undefined, { name: 'Admin Role User' }),
+    createUserWithToken(app, client, 'editor@test.com', undefined, { name: 'Editor User' }),
+    createUserWithToken(app, client, 'viewer@test.com', undefined, { name: 'Viewer User' }),
+  ]);
 
-  // Create memberships with role hierarchy
-  await createMembership(client, workspaceId, owner.id, 'owner');
-  await createMembership(client, workspaceId, admin.id, 'admin', owner.id);
-  await createMembership(client, workspaceId, editor.id, 'editor', owner.id);
-  await createMembership(client, workspaceId, viewer.id, 'viewer', owner.id);
+  // Create memberships in parallel (no dependencies between them)
+  await Promise.all([
+    createMembership(client, workspaceId, owner.id, 'owner'),
+    createMembership(client, workspaceId, admin.id, 'admin', owner.id),
+    createMembership(client, workspaceId, editor.id, 'editor', owner.id),
+    createMembership(client, workspaceId, viewer.id, 'viewer', owner.id),
+  ]);
 
   return { owner, admin, editor, viewer };
 }
@@ -324,21 +328,19 @@ export async function setupInvitationsTestScenario(
   const workspaceId = 'test_ws_inv';
   await createWorkspaceFn(client, workspaceId, { name: 'Test Workspace' });
 
-  // Create users
-  const owner = await createUserWithToken(app, client, 'inv-owner@test.com', undefined, {
-    name: 'Invitation Owner',
-  });
-  const editor = await createUserWithToken(app, client, 'inv-editor@test.com', undefined, {
-    name: 'Invitation Editor',
-  });
-  const viewer = await createUserWithToken(app, client, 'inv-viewer@test.com', undefined, {
-    name: 'Invitation Viewer',
-  });
+  // Create users in parallel
+  const [owner, editor, viewer] = await Promise.all([
+    createUserWithToken(app, client, 'inv-owner@test.com', undefined, { name: 'Invitation Owner' }),
+    createUserWithToken(app, client, 'inv-editor@test.com', undefined, { name: 'Invitation Editor' }),
+    createUserWithToken(app, client, 'inv-viewer@test.com', undefined, { name: 'Invitation Viewer' }),
+  ]);
 
-  // Create memberships
-  await createMembership(client, workspaceId, owner.id, 'owner');
-  await createMembership(client, workspaceId, editor.id, 'editor', owner.id);
-  await createMembership(client, workspaceId, viewer.id, 'viewer', owner.id);
+  // Create memberships in parallel
+  await Promise.all([
+    createMembership(client, workspaceId, owner.id, 'owner'),
+    createMembership(client, workspaceId, editor.id, 'editor', owner.id),
+    createMembership(client, workspaceId, viewer.id, 'viewer', owner.id),
+  ]);
 
   return { workspaceId, owner, editor, viewer };
 }

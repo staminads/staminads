@@ -7,6 +7,7 @@
 import { ClickHouseClient } from '@clickhouse/client';
 import { generateId, generateApiKeyToken } from '../../src/common/crypto';
 import { toClickHouseDateTime } from './datetime.helper';
+import { waitForData } from './wait.helper';
 
 export interface WorkspaceSettings {
   timescore_reference?: number;
@@ -74,7 +75,7 @@ export async function createTestWorkspace(
     format: 'JSONEachRow',
   });
 
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  // No delay needed - workspace creation has no immediate read-after-write dependency
   return workspaceId;
 }
 
@@ -128,7 +129,9 @@ export async function createTestApiKey(
     format: 'JSONEachRow',
   });
 
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  // Poll until API key is visible (faster than fixed 100ms delay)
+  await waitForData(client, 'api_keys', 'id = {id:String}', { id: keyId }, { timeoutMs: 2000, intervalMs: 10 });
+
   return key;
 }
 
