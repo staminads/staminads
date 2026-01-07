@@ -41,6 +41,9 @@ export interface DashboardContextValue {
   globalFilters: Filter[]
   showComparison: boolean
   timescoreReference: number
+  /** Mobile-only: show evolution percentages instead of values */
+  showEvoDetails: boolean
+  setShowEvoDetails: (value: boolean) => void
 }
 
 /** Standard data shape for all dimension widgets */

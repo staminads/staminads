@@ -13,6 +13,8 @@ export interface DashboardProviderProps {
   globalFilters?: Filter[]
   showComparison: boolean
   timescoreReference: number
+  showEvoDetails: boolean
+  setShowEvoDetails: (value: boolean) => void
 }
 
 export function DashboardProvider({
@@ -24,6 +26,8 @@ export function DashboardProvider({
   globalFilters = [],
   showComparison,
   timescoreReference,
+  showEvoDetails,
+  setShowEvoDetails,
 }: DashboardProviderProps) {
   const value = useMemo<DashboardContextValue>(
     () => ({
@@ -34,8 +38,10 @@ export function DashboardProvider({
       globalFilters,
       showComparison,
       timescoreReference,
+      showEvoDetails,
+      setShowEvoDetails,
     }),
-    [workspaceId, dateRange, compareDateRange, timezone, globalFilters, showComparison, timescoreReference]
+    [workspaceId, dateRange, compareDateRange, timezone, globalFilters, showComparison, timescoreReference, showEvoDetails, setShowEvoDetails]
   )
 
   return <DashboardContext.Provider value={value}>{children}</DashboardContext.Provider>

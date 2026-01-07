@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.0] - 2026-01-07
+
+- Topbar logo now navigates to dashboard
+
 ## [2.2.0] - 2026-01-07
 
 - Mobile UI enhancements for dashboard and explore views

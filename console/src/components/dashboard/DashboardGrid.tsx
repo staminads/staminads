@@ -46,6 +46,7 @@ export function DashboardGrid({
   onAddFilter
 }: DashboardGridProps) {
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>('sessions')
+  const [showEvoDetails, setShowEvoDetails] = useState(false)
   const { period, timezone } = useDashboardParams(workspaceTimezone)
 
   // Key for resetting granularity override when period changes
@@ -351,6 +352,8 @@ export function DashboardGrid({
       globalFilters={globalFilters}
       showComparison={showComparison}
       timescoreReference={timescoreReference}
+      showEvoDetails={showEvoDetails}
+      setShowEvoDetails={setShowEvoDetails}
     >
       <div className={isFetching ? 'opacity-75 transition-opacity' : ''}>
         <div className="rounded-md overflow-hidden bg-white">

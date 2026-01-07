@@ -22,13 +22,12 @@ export function DimensionTableWidget({
   onRowClick,
   emptyText = 'No data available',
 }: DimensionTableWidgetProps) {
-  const { showComparison, timescoreReference } = useDashboardContext()
+  const { showComparison, timescoreReference, showEvoDetails, setShowEvoDetails } = useDashboardContext()
   const [activeTabKey, setActiveTabKey] = useState(tabs[0].key)
   const [sortBy, setSortBy] = useState<SortKey>('sessions')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
-  const [showEvoDetails, setShowEvoDetails] = useState(false)
   const [hoveredRowIndex, setHoveredRowIndex] = useState<number | null>(null)
 
   const activeTab = tabs.find((t) => t.key === activeTabKey) ?? tabs[0]
@@ -139,22 +138,28 @@ export function DimensionTableWidget({
         </h3>
         {/* Hide expand button for map views */}
         {!isMapView && (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             {/* Growth toggle - mobile only, only when comparison is shown */}
             {showComparison && (
-              <Tooltip title={showEvoDetails ? 'Hide percentages' : 'Show percentages'}>
-                <button
-                  onClick={() => setShowEvoDetails(!showEvoDetails)}
-                  className={`p-1.5 rounded hover:bg-gray-100 transition-colors cursor-pointer md:hidden ${showEvoDetails ? 'text-[var(--primary)]' : 'text-gray-400 hover:text-gray-600'}`}
-                >
-                  <TrendingUp size={16} />
-                </button>
-              </Tooltip>
+              <button
+                onClick={() => setShowEvoDetails(!showEvoDetails)}
+                className={`p-1.5 rounded hover:bg-gray-100 transition-colors cursor-pointer md:hidden ${showEvoDetails ? 'text-[var(--primary)]' : 'text-gray-400 hover:text-gray-600'}`}
+              >
+                <TrendingUp size={16} />
+              </button>
             )}
+            {/* Mobile: no tooltip */}
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer md:hidden"
+            >
+              <Maximize2 size={16} />
+            </button>
+            {/* Desktop: with tooltip */}
             <Tooltip title="Expand">
               <button
                 onClick={() => setDrawerOpen(true)}
-                className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+                className="hidden md:block p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
               >
                 <Maximize2 size={16} />
               </button>

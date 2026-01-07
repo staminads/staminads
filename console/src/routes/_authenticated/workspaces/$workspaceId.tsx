@@ -123,13 +123,17 @@ function WorkspaceLayout() {
         <div className="h-16 max-w-7xl mx-auto px-4 md:px-6 flex items-center justify-between border-b border-gray-200">
           {/* Mobile: Logo only */}
           <div className="flex md:hidden items-center">
-            <img src="/logo.svg" alt="Staminads" className="h-6" />
+            <Link to="/workspaces/$workspaceId" params={{ workspaceId }}>
+              <img src="/logo.svg" alt="Staminads" className="h-6" />
+            </Link>
           </div>
 
           {/* Desktop: Logo + Workspace Selector + Navigation */}
           <div className="hidden md:block">
           <Space size="large">
-            <img src="/logo.svg" alt="Staminads" className="h-6" />
+            <Link to="/workspaces/$workspaceId" params={{ workspaceId }}>
+              <img src="/logo.svg" alt="Staminads" className="h-6" />
+            </Link>
             <Select
               value={workspaceId}
               onChange={handleWorkspaceChange}
