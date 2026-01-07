@@ -43,37 +43,93 @@ describe('Invitations Integration', () => {
 
     // Create workspace ONCE
     workspaceId = 'test_ws_inv';
-    await createTestWorkspace(systemClient, workspaceId, { name: 'Test Workspace' });
+    await createTestWorkspace(systemClient, workspaceId, {
+      name: 'Test Workspace',
+    });
 
     // Create 5 users ONCE
-    const owner = await createUserWithToken(ctx.app, systemClient, 'owner@test.com', undefined, { name: 'Owner User' });
+    const owner = await createUserWithToken(
+      ctx.app,
+      systemClient,
+      'owner@test.com',
+      undefined,
+      { name: 'Owner User' },
+    );
     ownerUserId = owner.id;
     ownerAuthToken = owner.token;
 
-    const admin = await createUserWithToken(ctx.app, systemClient, 'admin@test.com', undefined, { name: 'Admin User' });
+    const admin = await createUserWithToken(
+      ctx.app,
+      systemClient,
+      'admin@test.com',
+      undefined,
+      { name: 'Admin User' },
+    );
     adminUserId = admin.id;
     adminAuthToken = admin.token;
 
-    const editor = await createUserWithToken(ctx.app, systemClient, 'editor@test.com', undefined, { name: 'Editor User' });
+    const editor = await createUserWithToken(
+      ctx.app,
+      systemClient,
+      'editor@test.com',
+      undefined,
+      { name: 'Editor User' },
+    );
     editorUserId = editor.id;
     editorAuthToken = editor.token;
 
-    const viewer = await createUserWithToken(ctx.app, systemClient, 'viewer@test.com', undefined, { name: 'Viewer User' });
+    const viewer = await createUserWithToken(
+      ctx.app,
+      systemClient,
+      'viewer@test.com',
+      undefined,
+      { name: 'Viewer User' },
+    );
     viewerUserId = viewer.id;
     viewerAuthToken = viewer.token;
 
     // User with no membership for "existing user joins workspace" test
-    const inviteTest = await createUserWithToken(ctx.app, systemClient, 'invitetest@test.com', undefined, { name: 'Invite Test User' });
+    const inviteTest = await createUserWithToken(
+      ctx.app,
+      systemClient,
+      'invitetest@test.com',
+      undefined,
+      { name: 'Invite Test User' },
+    );
     inviteTestUserId = inviteTest.id;
 
     // Create memberships ONCE (inviteTestUserId has NO membership)
     await createMembership(systemClient, workspaceId, ownerUserId, 'owner');
-    await createMembership(systemClient, workspaceId, adminUserId, 'admin', ownerUserId);
-    await createMembership(systemClient, workspaceId, editorUserId, 'editor', ownerUserId);
-    await createMembership(systemClient, workspaceId, viewerUserId, 'viewer', ownerUserId);
+    await createMembership(
+      systemClient,
+      workspaceId,
+      adminUserId,
+      'admin',
+      ownerUserId,
+    );
+    await createMembership(
+      systemClient,
+      workspaceId,
+      editorUserId,
+      'editor',
+      ownerUserId,
+    );
+    await createMembership(
+      systemClient,
+      workspaceId,
+      viewerUserId,
+      'viewer',
+      ownerUserId,
+    );
 
     // Track core user IDs for cleanup (used in beforeEach)
-    coreUserIds.push(ownerUserId, adminUserId, editorUserId, viewerUserId, inviteTestUserId);
+    coreUserIds.push(
+      ownerUserId,
+      adminUserId,
+      editorUserId,
+      viewerUserId,
+      inviteTestUserId,
+    );
   });
 
   afterAll(async () => {
@@ -91,7 +147,10 @@ describe('Invitations Integration', () => {
 
     // Delete test-created memberships (keep only core 4)
     await systemClient.command({
-      query: `ALTER TABLE workspace_memberships DELETE WHERE user_id NOT IN (${coreUserIds.slice(0, 4).map((id) => `'${id}'`).join(', ')})`,
+      query: `ALTER TABLE workspace_memberships DELETE WHERE user_id NOT IN (${coreUserIds
+        .slice(0, 4)
+        .map((id) => `'${id}'`)
+        .join(', ')})`,
     });
 
     // Wait for DELETE mutations to complete
@@ -143,7 +202,7 @@ describe('Invitations Integration', () => {
         query_params: { email: 'newuser@test.com' },
         format: 'JSONEachRow',
       });
-      const invitations = (await result.json()) as Record<string, unknown>[];
+      const invitations = await result.json();
       expect(invitations).toHaveLength(1);
       expect(invitations[0].status).toBe('pending');
     });
@@ -284,7 +343,9 @@ describe('Invitations Integration', () => {
           token_hash: 'hash1',
           invited_by: ownerUserId,
           status: 'pending',
-          expires_at: toClickHouseDateTime(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)),
+          expires_at: toClickHouseDateTime(
+            new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+          ),
           created_at: toClickHouseDateTime(new Date(now.getTime() - 2000)),
           updated_at: toClickHouseDateTime(new Date(now.getTime() - 2000)),
         },
@@ -296,7 +357,9 @@ describe('Invitations Integration', () => {
           token_hash: 'hash2',
           invited_by: ownerUserId,
           status: 'pending',
-          expires_at: toClickHouseDateTime(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)),
+          expires_at: toClickHouseDateTime(
+            new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+          ),
           created_at: toClickHouseDateTime(new Date(now.getTime() - 1000)),
           updated_at: toClickHouseDateTime(new Date(now.getTime() - 1000)),
         },
@@ -308,7 +371,9 @@ describe('Invitations Integration', () => {
           token_hash: 'hash3',
           invited_by: ownerUserId,
           status: 'accepted',
-          expires_at: toClickHouseDateTime(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)),
+          expires_at: toClickHouseDateTime(
+            new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+          ),
           accepted_at: toClickHouseDateTime(now),
           created_at: toClickHouseDateTime(now),
           updated_at: toClickHouseDateTime(now),
@@ -392,7 +457,9 @@ describe('Invitations Integration', () => {
         token_hash: tokenHash,
         invited_by: ownerUserId,
         status: 'pending',
-        expires_at: toClickHouseDateTime(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)),
+        expires_at: toClickHouseDateTime(
+          new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+        ),
         accepted_at: null,
         revoked_at: null,
         revoked_by: null,
@@ -442,7 +509,9 @@ describe('Invitations Integration', () => {
         token_hash: tokenHash,
         invited_by: ownerUserId,
         status: 'pending',
-        expires_at: toClickHouseDateTime(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)),
+        expires_at: toClickHouseDateTime(
+          new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+        ),
         accepted_at: null,
         revoked_at: null,
         revoked_by: null,
@@ -524,7 +593,9 @@ describe('Invitations Integration', () => {
         token_hash: tokenHash,
         invited_by: ownerUserId,
         status: 'revoked',
-        expires_at: toClickHouseDateTime(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)),
+        expires_at: toClickHouseDateTime(
+          new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+        ),
         accepted_at: null,
         revoked_at: toClickHouseDateTime(now),
         revoked_by: ownerUserId,
@@ -560,7 +631,9 @@ describe('Invitations Integration', () => {
         token_hash: tokenHash,
         invited_by: ownerUserId,
         status: 'pending',
-        expires_at: toClickHouseDateTime(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)),
+        expires_at: toClickHouseDateTime(
+          new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+        ),
         accepted_at: null,
         revoked_at: null,
         revoked_by: null,
@@ -599,7 +672,9 @@ describe('Invitations Integration', () => {
         token_hash: tokenHash,
         invited_by: ownerUserId,
         status: 'pending',
-        expires_at: toClickHouseDateTime(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)),
+        expires_at: toClickHouseDateTime(
+          new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+        ),
         accepted_at: null,
         revoked_at: null,
         revoked_by: null,
@@ -635,7 +710,7 @@ describe('Invitations Integration', () => {
         query_params: { email: 'newuser@test.com' },
         format: 'JSONEachRow',
       });
-      const users = (await userResult.json()) as Record<string, unknown>[];
+      const users = await userResult.json();
       expect(users).toHaveLength(1);
       expect(users[0].name).toBe('New User');
 
@@ -646,7 +721,7 @@ describe('Invitations Integration', () => {
         query_params: { ws: workspaceId, uid: response.body.userId },
         format: 'JSONEachRow',
       });
-      const members = (await memberResult.json()) as Record<string, unknown>[];
+      const members = await memberResult.json();
       expect(members).toHaveLength(1);
       expect(members[0].role).toBe('editor');
 
@@ -656,7 +731,7 @@ describe('Invitations Integration', () => {
         query_params: { id: invitation.id },
         format: 'JSONEachRow',
       });
-      const invs = (await invResult.json()) as Record<string, unknown>[];
+      const invs = await invResult.json();
       expect(invs[0].status).toBe('accepted');
       expect(invs[0].accepted_at).toBeDefined();
 
@@ -686,7 +761,9 @@ describe('Invitations Integration', () => {
         token_hash: tokenHash,
         invited_by: ownerUserId,
         status: 'pending',
-        expires_at: toClickHouseDateTime(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)),
+        expires_at: toClickHouseDateTime(
+          new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+        ),
         accepted_at: null,
         revoked_at: null,
         revoked_by: null,
@@ -720,7 +797,7 @@ describe('Invitations Integration', () => {
         query_params: { ws: workspaceId, uid: inviteTestUserId },
         format: 'JSONEachRow',
       });
-      const members = (await memberResult.json()) as Record<string, unknown>[];
+      const members = await memberResult.json();
       expect(members).toHaveLength(1);
       expect(members[0].role).toBe('admin');
     });
@@ -778,7 +855,9 @@ describe('Invitations Integration', () => {
         token_hash: tokenHash,
         invited_by: ownerUserId,
         status: 'revoked',
-        expires_at: toClickHouseDateTime(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)),
+        expires_at: toClickHouseDateTime(
+          new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+        ),
         accepted_at: null,
         revoked_at: toClickHouseDateTime(now),
         revoked_by: ownerUserId,
@@ -818,7 +897,9 @@ describe('Invitations Integration', () => {
         token_hash: tokenHash,
         invited_by: ownerUserId,
         status: 'pending',
-        expires_at: toClickHouseDateTime(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)),
+        expires_at: toClickHouseDateTime(
+          new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+        ),
         accepted_at: null,
         revoked_at: null,
         revoked_by: null,
@@ -857,7 +938,9 @@ describe('Invitations Integration', () => {
         token_hash: tokenHash,
         invited_by: ownerUserId,
         status: 'pending',
-        expires_at: toClickHouseDateTime(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)),
+        expires_at: toClickHouseDateTime(
+          new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+        ),
         accepted_at: null,
         revoked_at: null,
         revoked_by: null,
@@ -900,7 +983,9 @@ describe('Invitations Integration', () => {
         token_hash: originalHash,
         invited_by: ownerUserId,
         status: 'pending',
-        expires_at: toClickHouseDateTime(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)),
+        expires_at: toClickHouseDateTime(
+          new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+        ),
         accepted_at: null,
         revoked_at: null,
         revoked_by: null,
@@ -940,7 +1025,7 @@ describe('Invitations Integration', () => {
         query_params: { id: invitation.id },
         format: 'JSONEachRow',
       });
-      const invs = (await result.json()) as Record<string, unknown>[];
+      const invs = await result.json();
       expect(invs[0].token_hash).not.toBe(originalHash);
     });
 
@@ -955,7 +1040,9 @@ describe('Invitations Integration', () => {
         token_hash: 'some-hash',
         invited_by: ownerUserId,
         status: 'accepted',
-        expires_at: toClickHouseDateTime(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)),
+        expires_at: toClickHouseDateTime(
+          new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+        ),
         accepted_at: toClickHouseDateTime(now),
         revoked_at: null,
         revoked_by: null,
@@ -1009,7 +1096,9 @@ describe('Invitations Integration', () => {
         token_hash: 'some-hash',
         invited_by: ownerUserId,
         status: 'pending',
-        expires_at: toClickHouseDateTime(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)),
+        expires_at: toClickHouseDateTime(
+          new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+        ),
         accepted_at: null,
         revoked_at: null,
         revoked_by: null,
@@ -1039,7 +1128,7 @@ describe('Invitations Integration', () => {
         query_params: { id: invitation.id },
         format: 'JSONEachRow',
       });
-      const invs = (await result.json()) as Record<string, unknown>[];
+      const invs = await result.json();
       expect(invs[0].status).toBe('revoked');
       expect(invs[0].revoked_at).toBeDefined();
       expect(invs[0].revoked_by).toBe(ownerUserId);
@@ -1056,7 +1145,9 @@ describe('Invitations Integration', () => {
         token_hash: 'some-hash',
         invited_by: ownerUserId,
         status: 'revoked',
-        expires_at: toClickHouseDateTime(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)),
+        expires_at: toClickHouseDateTime(
+          new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+        ),
         accepted_at: null,
         revoked_at: toClickHouseDateTime(now),
         revoked_by: ownerUserId,

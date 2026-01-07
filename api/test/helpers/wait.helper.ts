@@ -92,7 +92,7 @@ export async function waitForRowCount(
       query_params: params,
       format: 'JSONEachRow',
     });
-    const rows = (await result.json()) as Array<{ count?: number }>;
+    const rows = await result.json();
     const count = Number(rows[0]?.count ?? 0);
     return count === expectedCount;
   }, options);
@@ -124,7 +124,7 @@ export async function waitForBackfillsToComplete(
               WHERE status IN ('pending', 'running')`,
       format: 'JSONEachRow',
     });
-    const rows = (await result.json()) as Array<{ count?: string | number }>;
+    const rows = await result.json();
     const count = parseInt(String(rows[0]?.count ?? '0'), 10);
     return count === 0;
   }, opts);
@@ -162,7 +162,7 @@ export async function waitForTaskCompletion(
       query_params: { taskId },
       format: 'JSONEachRow',
     });
-    const rows = (await result.json()) as Array<{ status?: string }>;
+    const rows = await result.json();
     const status = rows[0]?.status;
 
     if (status && terminalStatuses.includes(status)) {
@@ -206,7 +206,7 @@ export async function waitForMutations(
       query_params: { database },
       format: 'JSONEachRow',
     });
-    const rows = (await result.json()) as Array<{ count?: string | number }>;
+    const rows = await result.json();
     const count = parseInt(String(rows[0]?.count ?? '0'), 10);
     return count === 0;
   }, opts);

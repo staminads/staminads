@@ -81,7 +81,10 @@ export class InvitationsService {
     }
 
     // Check if already a member
-    const existingMembership = await this.getMembership(dto.workspace_id, email);
+    const existingMembership = await this.getMembership(
+      dto.workspace_id,
+      email,
+    );
     if (existingMembership) {
       throw new ConflictException('User is already a member of this workspace');
     }

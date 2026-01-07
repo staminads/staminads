@@ -347,7 +347,7 @@ describe('AuditService', () => {
       await service.list(dto);
 
       const call = clickhouse.querySystem.mock.calls[0];
-      const sql = call[0] as string;
+      const sql = call[0];
 
       expect(sql).toContain('WHERE');
       expect(sql).toContain('workspace_id = {workspace_id:String}');

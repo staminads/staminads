@@ -13,6 +13,7 @@ export const Route = createFileRoute('/setup')({
       }
     } catch (e) {
       // If we can't check status, allow access to setup page
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if (e instanceof Response || (e as any)?.to === '/login') {
         throw e
       }

@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { Monitor, Smartphone, Tablet, Globe, HelpCircle } from 'lucide-react'
 import type { ReactNode } from 'react'
 

@@ -130,7 +130,13 @@ export async function createTestApiKey(
   });
 
   // Poll until API key is visible (faster than fixed 100ms delay)
-  await waitForData(client, 'api_keys', 'id = {id:String}', { id: keyId }, { timeoutMs: 2000, intervalMs: 10 });
+  await waitForData(
+    client,
+    'api_keys',
+    'id = {id:String}',
+    { id: keyId },
+    { timeoutMs: 2000, intervalMs: 10 },
+  );
 
   return key;
 }
@@ -161,7 +167,11 @@ export async function createWorkspaceWithOwner(
   ) => Promise<string>,
   options: CreateWorkspaceOptions & { ownerEmail?: string } = {},
 ): Promise<{ workspaceId: string; ownerId: string }> {
-  const workspaceId = await createTestWorkspace(systemClient, undefined, options);
+  const workspaceId = await createTestWorkspace(
+    systemClient,
+    undefined,
+    options,
+  );
   const ownerEmail = options.ownerEmail || `owner-${workspaceId}@test.com`;
   const ownerId = await createUser(ownerEmail);
   await createMembership(workspaceId, ownerId, 'owner');

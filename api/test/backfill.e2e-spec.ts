@@ -50,7 +50,11 @@ describe('Backfill Integration', () => {
     await waitForBackfillsToComplete(systemClient);
 
     // Clean tables before each test
-    await truncateSystemTables(systemClient, ['workspaces', 'backfill_tasks'], 0);
+    await truncateSystemTables(
+      systemClient,
+      ['workspaces', 'backfill_tasks'],
+      0,
+    );
     await truncateWorkspaceTables(workspaceClient, ['sessions', 'events'], 0);
     await waitForClickHouse();
 
@@ -145,7 +149,7 @@ describe('Backfill Integration', () => {
         query_params: { id: response.body.task_id },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Record<string, unknown>[];
+      const rows = await result.json();
 
       expect(rows).toHaveLength(1);
       expect(rows[0].workspace_id).toBe(testWorkspaceId);
@@ -171,7 +175,7 @@ describe('Backfill Integration', () => {
         query_params: { id: response.body.task_id },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Record<string, unknown>[];
+      const rows = await result.json();
 
       expect(rows).toHaveLength(1);
       const snapshot = JSON.parse(rows[0].filters_snapshot as string);
@@ -256,7 +260,7 @@ describe('Backfill Integration', () => {
         query_params: { id: response.body.task_id },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Record<string, unknown>[];
+      const rows = await result.json();
 
       expect(rows[0].lookback_days).toBe(3);
       expect(rows[0].chunk_size_days).toBe(2);
@@ -369,7 +373,7 @@ describe('Backfill Integration', () => {
             query_params: { id: taskId },
             format: 'JSONEachRow',
           });
-          const rows = (await result.json()) as Record<string, unknown>[];
+          const rows = await result.json();
           status = rows[0]?.status as string;
           if (['cancelled', 'completed', 'failed'].includes(status)) break;
         }
@@ -497,7 +501,9 @@ describe('Backfill Integration', () => {
       // Task may complete very fast with no data, so activeTask could be null
       if (response.body.activeTask) {
         expect(response.body.activeTask.id).toBe(startResponse.body.task_id);
-        expect(['pending', 'running']).toContain(response.body.activeTask.status);
+        expect(['pending', 'running']).toContain(
+          response.body.activeTask.status,
+        );
       }
       // If no activeTask, verify the task exists and completed
       else {
@@ -574,7 +580,7 @@ describe('Backfill Integration', () => {
         query: 'DESCRIBE TABLE backfill_tasks',
         format: 'JSONEachRow',
       });
-      const columns = (await result.json()) as Record<string, unknown>[];
+      const columns = await result.json();
       const columnMap = Object.fromEntries(
         columns.map((c) => [c.name, c.type]),
       );
@@ -683,7 +689,7 @@ describe('Backfill Integration', () => {
         query_params: { ws: testWorkspaceId },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Record<string, unknown>[];
+      const rows = await result.json();
 
       expect(rows).toHaveLength(3);
       // All channel and stm_1 values should be empty before backfill (non-nullable schema)
@@ -752,7 +758,7 @@ describe('Backfill Integration', () => {
         query_params: { ws: testWorkspaceId },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Record<string, unknown>[];
+      const rows = await result.json();
 
       expect(rows).toHaveLength(3);
 
@@ -832,7 +838,7 @@ describe('Backfill Integration', () => {
         query_params: { id: response.body.task_id },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Record<string, unknown>[];
+      const rows = await result.json();
 
       expect(rows).toHaveLength(1);
       expect(rows[0].status).toBe('completed');
@@ -886,12 +892,14 @@ describe('Backfill Integration', () => {
         query_params: { id: staleTaskId },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Record<string, unknown>[];
+      const rows = await result.json();
 
       expect(rows).toHaveLength(1);
       expect(rows[0].status).toBe('running');
       // Verify the task is indeed stale (updated_at is old)
-      const updatedAt = new Date((rows[0].updated_at as string).replace(' ', 'T') + 'Z');
+      const updatedAt = new Date(
+        (rows[0].updated_at as string).replace(' ', 'T') + 'Z',
+      );
       const ageMinutes = (Date.now() - updatedAt.getTime()) / 60000;
       expect(ageMinutes).toBeGreaterThan(5); // Older than default stale threshold
 
@@ -956,7 +964,7 @@ describe('Backfill Integration', () => {
         query_params: { id: response.body.task_id },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Record<string, unknown>[];
+      const rows = await result.json();
 
       expect(rows).toHaveLength(1);
       expect(rows[0].completed_at).toBeTruthy();
@@ -984,7 +992,7 @@ describe('Backfill Integration', () => {
         query_params: { id: response.body.task_id },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Record<string, unknown>[];
+      const rows = await result.json();
 
       expect(rows).toHaveLength(1);
       expect(rows[0].status).toBe('completed');

@@ -76,7 +76,7 @@ describe('Demo Mode Restrictions', () => {
       query: "SELECT id FROM users WHERE email = 'demo-test@test.com' LIMIT 1",
       format: 'JSONEachRow',
     });
-    const users = (await userResult.json()) as { id: string }[];
+    const users = await userResult.json();
     if (users.length > 0) {
       await ctx.systemClient.insert({
         table: 'workspace_memberships',

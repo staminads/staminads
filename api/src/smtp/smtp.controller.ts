@@ -62,7 +62,9 @@ export class SmtpController {
   @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Send test email' })
   @ApiResponse({ status: 200, description: 'Test email sent' })
-  async test(@Body() dto: TestSmtpDto): Promise<{ success: boolean; message: string }> {
+  async test(
+    @Body() dto: TestSmtpDto,
+  ): Promise<{ success: boolean; message: string }> {
     try {
       await this.mailService.sendTestEmail(dto.workspace_id, dto.to_email);
       return { success: true, message: 'Test email sent successfully' };

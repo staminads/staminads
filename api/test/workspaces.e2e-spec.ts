@@ -100,7 +100,7 @@ describe('Workspaces Integration', () => {
         query_params: { id: dto.id },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Record<string, unknown>[];
+      const rows = await result.json();
 
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({
@@ -231,7 +231,7 @@ describe('Workspaces Integration', () => {
         query_params: { workspaceId: dto.id },
         format: 'JSONEachRow',
       });
-      const memberships = (await result.json()) as Record<string, unknown>[];
+      const memberships = await result.json();
 
       expect(memberships).toHaveLength(1);
       expect(memberships[0].workspace_id).toBe(dto.id);
@@ -618,7 +618,7 @@ describe('Workspaces Integration', () => {
         query_params: { id: workspace.id },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Record<string, unknown>[];
+      const rows = await result.json();
       expect(rows).toHaveLength(0);
     });
 
@@ -644,7 +644,7 @@ describe('Workspaces Integration', () => {
         query: 'DESCRIBE TABLE workspaces',
         format: 'JSONEachRow',
       });
-      const columns = (await result.json()) as Record<string, unknown>[];
+      const columns = await result.json();
       const columnMap = Object.fromEntries(
         columns.map((c) => [c.name, c.type]),
       );
@@ -666,7 +666,7 @@ describe('Workspaces Integration', () => {
         query: 'DESCRIBE TABLE sessions',
         format: 'JSONEachRow',
       });
-      const columns = (await result.json()) as Record<string, unknown>[];
+      const columns = await result.json();
       const columnNames = columns.map((c) => c.name);
 
       // Core fields
@@ -703,7 +703,7 @@ describe('Workspaces Integration', () => {
         query: 'DESCRIBE TABLE events',
         format: 'JSONEachRow',
       });
-      const columns = (await result.json()) as Record<string, unknown>[];
+      const columns = await result.json();
       const columnNames = columns.map((c) => c.name);
 
       expect(columnNames).toContain('id');

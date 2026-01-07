@@ -138,10 +138,9 @@ describe('UsersService', () => {
 
       await service.findByEmail('TEST@EXAMPLE.COM');
 
-      expect(clickhouse.querySystem).toHaveBeenCalledWith(
-        expect.any(String),
-        { email: 'test@example.com' },
-      );
+      expect(clickhouse.querySystem).toHaveBeenCalledWith(expect.any(String), {
+        email: 'test@example.com',
+      });
     });
 
     it('excludes deleted users', async () => {
@@ -362,7 +361,9 @@ describe('UsersService', () => {
       const insertCall = clickhouse.insertSystem.mock.calls[0][1][0] as User;
       expect(insertCall.updated_at).toBeDefined();
       // Parse ClickHouse DateTime format
-      const updatedAt = new Date(insertCall.updated_at.replace(' ', 'T') + 'Z').getTime();
+      const updatedAt = new Date(
+        insertCall.updated_at.replace(' ', 'T') + 'Z',
+      ).getTime();
       expect(updatedAt >= beforeUpdate - 1000).toBe(true);
       expect(updatedAt <= afterUpdate + 1000).toBe(true);
     });
@@ -467,7 +468,9 @@ describe('UsersService', () => {
       const insertCall = clickhouse.insertSystem.mock.calls[0][1][0] as User;
       expect(insertCall.password_changed_at).toBeDefined();
       // Parse ClickHouse DateTime format
-      const changedAt = new Date(insertCall.password_changed_at!.replace(' ', 'T') + 'Z').getTime();
+      const changedAt = new Date(
+        insertCall.password_changed_at!.replace(' ', 'T') + 'Z',
+      ).getTime();
       expect(changedAt >= beforeChange - 1000).toBe(true);
       expect(changedAt <= afterChange + 1000).toBe(true);
     });
@@ -543,7 +546,9 @@ describe('UsersService', () => {
       const insertCall = clickhouse.insertSystem.mock.calls[0][1][0] as User;
       expect(insertCall.last_login_at).toBeDefined();
       // Parse ClickHouse DateTime format
-      const loginAt = new Date(insertCall.last_login_at!.replace(' ', 'T') + 'Z').getTime();
+      const loginAt = new Date(
+        insertCall.last_login_at!.replace(' ', 'T') + 'Z',
+      ).getTime();
       expect(loginAt >= before - 1000).toBe(true);
       expect(loginAt <= after + 1000).toBe(true);
     });
@@ -584,7 +589,9 @@ describe('UsersService', () => {
       expect(result.lockedUntil).toBeDefined();
 
       // Parse ClickHouse DateTime format
-      const lockedUntilTime = new Date(result.lockedUntil!.replace(' ', 'T') + 'Z').getTime();
+      const lockedUntilTime = new Date(
+        result.lockedUntil!.replace(' ', 'T') + 'Z',
+      ).getTime();
       const expectedMin = before + 15 * 60 * 1000 - 1000;
       const expectedMax = after + 15 * 60 * 1000 + 1000;
 
@@ -674,7 +681,10 @@ describe('UsersService', () => {
     it('returns true when locked_until is in the future', async () => {
       const futureDate = new Date(Date.now() + 10 * 60 * 1000);
       // ClickHouse format: YYYY-MM-DD HH:MM:SS.SSS (no T, no Z)
-      const clickhouseDate = futureDate.toISOString().replace('T', ' ').slice(0, -1);
+      const clickhouseDate = futureDate
+        .toISOString()
+        .replace('T', ' ')
+        .slice(0, -1);
       const lockedUser = {
         ...mockUser,
         locked_until: clickhouseDate,
@@ -689,7 +699,10 @@ describe('UsersService', () => {
     it('returns false when locked_until is in the past', async () => {
       const pastDate = new Date(Date.now() - 10 * 60 * 1000);
       // ClickHouse format: YYYY-MM-DD HH:MM:SS.SSS (no T, no Z)
-      const clickhouseDate = pastDate.toISOString().replace('T', ' ').slice(0, -1);
+      const clickhouseDate = pastDate
+        .toISOString()
+        .replace('T', ' ')
+        .slice(0, -1);
       const expiredLockUser = {
         ...mockUser,
         locked_until: clickhouseDate,
@@ -742,7 +755,9 @@ describe('UsersService', () => {
       const insertCall = clickhouse.insertSystem.mock.calls[0][1][0] as User;
       expect(insertCall.deleted_at).toBeDefined();
       // Parse ClickHouse DateTime format
-      const deletedAt = new Date(insertCall.deleted_at!.replace(' ', 'T') + 'Z').getTime();
+      const deletedAt = new Date(
+        insertCall.deleted_at!.replace(' ', 'T') + 'Z',
+      ).getTime();
       expect(deletedAt >= before - 1000).toBe(true);
       expect(deletedAt <= after + 1000).toBe(true);
     });

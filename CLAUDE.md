@@ -133,9 +133,12 @@ Version is defined in `api/src/version.ts` and used by both API and console.
 
 When releasing a new version:
 
-1. Update version in `api/src/version.ts`
-2. Update `CHANGELOG.md`
-3. Create release notes file in `releases/`
+1. Run linters and build to verify no errors:
+   - `cd console && npm run lint && npm run build`
+   - `cd api && npm run lint && npm run build`
+2. Update version in `api/src/version.ts`
+3. Update `CHANGELOG.md`
+4. Create release notes file in `releases/`
 
 ### Minor Version Release
 

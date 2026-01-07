@@ -264,7 +264,9 @@ export class DemoService {
       },
     ]);
 
-    this.logger.log(`Added super_admin ${superAdminId} as owner of ${workspaceId}`);
+    this.logger.log(
+      `Added super_admin ${superAdminId} as owner of ${workspaceId}`,
+    );
   }
 
   private async insertEventsBatched(

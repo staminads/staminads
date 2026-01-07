@@ -135,7 +135,10 @@ describe('ApiKeyStrategy', () => {
       const pastDate = new Date();
       pastDate.setDate(pastDate.getDate() - 1);
       // ClickHouse format: YYYY-MM-DD HH:MM:SS.SSS (no T, no Z)
-      const clickhouseDate = pastDate.toISOString().replace('T', ' ').slice(0, -1);
+      const clickhouseDate = pastDate
+        .toISOString()
+        .replace('T', ' ')
+        .slice(0, -1);
 
       apiKeysService.findByToken.mockResolvedValue({
         ...mockApiKey,
@@ -143,12 +146,12 @@ describe('ApiKeyStrategy', () => {
       });
       apiKeysService.updateLastUsed.mockResolvedValue(undefined);
 
-      await expect(
-        strategy.validate('stam_live_expired_date'),
-      ).rejects.toThrow(UnauthorizedException);
-      await expect(
-        strategy.validate('stam_live_expired_date'),
-      ).rejects.toThrow('API key has expired');
+      await expect(strategy.validate('stam_live_expired_date')).rejects.toThrow(
+        UnauthorizedException,
+      );
+      await expect(strategy.validate('stam_live_expired_date')).rejects.toThrow(
+        'API key has expired',
+      );
     });
 
     it('allows API key with future expiry date', async () => {
@@ -172,12 +175,12 @@ describe('ApiKeyStrategy', () => {
         workspace_id: null,
       });
 
-      await expect(
-        strategy.validate('stam_live_no_workspace'),
-      ).rejects.toThrow(UnauthorizedException);
-      await expect(
-        strategy.validate('stam_live_no_workspace'),
-      ).rejects.toThrow('API key not bound to workspace');
+      await expect(strategy.validate('stam_live_no_workspace')).rejects.toThrow(
+        UnauthorizedException,
+      );
+      await expect(strategy.validate('stam_live_no_workspace')).rejects.toThrow(
+        'API key not bound to workspace',
+      );
     });
 
     it('does not fail if updateLastUsed throws', async () => {

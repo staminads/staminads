@@ -466,9 +466,7 @@ describe('ApiKeysService', () => {
       await service.list();
 
       expect(clickhouse.querySystem).toHaveBeenCalledWith(
-        expect.stringContaining(
-          '(id, updated_at) IN (',
-        ),
+        expect.stringContaining('(id, updated_at) IN ('),
         expect.any(Object),
       );
       expect(clickhouse.querySystem).toHaveBeenCalledWith(

@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from 'react'
-import { Card, Button, Tag, Drawer, Spin, Typography } from 'antd'
+import { Card, Button, Tag, Drawer, Spin, Typography, Space } from 'antd'
 import { ThunderboltOutlined, CheckOutlined } from '@ant-design/icons'
 import { Bubble, Sender } from '@ant-design/x'
 import { XMarkdown } from '@ant-design/x-markdown'

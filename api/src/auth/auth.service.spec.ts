@@ -1,8 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  UnauthorizedException,
-  BadRequestException,
-} from '@nestjs/common';
+import { UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -24,10 +21,14 @@ jest.mock('../common/crypto', () => ({
     hash: 'mock-token-hash',
   })),
   hashToken: jest.fn((token: string) => `hashed-${token}`),
-  verifyTokenHash: jest.fn((token: string, hash: string) => hash === `hashed-${token}`),
-  hashPassword: jest.fn((password: string) => Promise.resolve(`hashed-${password}`)),
+  verifyTokenHash: jest.fn(
+    (token: string, hash: string) => hash === `hashed-${token}`,
+  ),
+  hashPassword: jest.fn((password: string) =>
+    Promise.resolve(`hashed-${password}`),
+  ),
   verifyPassword: jest.fn((password: string, hash: string) =>
-    Promise.resolve(hash === `hashed-${password}`)
+    Promise.resolve(hash === `hashed-${password}`),
   ),
 }));
 
@@ -175,11 +176,14 @@ describe('AuthService', () => {
       });
 
       it('should normalize email to lowercase', async () => {
-        await service.login(
-          { email: 'TEST@EXAMPLE.COM', password: 'password123' },
-        );
+        await service.login({
+          email: 'TEST@EXAMPLE.COM',
+          password: 'password123',
+        });
 
-        expect(usersService.findByEmail).toHaveBeenCalledWith('test@example.com');
+        expect(usersService.findByEmail).toHaveBeenCalledWith(
+          'test@example.com',
+        );
       });
 
       it('should create a session with IP and user agent', async () => {
@@ -202,9 +206,10 @@ describe('AuthService', () => {
       });
 
       it('should sign JWT with user id, email and session id', async () => {
-        await service.login(
-          { email: 'test@example.com', password: 'password123' },
-        );
+        await service.login({
+          email: 'test@example.com',
+          password: 'password123',
+        });
 
         expect(jwtService.sign).toHaveBeenCalledWith({
           sub: 'user-123',
@@ -214,9 +219,10 @@ describe('AuthService', () => {
       });
 
       it('should record successful login', async () => {
-        await service.login(
-          { email: 'test@example.com', password: 'password123' },
-        );
+        await service.login({
+          email: 'test@example.com',
+          password: 'password123',
+        });
 
         expect(usersService.recordLogin).toHaveBeenCalledWith('user-123');
       });
@@ -240,12 +246,17 @@ describe('AuthService', () => {
         usersService.findByEmail.mockResolvedValue(mockUser);
 
         try {
-          await service.login({ email: 'test@example.com', password: 'wrongpass' });
+          await service.login({
+            email: 'test@example.com',
+            password: 'wrongpass',
+          });
         } catch (e) {
           // Expected to throw
         }
 
-        expect(usersService.recordFailedLogin).toHaveBeenCalledWith('test@example.com');
+        expect(usersService.recordFailedLogin).toHaveBeenCalledWith(
+          'test@example.com',
+        );
       });
 
       it('should throw UnauthorizedException for non-existent user', async () => {
@@ -253,10 +264,16 @@ describe('AuthService', () => {
         usersService.findByEmail.mockResolvedValue(null);
 
         await expect(
-          service.login({ email: 'notfound@example.com', password: 'password' }),
+          service.login({
+            email: 'notfound@example.com',
+            password: 'password',
+          }),
         ).rejects.toThrow(UnauthorizedException);
         await expect(
-          service.login({ email: 'notfound@example.com', password: 'password' }),
+          service.login({
+            email: 'notfound@example.com',
+            password: 'password',
+          }),
         ).rejects.toThrow('Invalid credentials');
       });
 
@@ -297,14 +314,19 @@ describe('AuthService', () => {
         ).rejects.toThrow(UnauthorizedException);
         await expect(
           service.login({ email: 'test@example.com', password: 'password123' }),
-        ).rejects.toThrow('Account temporarily locked. Try again in 15 minutes.');
+        ).rejects.toThrow(
+          'Account temporarily locked. Try again in 15 minutes.',
+        );
       });
 
       it('should not attempt login if account is locked', async () => {
         usersService.isLocked.mockResolvedValue(true);
 
         try {
-          await service.login({ email: 'test@example.com', password: 'password123' });
+          await service.login({
+            email: 'test@example.com',
+            password: 'password123',
+          });
         } catch (e) {
           // Expected to throw
         }
@@ -337,32 +359,44 @@ describe('AuthService', () => {
       it('should send password reset email for valid user', async () => {
         // Mock workspace query
         // Service uses in-memory rate limiting, only queries for workspace
-        clickhouse.querySystem.mockResolvedValueOnce([{ workspace_id: 'ws-123' }]);
+        clickhouse.querySystem.mockResolvedValueOnce([
+          { workspace_id: 'ws-123' },
+        ]);
 
-        await service.forgotPassword({ email: 'test@example.com' }, '192.168.1.1');
+        await service.forgotPassword(
+          { email: 'test@example.com' },
+          '192.168.1.1',
+        );
 
         expect(mailService.sendPasswordReset).toHaveBeenCalledWith(
           'ws-123',
           'test@example.com',
           {
             userName: 'Test User',
-            resetUrl: 'http://localhost:5173/reset-password/mock-token-64-chars',
+            resetUrl:
+              'http://localhost:5173/reset-password/mock-token-64-chars',
           },
         );
       });
 
       it('should normalize email to lowercase', async () => {
         // Service uses in-memory rate limiting, only queries for workspace
-        clickhouse.querySystem.mockResolvedValueOnce([{ workspace_id: 'ws-123' }]);
+        clickhouse.querySystem.mockResolvedValueOnce([
+          { workspace_id: 'ws-123' },
+        ]);
 
         await service.forgotPassword({ email: 'TEST@EXAMPLE.COM' });
 
-        expect(usersService.findByEmail).toHaveBeenCalledWith('test@example.com');
+        expect(usersService.findByEmail).toHaveBeenCalledWith(
+          'test@example.com',
+        );
       });
 
       it('should create password reset token in database', async () => {
         // Service uses in-memory rate limiting, only queries for workspace
-        clickhouse.querySystem.mockResolvedValueOnce([{ workspace_id: 'ws-123' }]);
+        clickhouse.querySystem.mockResolvedValueOnce([
+          { workspace_id: 'ws-123' },
+        ]);
 
         await service.forgotPassword({ email: 'test@example.com' });
 
@@ -383,7 +417,10 @@ describe('AuthService', () => {
           .mockResolvedValueOnce([{ count: 0 }])
           .mockResolvedValueOnce([{ workspace_id: 'ws-123' }]);
 
-        await service.forgotPassword({ email: 'test@example.com' }, '192.168.1.1');
+        await service.forgotPassword(
+          { email: 'test@example.com' },
+          '192.168.1.1',
+        );
 
         expect(auditService.log).toHaveBeenCalledWith({
           user_id: 'user-123',
@@ -566,7 +603,10 @@ describe('AuthService', () => {
       it('should revoke all sessions', async () => {
         clickhouse.querySystem
           .mockResolvedValueOnce([validToken]) // Token query
-          .mockResolvedValueOnce([mockSession, { ...mockSession, id: 'session-456' }]); // Sessions query
+          .mockResolvedValueOnce([
+            mockSession,
+            { ...mockSession, id: 'session-456' },
+          ]); // Sessions query
 
         await service.resetPassword({
           token: 'valid-token',
@@ -645,7 +685,10 @@ describe('AuthService', () => {
       it('should throw BadRequestException for expired token', async () => {
         const pastDate = new Date(Date.now() - 60 * 60 * 1000);
         // ClickHouse format: YYYY-MM-DD HH:MM:SS.SSS (no T, no Z)
-        const clickhouseDate = pastDate.toISOString().replace('T', ' ').slice(0, -1);
+        const clickhouseDate = pastDate
+          .toISOString()
+          .replace('T', ' ')
+          .slice(0, -1);
         const expiredToken = {
           ...validToken,
           expires_at: clickhouseDate,
@@ -744,7 +787,9 @@ describe('AuthService', () => {
       const expectedExpiry = new Date(now + 7 * 24 * 60 * 60 * 1000);
 
       // Allow 1 second tolerance
-      expect(Math.abs(expiresAt.getTime() - expectedExpiry.getTime())).toBeLessThan(1000);
+      expect(
+        Math.abs(expiresAt.getTime() - expectedExpiry.getTime()),
+      ).toBeLessThan(1000);
     });
 
     it('should handle missing IP and user agent', async () => {
@@ -787,7 +832,10 @@ describe('AuthService', () => {
     it('should return false for non-existent session', async () => {
       clickhouse.querySystem.mockResolvedValue([]);
 
-      const result = await service.validateSession('invalid-session', 'user-123');
+      const result = await service.validateSession(
+        'invalid-session',
+        'user-123',
+      );
 
       expect(result).toBe(false);
     });
@@ -854,7 +902,9 @@ describe('AuthService', () => {
 
       await service.revokeSession('session-123', 'user-123');
 
-      expect(cacheManager.del).toHaveBeenCalledWith('session:session-123:user-123');
+      expect(cacheManager.del).toHaveBeenCalledWith(
+        'session:session-123:user-123',
+      );
     });
   });
 
@@ -915,9 +965,15 @@ describe('AuthService', () => {
       await service.revokeAllSessions('user-123');
 
       expect(cacheManager.del).toHaveBeenCalledTimes(3);
-      expect(cacheManager.del).toHaveBeenCalledWith('session:session-123:user-123');
-      expect(cacheManager.del).toHaveBeenCalledWith('session:session-456:user-123');
-      expect(cacheManager.del).toHaveBeenCalledWith('session:session-789:user-123');
+      expect(cacheManager.del).toHaveBeenCalledWith(
+        'session:session-123:user-123',
+      );
+      expect(cacheManager.del).toHaveBeenCalledWith(
+        'session:session-456:user-123',
+      );
+      expect(cacheManager.del).toHaveBeenCalledWith(
+        'session:session-789:user-123',
+      );
     });
   });
 

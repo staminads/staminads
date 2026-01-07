@@ -111,7 +111,9 @@ export class FiltersController {
   @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Reorder filters' })
   @ApiResponse({ status: 200, type: BackfillSuccessResponseDto })
-  async reorder(@Body() dto: ReorderFiltersDto): Promise<BackfillSuccessResponseDto> {
+  async reorder(
+    @Body() dto: ReorderFiltersDto,
+  ): Promise<BackfillSuccessResponseDto> {
     await this.service.reorder(dto);
     return { success: true };
   }

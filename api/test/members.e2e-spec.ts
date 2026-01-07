@@ -43,7 +43,11 @@ describe('Members Integration', () => {
 
   beforeEach(async () => {
     // Clean system tables before each test
-    await truncateSystemTables(systemClient, ['workspaces', 'users', 'workspace_memberships', 'audit_logs'], 0);
+    await truncateSystemTables(
+      systemClient,
+      ['workspaces', 'users', 'workspace_memberships', 'audit_logs'],
+      0,
+    );
     await waitForClickHouse();
   });
 
@@ -54,7 +58,9 @@ describe('Members Integration', () => {
     email: string,
     name: string,
   ): Promise<UserWithToken> {
-    return createUserWithToken(ctx.app, systemClient, email, undefined, { name });
+    return createUserWithToken(ctx.app, systemClient, email, undefined, {
+      name,
+    });
   }
 
   /**
@@ -89,9 +95,27 @@ describe('Members Integration', () => {
 
     // Create memberships
     await createMembership(systemClient, testWorkspaceId, ownerUserId, 'owner');
-    await createMembership(systemClient, testWorkspaceId, adminRoleUserId, 'admin', ownerUserId);
-    await createMembership(systemClient, testWorkspaceId, editorUserId, 'editor', ownerUserId);
-    await createMembership(systemClient, testWorkspaceId, viewerUserId, 'viewer', adminRoleUserId);
+    await createMembership(
+      systemClient,
+      testWorkspaceId,
+      adminRoleUserId,
+      'admin',
+      ownerUserId,
+    );
+    await createMembership(
+      systemClient,
+      testWorkspaceId,
+      editorUserId,
+      'editor',
+      ownerUserId,
+    );
+    await createMembership(
+      systemClient,
+      testWorkspaceId,
+      viewerUserId,
+      'viewer',
+      adminRoleUserId,
+    );
   }
 
   describe('GET /api/members.list', () => {
@@ -242,7 +266,7 @@ describe('Members Integration', () => {
         query_params: { workspace_id: testWorkspaceId, user_id: editorUserId },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Record<string, unknown>[];
+      const rows = await result.json();
       expect(rows[0].role).toBe('admin');
     });
 
@@ -311,7 +335,13 @@ describe('Members Integration', () => {
 
       // Create another admin
       const admin2 = await createUser('admin2@test.com', 'Admin 2');
-      await createMembership(systemClient, testWorkspaceId, admin2.id, 'admin', ownerUserId);
+      await createMembership(
+        systemClient,
+        testWorkspaceId,
+        admin2.id,
+        'admin',
+        ownerUserId,
+      );
 
       // First admin tries to change second admin
       await request(ctx.app.getHttpServer())
@@ -395,7 +425,7 @@ describe('Members Integration', () => {
         },
         format: 'JSONEachRow',
       });
-      const logs = (await result.json()) as Record<string, unknown>[];
+      const logs = await result.json();
       expect(logs.length).toBeGreaterThan(0);
 
       const log = logs[0];
@@ -438,7 +468,7 @@ describe('Members Integration', () => {
         },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Record<string, unknown>[];
+      const rows = await result.json();
       expect(rows).toHaveLength(0);
     });
 
@@ -486,7 +516,13 @@ describe('Members Integration', () => {
 
       // Create a second owner
       const owner2 = await createUser('owner2@test.com', 'Owner 2');
-      await createMembership(systemClient, testWorkspaceId, owner2.id, 'owner', ownerUserId);
+      await createMembership(
+        systemClient,
+        testWorkspaceId,
+        owner2.id,
+        'owner',
+        ownerUserId,
+      );
 
       // First owner removes second owner - should succeed (leaves 1 owner)
       await request(ctx.app.getHttpServer())
@@ -508,7 +544,7 @@ describe('Members Integration', () => {
         query_params: { workspace_id: testWorkspaceId, user_id: owner2.id },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Record<string, unknown>[];
+      const rows = await result.json();
       expect(rows).toHaveLength(0);
     });
 
@@ -549,7 +585,7 @@ describe('Members Integration', () => {
         },
         format: 'JSONEachRow',
       });
-      const logs = (await result.json()) as Record<string, unknown>[];
+      const logs = await result.json();
       expect(logs.length).toBeGreaterThan(0);
 
       const log = logs[0];
@@ -587,7 +623,7 @@ describe('Members Integration', () => {
         },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Record<string, unknown>[];
+      const rows = await result.json();
       expect(rows).toHaveLength(0);
     });
 
@@ -608,7 +644,13 @@ describe('Members Integration', () => {
 
       // Create another owner
       const owner2 = await createUser('owner2@test.com', 'Owner 2');
-      await createMembership(systemClient, testWorkspaceId, owner2.id, 'owner', ownerUserId);
+      await createMembership(
+        systemClient,
+        testWorkspaceId,
+        owner2.id,
+        'owner',
+        ownerUserId,
+      );
 
       const response = await request(ctx.app.getHttpServer())
         .post('/api/members.leave')
@@ -658,7 +700,7 @@ describe('Members Integration', () => {
         },
         format: 'JSONEachRow',
       });
-      const logs = (await result.json()) as Record<string, unknown>[];
+      const logs = await result.json();
       expect(logs.length).toBeGreaterThan(0);
 
       const log = logs[0];
@@ -702,7 +744,7 @@ describe('Members Integration', () => {
         },
         format: 'JSONEachRow',
       });
-      const oldOwnerRows = (await oldOwnerResult.json()) as Record<string, unknown>[];
+      const oldOwnerRows = await oldOwnerResult.json();
       expect(oldOwnerRows[0].role).toBe('admin');
 
       const newOwnerResult = await systemClient.query({
@@ -714,7 +756,7 @@ describe('Members Integration', () => {
         },
         format: 'JSONEachRow',
       });
-      const newOwnerRows = (await newOwnerResult.json()) as Record<string, unknown>[];
+      const newOwnerRows = await newOwnerResult.json();
       expect(newOwnerRows[0].role).toBe('owner');
     });
 
@@ -783,7 +825,7 @@ describe('Members Integration', () => {
         },
         format: 'JSONEachRow',
       });
-      const logs = (await result.json()) as Record<string, unknown>[];
+      const logs = await result.json();
       expect(logs.length).toBeGreaterThan(0);
 
       const log = logs[0];
@@ -855,7 +897,13 @@ describe('Members Integration', () => {
         .send({ email: 'owner2@test.com', password: 'testpass123' });
       const owner2Token = owner2Result.body.access_token;
 
-      await createMembership(systemClient, testWorkspaceId, owner2.id, 'owner', ownerUserId);
+      await createMembership(
+        systemClient,
+        testWorkspaceId,
+        owner2.id,
+        'owner',
+        ownerUserId,
+      );
 
       // Both owners try to update the same member's role at the same time
       const promises = [
@@ -895,7 +943,7 @@ describe('Members Integration', () => {
         },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Record<string, unknown>[];
+      const rows = await result.json();
       expect(['admin', 'viewer']).toContain(rows[0].role);
     });
   });

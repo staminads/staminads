@@ -102,7 +102,9 @@ describe('Auth Integration', () => {
     it('resets failed login attempts on successful login', async () => {
       const email = 'test4@test.com';
       const password = 'password123';
-      await createTestUser(systemClient, email, password, { failedAttempts: 3 });
+      await createTestUser(systemClient, email, password, {
+        failedAttempts: 3,
+      });
 
       await request(ctx.app.getHttpServer())
         .post('/api/auth.login')
@@ -219,7 +221,9 @@ describe('Auth Integration', () => {
 
     it('fails when user status is not active', async () => {
       const email = 'test9@test.com';
-      await createTestUser(systemClient, email, 'password123', { status: 'disabled' });
+      await createTestUser(systemClient, email, 'password123', {
+        status: 'disabled',
+      });
 
       const response = await request(ctx.app.getHttpServer())
         .post('/api/auth.login')
@@ -252,7 +256,7 @@ describe('Auth Integration', () => {
       await createTestUser(
         systemClient,
         process.env.ADMIN_EMAIL!,
-        process.env.ADMIN_PASSWORD!,
+        process.env.ADMIN_PASSWORD,
         { isSuperAdmin: true },
       );
 
@@ -615,7 +619,9 @@ describe('Auth Integration', () => {
     });
 
     it('requires authentication', async () => {
-      await request(ctx.app.getHttpServer()).get('/api/auth.sessions').expect(401);
+      await request(ctx.app.getHttpServer())
+        .get('/api/auth.sessions')
+        .expect(401);
     });
   });
 
@@ -661,7 +667,7 @@ describe('Auth Integration', () => {
       expect(updatedSessions.body[0].id).not.toBe(sessionToRevoke);
     });
 
-    it('fails when revoking another user\'s session', async () => {
+    it("fails when revoking another user's session", async () => {
       const email1 = 'revoke1@test.com';
       const email2 = 'revoke2@test.com';
       await createTestUser(systemClient, email1, 'password123');

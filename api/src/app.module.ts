@@ -46,7 +46,8 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         // Disable rate limiting in test mode by setting extremely high limits
-        const isTest = config.get('NODE_ENV') === 'test' ||
+        const isTest =
+          config.get('NODE_ENV') === 'test' ||
           config.get('CLICKHOUSE_SYSTEM_DATABASE')?.includes('test');
         if (isTest) {
           return {

@@ -1,6 +1,9 @@
 // Set env vars BEFORE any imports to ensure ConfigModule picks them up
 import { setupTestEnv } from './constants/test-config';
-const ALLOWED_ORIGINS = ['http://localhost:5173', 'https://console.example.com'];
+const ALLOWED_ORIGINS = [
+  'http://localhost:5173',
+  'https://console.example.com',
+];
 setupTestEnv({ corsOrigins: ALLOWED_ORIGINS });
 
 import { INestApplication, ValidationPipe } from '@nestjs/common';
@@ -14,7 +17,6 @@ describe('CORS Configuration', () => {
   let app: INestApplication;
 
   beforeAll(async () => {
-
     const moduleFixture = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -24,10 +26,16 @@ describe('CORS Configuration', () => {
     // Configure CORS the same way as main.ts
     const allowedOriginsEnv = process.env.CORS_ALLOWED_ORIGINS;
     const allowedOrigins = allowedOriginsEnv
-      ? allowedOriginsEnv.split(',').map((o) => o.trim()).filter(Boolean)
+      ? allowedOriginsEnv
+          .split(',')
+          .map((o) => o.trim())
+          .filter(Boolean)
       : [];
 
-    const corsOptionsDelegate: CorsOptionsDelegate<Request> = (req, callback) => {
+    const corsOptionsDelegate: CorsOptionsDelegate<Request> = (
+      req,
+      callback,
+    ) => {
       const origin = req.headers.origin;
       const path = req.url || '';
 
@@ -71,7 +79,9 @@ describe('CORS Configuration', () => {
         .set('Origin', randomOrigin)
         .set('Access-Control-Request-Method', 'POST');
 
-      expect(response.headers['access-control-allow-origin']).toBe(randomOrigin);
+      expect(response.headers['access-control-allow-origin']).toBe(
+        randomOrigin,
+      );
       expect(response.headers['access-control-allow-credentials']).toBe('true');
     });
 
@@ -83,7 +93,9 @@ describe('CORS Configuration', () => {
         .set('Origin', randomOrigin)
         .set('Access-Control-Request-Method', 'POST');
 
-      expect(response.headers['access-control-allow-origin']).toBe(randomOrigin);
+      expect(response.headers['access-control-allow-origin']).toBe(
+        randomOrigin,
+      );
       expect(response.headers['access-control-allow-credentials']).toBe('true');
     });
   });
@@ -97,7 +109,9 @@ describe('CORS Configuration', () => {
         .set('Origin', allowedOrigin)
         .set('Access-Control-Request-Method', 'POST');
 
-      expect(response.headers['access-control-allow-origin']).toBe(allowedOrigin);
+      expect(response.headers['access-control-allow-origin']).toBe(
+        allowedOrigin,
+      );
       expect(response.headers['access-control-allow-credentials']).toBe('true');
     });
 
@@ -109,7 +123,9 @@ describe('CORS Configuration', () => {
         .set('Origin', allowedOrigin)
         .set('Access-Control-Request-Method', 'GET');
 
-      expect(response.headers['access-control-allow-origin']).toBe(allowedOrigin);
+      expect(response.headers['access-control-allow-origin']).toBe(
+        allowedOrigin,
+      );
     });
 
     it('blocks requests from non-configured origins', async () => {
@@ -169,7 +185,10 @@ describe('CORS with no CORS_ALLOWED_ORIGINS (default permissive)', () => {
     app = moduleFixture.createNestApplication();
 
     // Configure CORS with empty allowed origins (default permissive)
-    const corsOptionsDelegate: CorsOptionsDelegate<Request> = (req, callback) => {
+    const corsOptionsDelegate: CorsOptionsDelegate<Request> = (
+      req,
+      callback,
+    ) => {
       const path = req.url || '';
 
       if (path.startsWith('/api/track')) {

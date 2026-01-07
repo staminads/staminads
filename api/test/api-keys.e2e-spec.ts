@@ -3,7 +3,11 @@ import { setupTestEnv, TEST_SYSTEM_DATABASE } from './constants/test-config';
 setupTestEnv();
 
 import request from 'supertest';
-import { createTestApp, closeTestApp, TestAppContext } from './helpers/app.helper';
+import {
+  createTestApp,
+  closeTestApp,
+  TestAppContext,
+} from './helpers/app.helper';
 import { toClickHouseDateTime } from './helpers';
 import { createUserWithToken, createMembership } from './helpers/user.helper';
 import { createTestWorkspace } from './helpers/workspace.helper';
@@ -31,10 +35,21 @@ describe('API Keys Integration', () => {
 
     // Create test workspaces used by the tests
     const workspaceIds = [
-      'test_ws_1', 'test_ws_2', 'test_ws_3', 'test_ws_4', 'test_ws_5', 'test_ws_6', 'test_ws_7',
-      'test_ws_frontend', 'test_ws_expired',
-      'workspace_1', 'workspace_2', 'workspace_get_test', 'workspace_revoke_test',
-      'workspace_exp', 'workspace_metadata',
+      'test_ws_1',
+      'test_ws_2',
+      'test_ws_3',
+      'test_ws_4',
+      'test_ws_5',
+      'test_ws_6',
+      'test_ws_7',
+      'test_ws_frontend',
+      'test_ws_expired',
+      'workspace_1',
+      'workspace_2',
+      'workspace_get_test',
+      'workspace_revoke_test',
+      'workspace_exp',
+      'workspace_metadata',
     ];
     for (const wsId of workspaceIds) {
       await createTestWorkspace(ctx.systemClient, wsId);
@@ -91,7 +106,7 @@ describe('API Keys Integration', () => {
         query_params: { id: response.body.apiKey.id },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Record<string, unknown>[];
+      const rows = await result.json();
 
       expect(rows).toHaveLength(1);
       expect(rows[0].id).toBe(response.body.apiKey.id);
@@ -385,9 +400,11 @@ describe('API Keys Integration', () => {
         .expect(200);
 
       expect(response.body).toHaveLength(2);
-      expect(response.body.every((k: Record<string, unknown>) => k.workspace_id === 'workspace_1')).toBe(
-        true,
-      );
+      expect(
+        response.body.every(
+          (k: Record<string, unknown>) => k.workspace_id === 'workspace_1',
+        ),
+      ).toBe(true);
     });
 
     it('filters API keys by status', async () => {
@@ -410,7 +427,11 @@ describe('API Keys Integration', () => {
         .expect(200);
 
       expect(response.body).toHaveLength(2);
-      expect(response.body.every((k: Record<string, unknown>) => k.status === 'active')).toBe(true);
+      expect(
+        response.body.every(
+          (k: Record<string, unknown>) => k.status === 'active',
+        ),
+      ).toBe(true);
     });
 
     it('combines multiple filters (user_id and workspace_id)', async () => {
@@ -499,7 +520,10 @@ describe('API Keys Integration', () => {
       expect(response.body.workspace_id).toBe('workspace_get_test');
       expect(response.body.key_hash).toBeUndefined(); // Should not expose key_hash
       expect(response.body.key_prefix).toBe('sk_live_gettest');
-      expect(response.body.scopes).toEqual(['analytics.export', 'workspace.read']);
+      expect(response.body.scopes).toEqual([
+        'analytics.export',
+        'workspace.read',
+      ]);
       expect(response.body.status).toBe('active');
     });
 
@@ -582,7 +606,7 @@ describe('API Keys Integration', () => {
         query_params: { id: testKeyId },
         format: 'JSONEachRow',
       });
-      const rows = (await result.json()) as Record<string, unknown>[];
+      const rows = await result.json();
 
       expect(rows).toHaveLength(1);
       expect(rows[0].status).toBe('revoked');
@@ -706,7 +730,9 @@ describe('API Keys Integration', () => {
         name: 'Metadata Test Key',
         description: 'Full metadata test',
         scopes: ['analytics.view', 'analytics.export'],
-        expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year
+        expires_at: new Date(
+          Date.now() + 365 * 24 * 60 * 60 * 1000,
+        ).toISOString(), // 1 year
       };
 
       const createResponse = await request(ctx.app.getHttpServer())
@@ -753,7 +779,7 @@ describe('API Keys Integration', () => {
         query: 'DESCRIBE TABLE api_keys',
         format: 'JSONEachRow',
       });
-      const columns = (await result.json()) as Record<string, unknown>[];
+      const columns = await result.json();
       const columnMap = Object.fromEntries(
         columns.map((c) => [c.name, c.type]),
       );

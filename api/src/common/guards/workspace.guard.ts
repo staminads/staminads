@@ -95,7 +95,10 @@ export class WorkspaceAuthGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     );
 
-    if (requiredPermission && !hasPermission(membership.role, requiredPermission)) {
+    if (
+      requiredPermission &&
+      !hasPermission(membership.role, requiredPermission)
+    ) {
       throw new ForbiddenException('Insufficient permissions');
     }
 

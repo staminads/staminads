@@ -243,28 +243,31 @@ export function ExploreTable({
     })
   }, [])
 
-  const renderMobileCards = useCallback((rows: ExploreRow[], depth = 0): React.ReactNode => {
-    return rows.map(record => (
-      <div key={record.key}>
-        <MobileExploreCard
-          record={record}
-          dimensions={dimensions}
-          depth={depth}
-          isExpanded={mobileExpandedKeys.has(record.key)}
-          onToggle={() => toggleMobileExpand(record.key)}
-          onDrillDown={() => onExpand(true, record)}
-          isLoading={loadingRows.has(record.key)}
-          showComparison={showComparison}
-          customDimensionLabels={customDimensionLabels}
-          maxMedianDuration={maxMedianDuration}
-          timescoreReference={timescoreReference ?? 0}
-        />
-        {/* Render children if loaded */}
-        {record.children && record.children.length > 0 && (
-          renderMobileCards(record.children, depth + 1)
-        )}
-      </div>
-    ))
+  const renderMobileCards = useMemo(() => {
+    const render = (rows: ExploreRow[], depth = 0): React.ReactNode => {
+      return rows.map(record => (
+        <div key={record.key}>
+          <MobileExploreCard
+            record={record}
+            dimensions={dimensions}
+            depth={depth}
+            isExpanded={mobileExpandedKeys.has(record.key)}
+            onToggle={() => toggleMobileExpand(record.key)}
+            onDrillDown={() => onExpand(true, record)}
+            isLoading={loadingRows.has(record.key)}
+            showComparison={showComparison}
+            customDimensionLabels={customDimensionLabels}
+            maxMedianDuration={maxMedianDuration}
+            timescoreReference={timescoreReference ?? 0}
+          />
+          {/* Render children if loaded */}
+          {record.children && record.children.length > 0 && (
+            render(record.children, depth + 1)
+          )}
+        </div>
+      ))
+    }
+    return render
   }, [dimensions, mobileExpandedKeys, toggleMobileExpand, onExpand, loadingRows, showComparison, customDimensionLabels, maxMedianDuration, timescoreReference])
 
   const columns: ColumnsType<ExploreRow> = useMemo(() => {

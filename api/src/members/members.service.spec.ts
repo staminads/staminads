@@ -287,7 +287,9 @@ describe('MembersService', () => {
         ]);
 
       // First user exists, second doesn't
-      usersService.findById.mockResolvedValueOnce(ownerUser).mockResolvedValueOnce(null);
+      usersService.findById
+        .mockResolvedValueOnce(ownerUser)
+        .mockResolvedValueOnce(null);
 
       const result = await service.list({ workspace_id: workspaceId }, ownerId);
 
@@ -386,7 +388,10 @@ describe('MembersService', () => {
       clickhouseService.querySystem.mockResolvedValueOnce([]);
 
       await expect(
-        service.get({ workspace_id: workspaceId, user_id: adminId }, 'not_a_member'),
+        service.get(
+          { workspace_id: workspaceId, user_id: adminId },
+          'not_a_member',
+        ),
       ).rejects.toThrow(ForbiddenException);
     });
   });
@@ -832,7 +837,9 @@ describe('MembersService', () => {
           },
           ownerId,
         ),
-      ).rejects.toThrow('Cannot remove yourself. Use the leave endpoint instead');
+      ).rejects.toThrow(
+        'Cannot remove yourself. Use the leave endpoint instead',
+      );
     });
 
     it('should throw ForbiddenException when trying to remove higher role', async () => {
@@ -903,7 +910,9 @@ describe('MembersService', () => {
           },
           ownerId,
         ),
-      ).rejects.toThrow('Cannot remove the last owner. Transfer ownership first');
+      ).rejects.toThrow(
+        'Cannot remove the last owner. Transfer ownership first',
+      );
     });
 
     it('should throw NotFoundException when target member not found', async () => {
@@ -992,7 +1001,9 @@ describe('MembersService', () => {
 
       await expect(
         service.leave({ workspace_id: workspaceId }, ownerId),
-      ).rejects.toThrow('Cannot leave as the last owner. Transfer ownership first');
+      ).rejects.toThrow(
+        'Cannot leave as the last owner. Transfer ownership first',
+      );
     });
 
     it('should throw NotFoundException when user is not a member', async () => {
@@ -1026,7 +1037,9 @@ describe('MembersService', () => {
           },
         ]);
 
-      usersService.findById.mockResolvedValueOnce(ownerUser).mockResolvedValueOnce(adminUser);
+      usersService.findById
+        .mockResolvedValueOnce(ownerUser)
+        .mockResolvedValueOnce(adminUser);
 
       const result = await service.transferOwnership(
         {

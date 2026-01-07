@@ -86,7 +86,13 @@ export async function createTestUser(
   });
 
   // Poll until user is visible (faster than fixed 100ms delay)
-  await waitForData(client, 'users', 'id = {id:String}', { id: userId }, { timeoutMs: 2000, intervalMs: 10 });
+  await waitForData(
+    client,
+    'users',
+    'id = {id:String}',
+    { id: userId },
+    { timeoutMs: 2000, intervalMs: 10 },
+  );
 
   return userId;
 }
@@ -126,7 +132,9 @@ export async function getAuthToken(
  * @param app - NestJS application instance
  * @returns JWT access token for admin
  */
-export async function getAdminAuthToken(app: INestApplication): Promise<string> {
+export async function getAdminAuthToken(
+  app: INestApplication,
+): Promise<string> {
   return getAuthToken(app, ADMIN_EMAIL, ADMIN_PASSWORD);
 }
 
@@ -197,7 +205,13 @@ export async function createMembership(
   });
 
   // Poll until membership is visible (faster than fixed 100ms delay)
-  await waitForData(client, 'workspace_memberships', 'id = {id:String}', { id: membershipId }, { timeoutMs: 2000, intervalMs: 10 });
+  await waitForData(
+    client,
+    'workspace_memberships',
+    'id = {id:String}',
+    { id: membershipId },
+    { timeoutMs: 2000, intervalMs: 10 },
+  );
 
   return membershipId;
 }
@@ -239,7 +253,13 @@ export async function createPasswordResetToken(
   });
 
   // Poll until token is visible (faster than fixed 100ms delay)
-  await waitForData(client, 'password_reset_tokens', 'id = {id:String}', { id: tokenId }, { timeoutMs: 2000, intervalMs: 10 });
+  await waitForData(
+    client,
+    'password_reset_tokens',
+    'id = {id:String}',
+    { id: tokenId },
+    { timeoutMs: 2000, intervalMs: 10 },
+  );
 
   return token;
 }
@@ -277,10 +297,18 @@ export async function setupMembersTestScenario(
 ): Promise<TestScenarioUsers> {
   // Create users in parallel (each has unique email/ID, so no conflicts)
   const [owner, admin, editor, viewer] = await Promise.all([
-    createUserWithToken(app, client, 'owner@test.com', undefined, { name: 'Owner User' }),
-    createUserWithToken(app, client, 'admin-role@test.com', undefined, { name: 'Admin Role User' }),
-    createUserWithToken(app, client, 'editor@test.com', undefined, { name: 'Editor User' }),
-    createUserWithToken(app, client, 'viewer@test.com', undefined, { name: 'Viewer User' }),
+    createUserWithToken(app, client, 'owner@test.com', undefined, {
+      name: 'Owner User',
+    }),
+    createUserWithToken(app, client, 'admin-role@test.com', undefined, {
+      name: 'Admin Role User',
+    }),
+    createUserWithToken(app, client, 'editor@test.com', undefined, {
+      name: 'Editor User',
+    }),
+    createUserWithToken(app, client, 'viewer@test.com', undefined, {
+      name: 'Viewer User',
+    }),
   ]);
 
   // Create memberships in parallel (no dependencies between them)
@@ -322,7 +350,11 @@ export interface InvitationsTestContext {
 export async function setupInvitationsTestScenario(
   app: INestApplication,
   client: ClickHouseClient,
-  createWorkspaceFn: (client: ClickHouseClient, id: string, options?: Record<string, unknown>) => Promise<string>,
+  createWorkspaceFn: (
+    client: ClickHouseClient,
+    id: string,
+    options?: Record<string, unknown>,
+  ) => Promise<string>,
 ): Promise<InvitationsTestContext> {
   // Create workspace
   const workspaceId = 'test_ws_inv';
@@ -330,9 +362,15 @@ export async function setupInvitationsTestScenario(
 
   // Create users in parallel
   const [owner, editor, viewer] = await Promise.all([
-    createUserWithToken(app, client, 'inv-owner@test.com', undefined, { name: 'Invitation Owner' }),
-    createUserWithToken(app, client, 'inv-editor@test.com', undefined, { name: 'Invitation Editor' }),
-    createUserWithToken(app, client, 'inv-viewer@test.com', undefined, { name: 'Invitation Viewer' }),
+    createUserWithToken(app, client, 'inv-owner@test.com', undefined, {
+      name: 'Invitation Owner',
+    }),
+    createUserWithToken(app, client, 'inv-editor@test.com', undefined, {
+      name: 'Invitation Editor',
+    }),
+    createUserWithToken(app, client, 'inv-viewer@test.com', undefined, {
+      name: 'Invitation Viewer',
+    }),
   ]);
 
   // Create memberships in parallel

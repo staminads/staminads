@@ -440,10 +440,15 @@ describe('InvitationsService', () => {
       );
 
       const afterCreate = Date.now();
-      const insertCall = clickhouse.insertSystem.mock.calls[0] as [string, Invitation[]];
+      const insertCall = clickhouse.insertSystem.mock.calls[0] as [
+        string,
+        Invitation[],
+      ];
       const invitation = insertCall[1][0];
       // Parse ClickHouse DateTime format as UTC
-      const expiresAt = new Date(invitation.expires_at.replace(' ', 'T') + 'Z').getTime();
+      const expiresAt = new Date(
+        invitation.expires_at.replace(' ', 'T') + 'Z',
+      ).getTime();
       const expectedMin = beforeCreate + 7 * 24 * 60 * 60 * 1000 - 1000;
       const expectedMax = afterCreate + 7 * 24 * 60 * 60 * 1000 + 1000;
 
@@ -500,10 +505,15 @@ describe('InvitationsService', () => {
       await service.resend('inv-001', 'inviter-001');
 
       const afterResend = Date.now();
-      const insertCall = clickhouse.insertSystem.mock.calls[0] as [string, Invitation[]];
+      const insertCall = clickhouse.insertSystem.mock.calls[0] as [
+        string,
+        Invitation[],
+      ];
       const invitation = insertCall[1][0];
       // Parse ClickHouse DateTime format as UTC
-      const expiresAt = new Date(invitation.expires_at.replace(' ', 'T') + 'Z').getTime();
+      const expiresAt = new Date(
+        invitation.expires_at.replace(' ', 'T') + 'Z',
+      ).getTime();
       const expectedMin = beforeResend + 7 * 24 * 60 * 60 * 1000 - 1000;
       const expectedMax = afterResend + 7 * 24 * 60 * 60 * 1000 + 1000;
 
@@ -514,12 +524,12 @@ describe('InvitationsService', () => {
     it('throws NotFoundException when invitation does not exist', async () => {
       clickhouse.querySystem.mockResolvedValue([]);
 
-      await expect(service.resend('non-existent', 'inviter-001')).rejects.toThrow(
-        NotFoundException,
-      );
-      await expect(service.resend('non-existent', 'inviter-001')).rejects.toThrow(
-        'Invitation not found',
-      );
+      await expect(
+        service.resend('non-existent', 'inviter-001'),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        service.resend('non-existent', 'inviter-001'),
+      ).rejects.toThrow('Invitation not found');
     });
 
     it('throws BadRequestException when invitation is not pending', async () => {
@@ -561,12 +571,12 @@ describe('InvitationsService', () => {
     it('throws NotFoundException when invitation does not exist', async () => {
       clickhouse.querySystem.mockResolvedValue([]);
 
-      await expect(service.revoke('non-existent', 'revoker-001')).rejects.toThrow(
-        NotFoundException,
-      );
-      await expect(service.revoke('non-existent', 'revoker-001')).rejects.toThrow(
-        'Invitation not found',
-      );
+      await expect(
+        service.revoke('non-existent', 'revoker-001'),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        service.revoke('non-existent', 'revoker-001'),
+      ).rejects.toThrow('Invitation not found');
     });
 
     it('throws BadRequestException when invitation is not pending', async () => {
@@ -638,7 +648,10 @@ describe('InvitationsService', () => {
     it('throws BadRequestException for expired invitation', async () => {
       const pastDate = new Date(Date.now() - 1000);
       // ClickHouse format: YYYY-MM-DD HH:MM:SS.SSS (no T, no Z)
-      const clickhouseDate = pastDate.toISOString().replace('T', ' ').slice(0, -1);
+      const clickhouseDate = pastDate
+        .toISOString()
+        .replace('T', ' ')
+        .slice(0, -1);
       const expiredInvitation = {
         ...mockInvitation,
         expires_at: clickhouseDate,
@@ -951,7 +964,10 @@ describe('InvitationsService', () => {
     it('throws BadRequestException for expired invitation', async () => {
       const pastDate = new Date(Date.now() - 1000);
       // ClickHouse format: YYYY-MM-DD HH:MM:SS.SSS (no T, no Z)
-      const clickhouseDate = pastDate.toISOString().replace('T', ' ').slice(0, -1);
+      const clickhouseDate = pastDate
+        .toISOString()
+        .replace('T', ' ')
+        .slice(0, -1);
       const expiredInvitation = {
         ...mockInvitation,
         expires_at: clickhouseDate,

@@ -97,8 +97,9 @@ describe('Setup Middleware', () => {
 
   describe('when setup is complete', () => {
     it('allows API routes (returns 401 for auth-required, not 503)', async () => {
-      const response = await request(ctx.app.getHttpServer())
-        .get('/api/workspaces.list');
+      const response = await request(ctx.app.getHttpServer()).get(
+        '/api/workspaces.list',
+      );
 
       // Should not be 503 (setup_required) - setup is complete
       expect(response.status).not.toBe(503);

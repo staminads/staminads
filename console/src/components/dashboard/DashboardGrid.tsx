@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { Alert } from 'antd'
 import { getDeviceIcon } from '../../lib/device-icons'
@@ -46,8 +46,14 @@ export function DashboardGrid({
   onAddFilter
 }: DashboardGridProps) {
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>('sessions')
-  const [granularityOverride, setGranularityOverride] = useState<Granularity | null>(null)
   const { period, timezone } = useDashboardParams(workspaceTimezone)
+
+  // Key for resetting granularity override when period changes
+  const periodKey = `${period}-${customStart}-${customEnd}`
+  const [granularityOverride, setGranularityOverride] = useState<{ key: string; value: Granularity | null }>({ key: periodKey, value: null })
+
+  // Reset override if period changed
+  const currentOverride = granularityOverride.key === periodKey ? granularityOverride.value : null
 
   // Compute date range to get the number of days
   const dateRangeForGranularity = useMemo(() => {
@@ -66,14 +72,14 @@ export function DashboardGrid({
     : determineGranularity(period as DatePreset)
 
   // Use override if valid, otherwise default
-  const granularity = granularityOverride && availableGranularities.includes(granularityOverride)
-    ? granularityOverride
+  const granularity = currentOverride && availableGranularities.includes(currentOverride)
+    ? currentOverride
     : defaultGranularity
 
-  // Reset override when period changes
-  useEffect(() => {
-    setGranularityOverride(null)
-  }, [period, customStart, customEnd])
+  // Handler to update granularity override
+  const handleGranularityChange = useCallback((value: Granularity | null) => {
+    setGranularityOverride({ key: periodKey, value })
+  }, [periodKey])
 
   const showComparison = comparison !== 'none'
 
@@ -360,7 +366,7 @@ export function DashboardGrid({
               <div className="absolute top-4 right-4 z-10">
                 <GranularitySelector
                   value={granularity}
-                  onChange={setGranularityOverride}
+                  onChange={handleGranularityChange}
                   availableGranularities={availableGranularities}
                 />
               </div>

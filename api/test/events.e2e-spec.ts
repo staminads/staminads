@@ -93,7 +93,7 @@ describe('Events Integration', () => {
         query_params: { session_id: 'session-1' },
         format: 'JSONEachRow',
       });
-      const events = (await result.json()) as Record<string, unknown>[];
+      const events = await result.json();
 
       expect(events).toHaveLength(1);
       expect(events[0].workspace_id).toBe(testWorkspaceId);
@@ -174,9 +174,13 @@ describe('Events Integration', () => {
     });
 
     it('rejects API key without events.track scope', async () => {
-      const readOnlyKey = await createTestApiKey(systemClient, testWorkspaceId, {
-        scopes: ['analytics.view'],
-      });
+      const readOnlyKey = await createTestApiKey(
+        systemClient,
+        testWorkspaceId,
+        {
+          scopes: ['analytics.view'],
+        },
+      );
 
       const response = await request(ctx.app.getHttpServer())
         .post('/api/track')
@@ -309,7 +313,7 @@ describe('Events Integration', () => {
         query_params: { session_id: 'batch-session-1' },
         format: 'JSONEachRow',
       });
-      const events = (await result.json()) as Record<string, unknown>[];
+      const events = await result.json();
 
       expect(events).toHaveLength(2);
     });
@@ -456,7 +460,7 @@ describe('Events Integration', () => {
         {},
         {
           timeoutMs: 60000, // Increased to 60s for CI robustness
-          intervalMs: 500,  // Check every 500ms instead of default 100ms
+          intervalMs: 500, // Check every 500ms instead of default 100ms
         },
       );
 
@@ -466,7 +470,7 @@ describe('Events Integration', () => {
         query_params: { id: sessionId },
         format: 'JSONEachRow',
       });
-      const sessions = (await result.json()) as Record<string, unknown>[];
+      const sessions = await result.json();
 
       expect(sessions).toHaveLength(1);
       const session = sessions[0];

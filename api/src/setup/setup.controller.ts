@@ -29,7 +29,9 @@ export class SetupController {
 
   @Public()
   @Post('setup.initialize')
-  @ApiOperation({ summary: 'Initialize the application with the first admin user' })
+  @ApiOperation({
+    summary: 'Initialize the application with the first admin user',
+  })
   @ApiResponse({
     status: 201,
     description: 'Admin user created successfully',

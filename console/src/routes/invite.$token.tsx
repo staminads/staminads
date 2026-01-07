@@ -86,6 +86,7 @@ function InviteAcceptPage() {
         await login(invitation.email, values.password)
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       navigate({ to: `/workspaces/${result.workspaceId}` } as any)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to accept invitation')
@@ -101,6 +102,7 @@ function InviteAcceptPage() {
 
     try {
       const result = await api.invitations.accept({ token })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       navigate({ to: `/workspaces/${result.workspaceId}` } as any)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to accept invitation')

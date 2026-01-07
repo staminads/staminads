@@ -125,7 +125,9 @@ export class AnalyticsService {
 
     // Convert ISO dates to ClickHouse format if they contain 'T'
     if (resolvedDateRange.start?.includes('T')) {
-      resolvedDateRange.start = isoToClickHouseDateTime(resolvedDateRange.start)!;
+      resolvedDateRange.start = isoToClickHouseDateTime(
+        resolvedDateRange.start,
+      )!;
     }
     if (resolvedDateRange.end?.includes('T')) {
       resolvedDateRange.end = isoToClickHouseDateTime(resolvedDateRange.end)!;
@@ -342,7 +344,9 @@ export class AnalyticsService {
 
     // Convert ISO dates to ClickHouse format
     if (resolvedDateRange.start?.includes('T')) {
-      resolvedDateRange.start = isoToClickHouseDateTime(resolvedDateRange.start)!;
+      resolvedDateRange.start = isoToClickHouseDateTime(
+        resolvedDateRange.start,
+      )!;
     }
     if (resolvedDateRange.end?.includes('T')) {
       resolvedDateRange.end = isoToClickHouseDateTime(resolvedDateRange.end)!;
@@ -395,16 +399,11 @@ export class AnalyticsService {
    * Get cache TTL based on whether the date range includes today.
    * Live data (includes today) gets 1 min TTL, historical gets 5 min.
    */
-  private getTTL(
-    dates: { start: string; end: string },
-    tz: string,
-  ): number {
+  private getTTL(dates: { start: string; end: string }, tz: string): number {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: tz });
     // Handle both ISO format (2025-01-05T...) and ClickHouse format (2025-01-05 ...)
     const endDate = dates.end.split(' ')[0].split('T')[0];
-    return endDate >= today
-      ? this.CACHE_TTL_LIVE
-      : this.CACHE_TTL_HISTORICAL;
+    return endDate >= today ? this.CACHE_TTL_LIVE : this.CACHE_TTL_HISTORICAL;
   }
 
   /**

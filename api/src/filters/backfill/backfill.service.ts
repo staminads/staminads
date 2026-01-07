@@ -153,7 +153,9 @@ export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
    * Start a new backfill task for a workspace.
    * Returns immediately with a task_id for polling.
    */
-  async startBackfill(dto: StartBackfillDto): Promise<BackfillStartResponseDto> {
+  async startBackfill(
+    dto: StartBackfillDto,
+  ): Promise<BackfillStartResponseDto> {
     // Validate workspace exists
     const workspace = await this.workspacesService.get(dto.workspace_id);
 

@@ -11,7 +11,10 @@ async function bootstrap() {
   // Parse allowed origins from env (empty array = allow all)
   const allowedOriginsEnv = process.env.CORS_ALLOWED_ORIGINS;
   const allowedOrigins = allowedOriginsEnv
-    ? allowedOriginsEnv.split(',').map((o) => o.trim()).filter(Boolean)
+    ? allowedOriginsEnv
+        .split(',')
+        .map((o) => o.trim())
+        .filter(Boolean)
     : [];
 
   // Route-aware CORS: track endpoints always permissive, others check list

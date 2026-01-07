@@ -41,6 +41,7 @@ export function DashboardProvider({
   return <DashboardContext.Provider value={value}>{children}</DashboardContext.Provider>
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useDashboardContext(): DashboardContextValue {
   const context = useContext(DashboardContext)
   if (!context) {

@@ -102,7 +102,8 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
         period: {
           type: 'string',
           enum: [...DATE_PRESETS],
-          description: 'Date range to search within (default: previous_30_days)',
+          description:
+            'Date range to search within (default: previous_30_days)',
         },
         search: {
           type: 'string',
