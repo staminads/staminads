@@ -29,6 +29,7 @@ export function DimensionTableWidget({
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [showEvoDetails, setShowEvoDetails] = useState(false)
+  const [hoveredRowIndex, setHoveredRowIndex] = useState<number | null>(null)
 
   const activeTab = tabs.find((t) => t.key === activeTabKey) ?? tabs[0]
   const isMapView = activeTab.type === 'country_map'
@@ -85,6 +86,18 @@ export function DimensionTableWidget({
     if (!previous || previous === 0) return null
     return ((current - previous) / previous) * 100
   }
+
+  // Helper for column-based layout hover coordination
+  const getRowClasses = (index: number) =>
+    `h-9 flex items-center border-b ${
+      hoveredRowIndex === index ? 'border-[var(--primary)]' : 'border-transparent'
+    } ${onRowClick ? 'cursor-pointer' : ''}`
+
+  const rowInteractionProps = (index: number, row: DimensionData) => ({
+    onClick: onRowClick ? () => onRowClick(row, activeTabKey) : undefined,
+    onMouseEnter: () => setHoveredRowIndex(index),
+    onMouseLeave: () => setHoveredRowIndex(null),
+  })
 
   const sortDebounceRef = useRef(false)
 
@@ -178,48 +191,7 @@ export function DimensionTableWidget({
             onRowClick?.({ dimension_value: countryCode, sessions: 0, median_duration: 0 }, activeTabKey)
           }}
         />
-      ) : (
-        <div className="overflow-x-auto">
-          {/* Table header with clickable sort */}
-      <div className="flex items-center px-4 py-3 border-b border-gray-200">
-        <span className="flex-1 min-w-[150px] md:min-w-0 text-xs font-medium text-gray-600 md:truncate whitespace-nowrap">
-          {activeTab.dimensionLabel}
-        </span>
-        <div className="flex items-center sticky right-0 bg-white pl-2 md:static md:pl-0 md:bg-transparent">
-          <button
-            onClick={() => handleHeaderClick('sessions')}
-            className={`text-xs font-medium text-right cursor-pointer hover:text-gray-900 flex items-center justify-end gap-0.5 w-16 md:w-24 flex-shrink-0 ${sortBy === 'sessions' ? 'text-gray-900' : 'text-gray-500'}`}
-          >
-            Sessions
-            {sortBy === 'sessions' ? (
-              sortDirection === 'desc' ? (
-                <ArrowDown size={12} className="text-[var(--primary)]" />
-              ) : (
-                <ArrowUp size={12} className="text-[var(--primary)]" />
-              )
-            ) : (
-              <ArrowDown size={12} className="opacity-0" />
-            )}
-          </button>
-          <button
-            onClick={() => handleHeaderClick('median_duration')}
-            className={`text-xs font-medium pl-6 cursor-pointer hover:text-gray-900 flex items-center gap-0.5 w-28 md:w-36 flex-shrink-0 ${sortBy === 'median_duration' ? 'text-gray-900' : 'text-gray-500'}`}
-          >
-            TimeScore
-            {sortBy === 'median_duration' ? (
-              sortDirection === 'desc' ? (
-                <ArrowDown size={12} className="text-[var(--primary)]" />
-              ) : (
-                <ArrowUp size={12} className="text-[var(--primary)]" />
-              )
-            ) : (
-              <ArrowDown size={12} className="opacity-0" />
-            )}
-          </button>
-        </div>
-      </div>
-
-      {loading && data.length === 0 ? (
+      ) : loading && data.length === 0 ? (
         <div className="flex items-center justify-center py-12">
           <Spin />
         </div>
@@ -230,24 +202,174 @@ export function DimensionTableWidget({
           className="py-8"
         />
       ) : (
-        <div className="flex flex-col">
-          {data.map((row) => (
-            <DimensionRow
-              key={row.dimension_value}
-              row={row}
-              sortBy={sortBy}
-              maxValue={maxValue}
-              maxMedianDuration={maxMedianDuration}
-              timescoreReference={timescoreReference}
-              showComparison={showComparison}
-              showEvoDetails={showEvoDetails}
-              iconPrefix={iconPrefix?.(row.dimension_value, activeTabKey)}
-              onClick={onRowClick ? () => onRowClick(row, activeTabKey) : undefined}
-              getChange={getChange}
-            />
-          ))}
-        </div>
-      )}
+        <div className="flex">
+          {/* DIMENSION COLUMN - scrollable on mobile only */}
+          <div className="flex-1 overflow-x-auto md:overflow-visible">
+            <div className="min-w-max md:min-w-0">
+              {/* Dimension header */}
+              <div className="flex items-center h-[46px] px-4 border-b border-gray-200">
+                <span className="text-xs font-medium text-gray-600 whitespace-nowrap md:truncate">
+                  {activeTab.dimensionLabel}
+                </span>
+              </div>
+              {/* Dimension cells */}
+              {data.map((row, index) => {
+                const percent = (row[sortBy] / maxValue) * 100
+                return (
+                  <div
+                    key={row.dimension_value}
+                    className={`${getRowClasses(index)} px-4 pl-1.5 gap-2 relative`}
+                    {...rowInteractionProps(index, row)}
+                  >
+                    {/* Background bar */}
+                    <div
+                      className="absolute inset-y-1 left-0 bg-[var(--primary)] opacity-[0.06] rounded pointer-events-none"
+                      style={{ width: `${percent}%`, minWidth: '0.5rem' }}
+                    />
+                    {iconPrefix?.(row.dimension_value, activeTabKey)}
+                    <Tooltip title={row.dimension_value || '(empty)'} placement="topLeft">
+                      <span className="relative whitespace-nowrap md:truncate text-xs text-gray-700 pr-2">
+                        {row.dimension_value || '(empty)'}
+                      </span>
+                    </Tooltip>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* SESSIONS COLUMN - static, never scrolls */}
+          <div className="w-16 md:w-24 flex-shrink-0 bg-white md:bg-transparent">
+            {/* Sessions header */}
+            <div className="flex items-center justify-end h-[46px] border-b border-gray-200">
+              <button
+                onClick={() => handleHeaderClick('sessions')}
+                className={`text-xs font-medium text-right cursor-pointer hover:text-gray-900 flex items-center justify-end gap-0.5 ${sortBy === 'sessions' ? 'text-gray-900' : 'text-gray-500'}`}
+              >
+                Sessions
+                {sortBy === 'sessions' ? (
+                  sortDirection === 'desc' ? (
+                    <ArrowDown size={12} className="text-[var(--primary)]" />
+                  ) : (
+                    <ArrowUp size={12} className="text-[var(--primary)]" />
+                  )
+                ) : (
+                  <ArrowDown size={12} className="opacity-0" />
+                )}
+              </button>
+            </div>
+            {/* Sessions cells */}
+            {data.map((row, index) => {
+              const sessionsChange = showComparison ? getChange(row.sessions, row.prev_sessions) : null
+              return (
+                <div
+                  key={row.dimension_value}
+                  className={`${getRowClasses(index)} justify-end`}
+                  {...rowInteractionProps(index, row)}
+                >
+                  {/* Mobile: toggle between value+caret and evo% */}
+                  <span className="md:hidden">
+                    {showEvoDetails && showComparison ? (
+                      <span
+                        className={`text-xs ${sessionsChange !== null ? (sessionsChange >= 0 ? 'text-green-600' : 'text-orange-500') : 'text-gray-400'}`}
+                      >
+                        {sessionsChange !== null ? (
+                          <>
+                            {sessionsChange >= 0 ? <ChevronUp size={14} className="inline" /> : <ChevronDown size={14} className="inline" />}
+                            {Math.abs(sessionsChange).toFixed(0)}%
+                          </>
+                        ) : '—'}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-800 inline-flex items-center justify-end gap-0.5">
+                        {formatValue(row.sessions, 'number')}
+                        {showComparison && sessionsChange !== null && (
+                          sessionsChange >= 0 ? <ChevronUp size={14} className="text-green-600" /> : <ChevronDown size={14} className="text-orange-500" />
+                        )}
+                      </span>
+                    )}
+                  </span>
+                  {/* Desktop: always show value + full evo% */}
+                  <span className="hidden md:inline-flex items-center justify-end gap-1 text-xs text-gray-800">
+                    {formatValue(row.sessions, 'number')}
+                    {showComparison && sessionsChange !== null && (
+                      <span className={sessionsChange >= 0 ? 'text-green-600' : 'text-orange-500'}>
+                        {sessionsChange >= 0 ? <ChevronUp size={14} className="inline" /> : <ChevronDown size={14} className="inline" />}
+                        {Math.abs(sessionsChange).toFixed(0)}%
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* TIMESCORE COLUMN - static, never scrolls */}
+          <div className="w-28 md:w-36 flex-shrink-0 bg-white md:bg-transparent">
+            {/* TimeScore header */}
+            <div className="flex items-center h-[46px] pl-6 border-b border-gray-200">
+              <button
+                onClick={() => handleHeaderClick('median_duration')}
+                className={`text-xs font-medium cursor-pointer hover:text-gray-900 flex items-center gap-0.5 ${sortBy === 'median_duration' ? 'text-gray-900' : 'text-gray-500'}`}
+              >
+                TimeScore
+                {sortBy === 'median_duration' ? (
+                  sortDirection === 'desc' ? (
+                    <ArrowDown size={12} className="text-[var(--primary)]" />
+                  ) : (
+                    <ArrowUp size={12} className="text-[var(--primary)]" />
+                  )
+                ) : (
+                  <ArrowDown size={12} className="opacity-0" />
+                )}
+              </button>
+            </div>
+            {/* TimeScore cells */}
+            {data.map((row, index) => {
+              const durationChange = showComparison ? getChange(row.median_duration, row.prev_median_duration) : null
+              return (
+                <div
+                  key={row.dimension_value}
+                  className={`${getRowClasses(index)} gap-2 pl-6`}
+                  {...rowInteractionProps(index, row)}
+                >
+                  <span style={getHeatMapStyle(row.median_duration, maxMedianDuration, timescoreReference)} />
+                  {/* Mobile: toggle between value+caret and evo% */}
+                  <span className="md:hidden">
+                    {showEvoDetails && showComparison ? (
+                      <span
+                        className={`text-xs ${durationChange !== null ? (durationChange >= 0 ? 'text-green-600' : 'text-orange-500') : 'text-gray-400'}`}
+                      >
+                        {durationChange !== null ? (
+                          <>
+                            {durationChange >= 0 ? <ChevronUp size={14} className="inline" /> : <ChevronDown size={14} className="inline" />}
+                            {Math.abs(durationChange).toFixed(0)}%
+                          </>
+                        ) : '—'}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-800 inline-flex items-center gap-0.5">
+                        {formatValue(row.median_duration, 'duration')}
+                        {showComparison && durationChange !== null && (
+                          durationChange >= 0 ? <ChevronUp size={14} className="text-green-600" /> : <ChevronDown size={14} className="text-orange-500" />
+                        )}
+                      </span>
+                    )}
+                  </span>
+                  {/* Desktop: always show value + full evo% */}
+                  <span className="hidden md:inline-flex items-center gap-1 text-xs text-gray-800">
+                    {formatValue(row.median_duration, 'duration')}
+                    {showComparison && durationChange !== null && (
+                      <span className={durationChange >= 0 ? 'text-green-600' : 'text-orange-500'}>
+                        {durationChange >= 0 ? <ChevronUp size={14} className="inline" /> : <ChevronDown size={14} className="inline" />}
+                        {Math.abs(durationChange).toFixed(0)}%
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 
@@ -308,7 +430,7 @@ export function DimensionTableWidget({
           </button>
           <button
             onClick={() => handleHeaderClick('median_duration')}
-            className={`text-xs font-medium pl-6 cursor-pointer hover:text-gray-900 flex items-center gap-0.5 w-28 md:w-36 flex-shrink-0 ${sortBy === 'median_duration' ? 'text-gray-900' : 'text-gray-500'}`}
+            className={`text-xs font-medium pl-6 cursor-pointer hover:text-gray-900 flex items-center gap-0.5 w-28 md:w-36 flex-shrink-0 bg-white md:bg-transparent ${sortBy === 'median_duration' ? 'text-gray-900' : 'text-gray-500'}`}
           >
             TimeScore
             {sortBy === 'median_duration' ? (
@@ -406,25 +528,27 @@ function DimensionRow({
   return (
     <div
       onClick={onClick}
-      className={`group/row relative flex items-center h-9 px-4 border-b border-transparent hover:border-[var(--primary)] ${onClick ? 'cursor-pointer' : ''}`}
+      className={`group/row relative flex items-center h-9 px-4 border-b border-transparent hover:border-[var(--primary)] min-w-max md:min-w-0 ${onClick ? 'cursor-pointer' : ''}`}
     >
-      {/* Dimension value */}
-      <div className="relative flex-1 min-w-0 pr-4 h-full flex items-center pl-1.5 gap-2 overflow-hidden">
-        {/* Background bar */}
-        <div
-          className="absolute left-0 top-1 bottom-1 bg-[var(--primary)] opacity-[0.06] pointer-events-none rounded"
-          style={{ width: `${percent}%`, minWidth: '0.5rem' }}
-        />
-        {iconPrefix}
-        <Tooltip title={displayValue} placement="topLeft">
-          <span className="relative truncate block text-xs text-gray-700 group-hover/row:text-gray-900">
-            {displayValue}
-          </span>
-        </Tooltip>
+      {/* Dimension column */}
+      <div className="flex-1 h-full">
+        <div className="relative h-full flex items-center pl-1.5 gap-2">
+          {/* Background bar - contained within scroll area */}
+          <div
+            className="absolute inset-y-1 left-0 bg-[var(--primary)] opacity-[0.06] rounded pointer-events-none"
+            style={{ width: `${percent}%`, minWidth: '0.5rem' }}
+          />
+          {iconPrefix}
+          <Tooltip title={displayValue} placement="topLeft">
+            <span className="relative whitespace-nowrap md:truncate block text-xs text-gray-700 group-hover/row:text-gray-900 pr-2">
+              {displayValue}
+            </span>
+          </Tooltip>
+        </div>
       </div>
 
-      {/* Sessions value */}
-      <div className="text-right w-16 md:w-24 flex-shrink-0">
+      {/* Sessions - sticky on mobile */}
+      <div className="text-right w-16 md:w-24 flex-shrink-0 bg-white md:bg-transparent h-full flex items-center justify-end sticky right-[7rem] md:static">
         {/* Mobile: toggle between value+caret and evo% */}
         <span className="md:hidden">
           {showEvoDetails && showComparison ? (
@@ -459,8 +583,8 @@ function DimensionRow({
         </span>
       </div>
 
-      {/* TimeScore value */}
-      <div className="w-28 md:w-36 flex-shrink-0 flex items-center gap-2 pl-6">
+      {/* TimeScore - sticky on mobile */}
+      <div className="w-28 md:w-36 flex-shrink-0 flex items-center gap-2 pl-6 bg-white md:bg-transparent h-full sticky right-0 md:static">
         <span style={getHeatMapStyle(row.median_duration, maxMedianDuration, timescoreReference)} />
         {/* Mobile: toggle between value+caret and evo% */}
         <span className="md:hidden">
