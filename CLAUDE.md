@@ -194,6 +194,10 @@ Step-by-step migration instructions.
 
 ## Development Guidelines
 
+### Git Commits
+
+Do NOT include "Generated with Claude Code" or "Co-Authored-By" footers in commit messages. Use simple, clean commit messages.
+
 ### Running the API Server
 
 **Do not start the API server unless explicitly required.** For most tasks (code changes, builds, unit tests), starting the server is unnecessary.
