@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Table, Button, Modal, Form, Input, DatePicker, TimePicker, Select, message, Popconfirm } from 'antd'
+import { Table, Button, Modal, Form, Input, DatePicker, TimePicker, Select, message, Popconfirm, Empty } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { nanoid } from 'nanoid'
@@ -195,19 +195,73 @@ export function AnnotationsSettings({ workspace }: AnnotationsSettingsProps) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
+      <div className="mb-6">
+        <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold text-gray-900">Annotations</h1>
-          <p className="text-gray-500 mt-1">
-            Mark significant dates on your dashboard charts, like product launches or campaigns.
-          </p>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+            <span className="hidden md:inline">Add Annotation</span>
+            <span className="md:hidden">Add</span>
+          </Button>
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-          Add Annotation
-        </Button>
+        <p className="text-gray-500 mt-3 md:mt-1">
+          Mark significant dates on your dashboard charts, like product launches or campaigns.
+        </p>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm">
+      {/* Mobile: Card view */}
+      <div className="md:hidden space-y-3">
+        {annotations.length === 0 ? (
+          <div className="bg-white rounded-lg p-6">
+            <Empty description="No annotations yet" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          </div>
+        ) : (
+          annotations.map((annotation) => (
+            <div key={annotation.id} className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="flex items-start gap-3">
+                <span
+                  className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0"
+                  style={{ backgroundColor: annotation.color || DEFAULT_COLOR }}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium">{annotation.title}</div>
+                  {annotation.description && (
+                    <div className="text-sm text-gray-500 mt-1">{annotation.description}</div>
+                  )}
+                  <div className="text-sm text-gray-400 mt-2">
+                    {dayjs(annotation.date).format('MMM D, YYYY')} {annotation.time}
+                    <span className="mx-1">·</span>
+                    {annotation.timezone}
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+                <Popconfirm
+                  title="Delete annotation?"
+                  description="This action cannot be undone."
+                  onConfirm={() => handleDelete(annotation.id)}
+                  okText="Delete"
+                  okButtonProps={{ danger: true }}
+                >
+                  <Button block size="small" icon={<DeleteOutlined />}>
+                    Delete
+                  </Button>
+                </Popconfirm>
+                <Button
+                  block
+                  size="small"
+                  icon={<EditOutlined />}
+                  onClick={() => handleEdit(annotation)}
+                >
+                  Edit
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Desktop: Table view */}
+      <div className="hidden md:block bg-white rounded-lg shadow-sm">
         <Table
           dataSource={annotations}
           columns={columns}
@@ -231,12 +285,12 @@ export function AnnotationsSettings({ workspace }: AnnotationsSettingsProps) {
         okText={editingAnnotation ? 'Save' : 'Add'}
       >
         <Form form={form} layout="vertical" className="mt-4">
-          <div className="flex gap-4 items-end">
+          <div className="flex flex-wrap gap-4 items-end">
             <Form.Item
               name="date"
               label="Date"
               rules={[{ required: true, message: 'Date is required' }]}
-              style={{ minWidth: 160 }}
+              className="min-w-[160px]"
             >
               <DatePicker className="w-full" />
             </Form.Item>
@@ -249,17 +303,17 @@ export function AnnotationsSettings({ workspace }: AnnotationsSettingsProps) {
               <TimePicker format="HH:mm" />
             </Form.Item>
 
-            <Form.Item label="Color">
-              <div className="flex gap-1">
+            <Form.Item label="Color" className="w-full md:w-auto">
+              <div className="flex gap-2">
                 {PRESET_COLORS.map((color) => (
                   <button
                     key={color}
                     type="button"
                     onClick={() => setSelectedColor(color)}
-                    className={`w-7 h-7 rounded-full border-2 transition-all ${
+                    className={`w-6 h-6 rounded-full transition-all cursor-pointer ${
                       selectedColor === color
-                        ? 'border-gray-800 scale-110'
-                        : 'border-transparent hover:scale-105'
+                        ? 'outline outline-1 outline-offset-2 outline-[var(--ant-color-primary)]'
+                        : 'hover:scale-105'
                     }`}
                     style={{ backgroundColor: color }}
                   />

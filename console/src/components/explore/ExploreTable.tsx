@@ -1,10 +1,10 @@
-import { useMemo, useCallback } from 'react'
+import { useMemo, useCallback, useState } from 'react'
 import { Table, Empty, Spin, Tooltip, Button } from 'antd'
 import { SquarePlus, SquareMinus, Loader2, ChevronUp, ChevronDown, TriangleAlert } from 'lucide-react'
 import { EyeOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { HeatMapCell } from './HeatMapCell'
-import { getDimensionLabel, canExpandRow } from '../../lib/explore-utils'
+import { getDimensionLabel, canExpandRow, getHeatMapColor } from '../../lib/explore-utils'
 import { DaysOfWeek } from '../../lib/dictionaries'
 import { formatNumber } from '../../lib/chart-utils'
 import type { ExploreRow, ExploreTotals } from '../../types/explore'
@@ -31,6 +31,13 @@ interface ExploreTableProps {
 
 function formatPercentage(value: number): string {
   return `${value.toFixed(1)}%`
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)}s`
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.round(seconds % 60)
+  return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`
 }
 
 function ChangeIndicator({
@@ -62,6 +69,123 @@ function ChangeIndicator({
       ) : null}
       {Math.abs(value).toFixed(0)}%
     </span>
+  )
+}
+
+function MobileMetricRow({ label, value, change, invertColors, showComparison }: {
+  label: string
+  value: string | number
+  change?: number
+  invertColors?: boolean
+  showComparison: boolean
+}) {
+  return (
+    <div className="flex justify-between items-center">
+      <span className="text-gray-500 text-sm">{label}</span>
+      <div className="flex items-center">
+        <span className="font-medium">{value}</span>
+        {showComparison && <ChangeIndicator value={change} invertColors={invertColors} />}
+      </div>
+    </div>
+  )
+}
+
+function MobileExploreCard({
+  record,
+  dimensions,
+  depth,
+  isExpanded,
+  onToggle,
+  onDrillDown,
+  isLoading,
+  showComparison,
+  customDimensionLabels,
+  maxMedianDuration,
+  timescoreReference,
+}: {
+  record: ExploreRow
+  dimensions: string[]
+  depth: number
+  isExpanded: boolean
+  onToggle: () => void
+  onDrillDown: () => void
+  isLoading: boolean
+  showComparison: boolean
+  customDimensionLabels?: CustomDimensionLabels | null
+  maxMedianDuration: number
+  timescoreReference: number
+}) {
+  const currentDim = dimensions[record.parentDimensionIndex] || dimensions[0]
+  const rawValue = record[currentDim]
+  const displayValue = rawValue === null || rawValue === '' || rawValue === undefined
+    ? '(empty)'
+    : currentDim === 'day_of_week' && typeof rawValue === 'number'
+      ? DaysOfWeek[rawValue] ?? String(rawValue)
+      : String(rawValue)
+  const canDrillDown = canExpandRow(record, dimensions)
+  const heatColor = getHeatMapColor(record.median_duration, maxMedianDuration, timescoreReference)
+
+  return (
+    <div
+      className="bg-white rounded-lg border border-gray-200 p-4 mb-3"
+      style={{ marginLeft: depth * 16 }}
+    >
+      {/* Header row - tappable */}
+      <div className="flex items-center justify-between cursor-pointer" onClick={onToggle}>
+        <div className="flex-1 min-w-0">
+          <div className="text-xs text-gray-400">{getDimensionLabel(currentDim, customDimensionLabels)}</div>
+          <div className={`font-medium truncate ${rawValue === null || rawValue === '' ? 'text-gray-400 italic' : ''}`}>
+            {displayValue}
+          </div>
+        </div>
+        {isLoading ? (
+          <Loader2 size={16} className="animate-spin text-gray-400 ml-2" />
+        ) : (
+          <ChevronDown size={16} className={`text-gray-400 ml-2 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+        )}
+      </div>
+
+      {/* Summary metrics (always visible) */}
+      <div className="flex items-center gap-2 mt-2 text-sm text-gray-600">
+        <span>{formatNumber(record.sessions)}</span>
+        <span className="text-gray-300">•</span>
+        <span className="inline-flex items-center gap-1">
+          <span
+            className="inline-block w-2 h-2 rounded-full"
+            style={{ backgroundColor: heatColor }}
+          />
+          {formatDuration(record.median_duration)}
+        </span>
+        <span className="text-gray-300">•</span>
+        <span>{record.bounce_rate.toFixed(0)}%</span>
+      </div>
+
+      {/* Expanded details */}
+      {isExpanded && (
+        <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
+          <MobileMetricRow label="Sessions" value={formatNumber(record.sessions)} change={record.sessions_change} showComparison={showComparison} />
+          <div className="flex justify-between items-center">
+            <span className="text-gray-500 text-sm">TimeScore</span>
+            <div className="flex items-center">
+              <span
+                className="inline-block w-2 h-2 rounded-full mr-1"
+                style={{ backgroundColor: heatColor }}
+              />
+              <span className="font-medium">{formatDuration(record.median_duration)}</span>
+              {showComparison && <ChangeIndicator value={record.median_duration_change} />}
+            </div>
+          </div>
+          <MobileMetricRow label="Bounce Rate" value={`${record.bounce_rate.toFixed(1)}%`} change={record.bounce_rate_change} invertColors showComparison={showComparison} />
+          <MobileMetricRow label="Scroll Depth" value={`${record.median_scroll.toFixed(1)}%`} change={record.median_scroll_change} showComparison={showComparison} />
+
+          {canDrillDown && !record.childrenLoaded && (
+            <Button type="primary" ghost block size="small" className="mt-2" onClick={(e) => { e.stopPropagation(); onDrillDown(); }}>
+              Drill Down
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -106,6 +230,43 @@ export function ExploreTable({
       return rowValue === winningValue
     })
   }, [maxDimensionValues, dimensions])
+
+  // Mobile card state
+  const [mobileExpandedKeys, setMobileExpandedKeys] = useState<Set<string>>(new Set())
+
+  const toggleMobileExpand = useCallback((key: string) => {
+    setMobileExpandedKeys(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
+
+  const renderMobileCards = useCallback((rows: ExploreRow[], depth = 0): React.ReactNode => {
+    return rows.map(record => (
+      <div key={record.key}>
+        <MobileExploreCard
+          record={record}
+          dimensions={dimensions}
+          depth={depth}
+          isExpanded={mobileExpandedKeys.has(record.key)}
+          onToggle={() => toggleMobileExpand(record.key)}
+          onDrillDown={() => onExpand(true, record)}
+          isLoading={loadingRows.has(record.key)}
+          showComparison={showComparison}
+          customDimensionLabels={customDimensionLabels}
+          maxMedianDuration={maxMedianDuration}
+          timescoreReference={timescoreReference ?? 0}
+        />
+        {/* Render children if loaded */}
+        {record.children && record.children.length > 0 && (
+          renderMobileCards(record.children, depth + 1)
+        )}
+      </div>
+    ))
+  }, [dimensions, mobileExpandedKeys, toggleMobileExpand, onExpand, loadingRows, showComparison, customDimensionLabels, maxMedianDuration, timescoreReference])
+
   const columns: ColumnsType<ExploreRow> = useMemo(() => {
     // Get the current dimension being displayed (the last one that has data)
     const getCurrentDimensionForRow = (row: ExploreRow): string => {
@@ -270,56 +431,80 @@ export function ExploreTable({
   }
 
   return (
-    <Table<ExploreRow>
-      columns={columns}
-      dataSource={data}
-      rowKey="key"
-      loading={loading}
-      pagination={false}
-      rowClassName={(record) => isWinningRow(record) ? 'best-timescore-row' : ''}
-      expandable={{
-        expandedRowKeys,
-        expandRowByClick: true,
-        onExpand,
-        onExpandedRowsChange: (keys) => onExpandedRowsChange(keys as React.Key[]),
-        rowExpandable: (record) => canExpandRow(record, dimensions),
-        expandIcon: ({ expanded, record }) => {
-          if (!canExpandRow(record, dimensions)) {
-            return <span className="w-4" />
-          }
-
-          const isLoading = loadingRows.has(record.key)
-
-          if (isLoading) {
-            return <Loader2 size={14} className="mr-2 animate-spin text-gray-400" />
-          }
-
-          // Show warning icon if children were filtered by min sessions
-          if (expanded && record.childrenFilteredByMinSessions) {
-            return (
-              <Tooltip title={`All sub-items have fewer than ${minSessions} sessions. Lower the threshold to see them.`}>
-                <span className="mr-2 text-amber-500 cursor-help">
-                  <TriangleAlert size={14} />
-                </span>
-              </Tooltip>
-            )
-          }
-
-          return (
-            <span className="mr-2 text-gray-500">
-              {expanded ? <SquareMinus size={14} /> : <SquarePlus size={14} />}
-            </span>
-          )
-        },
-        childrenColumnName: 'children'
-      }}
-      locale={{
-        emptyText: loading ? (
-          <Spin tip="Loading..." />
-        ) : (
+    <>
+      {/* Mobile: Card view */}
+      <div className="md:hidden">
+        {loading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="bg-white rounded-lg border p-4 animate-pulse">
+                <div className="h-4 bg-gray-200 rounded w-2/3 mb-2" />
+                <div className="h-3 bg-gray-100 rounded w-1/2" />
+              </div>
+            ))}
+          </div>
+        ) : data.length === 0 ? (
           <Empty description="No data found" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-        )
-      }}
-    />
+        ) : (
+          renderMobileCards(data)
+        )}
+      </div>
+
+      {/* Desktop: Table view */}
+      <div className="hidden md:block">
+        <Table<ExploreRow>
+          columns={columns}
+          dataSource={data}
+          rowKey="key"
+          loading={loading}
+          pagination={false}
+          scroll={{ x: 'max-content' }}
+          rowClassName={(record) => isWinningRow(record) ? 'best-timescore-row' : ''}
+          expandable={{
+            expandedRowKeys,
+            expandRowByClick: true,
+            onExpand,
+            onExpandedRowsChange: (keys) => onExpandedRowsChange(keys as React.Key[]),
+            rowExpandable: (record) => canExpandRow(record, dimensions),
+            expandIcon: ({ expanded, record }) => {
+              if (!canExpandRow(record, dimensions)) {
+                return <span className="w-4" />
+              }
+
+              const isLoading = loadingRows.has(record.key)
+
+              if (isLoading) {
+                return <Loader2 size={14} className="mr-2 animate-spin text-gray-400" />
+              }
+
+              // Show warning icon if children were filtered by min sessions
+              if (expanded && record.childrenFilteredByMinSessions) {
+                return (
+                  <Tooltip title={`All sub-items have fewer than ${minSessions} sessions. Lower the threshold to see them.`}>
+                    <span className="mr-2 text-amber-500 cursor-help">
+                      <TriangleAlert size={14} />
+                    </span>
+                  </Tooltip>
+                )
+              }
+
+              return (
+                <span className="mr-2 text-gray-500">
+                  {expanded ? <SquareMinus size={14} /> : <SquarePlus size={14} />}
+                </span>
+              )
+            },
+            childrenColumnName: 'children'
+          }}
+          locale={{
+            emptyText: loading ? (
+              <Spin tip="Loading..." />
+            ) : (
+              <Empty description="No data found" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            )
+          }}
+        />
+      </div>
+    </>
   )
 }

@@ -11,6 +11,7 @@ import {
   Typography,
   Tooltip,
   Avatar,
+  Empty,
 } from 'antd'
 import {
   UserAddOutlined,
@@ -19,9 +20,16 @@ import {
   ReloadOutlined,
   CloseOutlined,
 } from '@ant-design/icons'
+import md5 from 'blueimp-md5'
 import { api } from '../../lib/api'
 import { InviteMemberModal } from './InviteMemberModal'
 import type { Member, Invitation, Role } from '../../types/member'
+
+// Generate Gravatar URL from email
+function getGravatarUrl(email: string, size = 40): string {
+  const hash = md5(email.trim().toLowerCase())
+  return `https://www.gravatar.com/avatar/${hash}?s=${size}&d=identicon`
+}
 
 const { Title, Text } = Typography
 
@@ -139,7 +147,7 @@ export function TeamSettings({ workspaceId, userRole }: TeamSettingsProps) {
       key: 'member',
       render: (_: unknown, record: Member) => (
         <Space>
-          <Avatar size="small">
+          <Avatar size="small" src={getGravatarUrl(record.user.email, 32)}>
             {record.user.name.charAt(0).toUpperCase()}
           </Avatar>
           <div>
@@ -245,7 +253,14 @@ export function TeamSettings({ workspaceId, userRole }: TeamSettingsProps) {
     {
       title: 'Email',
       key: 'email',
-      render: (_: unknown, record: Invitation) => record.email,
+      render: (_: unknown, record: Invitation) => (
+        <Space>
+          <Avatar size="small" src={getGravatarUrl(record.email, 32)}>
+            {record.email.charAt(0).toUpperCase()}
+          </Avatar>
+          <span>{record.email}</span>
+        </Space>
+      ),
     },
     {
       title: 'Role',
@@ -341,20 +356,107 @@ export function TeamSettings({ workspaceId, userRole }: TeamSettingsProps) {
                 onClick={() => setInviteModalOpen(true)}
                 disabled={!smtpStatus?.available}
               >
-                Invite Member
+                <span className="hidden md:inline">Invite Member</span>
+                <span className="md:hidden">Invite</span>
               </Button>
             </Tooltip>
           )}
         </div>
 
-        <Table
-          dataSource={members}
-          columns={memberColumns}
-          rowKey="id"
-          loading={membersLoading}
-          pagination={false}
-          size="middle"
-        />
+        {/* Mobile: Card view */}
+        <div className="md:hidden space-y-3">
+          {membersLoading ? (
+            <div className="bg-white rounded-lg p-6 text-center text-gray-500">Loading...</div>
+          ) : members.length === 0 ? (
+            <div className="bg-white rounded-lg p-6">
+              <Empty description="No team members" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            </div>
+          ) : (
+            members.map((member) => {
+              const isCurrentUser = member.user_id === currentUser?.id
+              const canChangeRole =
+                canManageMembers &&
+                member.role !== 'owner' &&
+                !isCurrentUser &&
+                (userRole === 'owner' || member.role !== 'admin')
+              const canRemove =
+                canManageMembers &&
+                member.role !== 'owner' &&
+                !isCurrentUser &&
+                (userRole === 'owner' || member.role !== 'admin')
+
+              return (
+                <div key={member.id} className="bg-white rounded-lg border border-gray-200 p-4">
+                  <div className="flex items-start gap-3">
+                    <Avatar size="default" src={getGravatarUrl(member.user.email, 40)}>
+                      {member.user.name.charAt(0).toUpperCase()}
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="font-medium">{member.user.name}</div>
+                          <div className="text-gray-500 text-sm truncate">{member.user.email}</div>
+                        </div>
+                        <div className="shrink-0">
+                          {member.role === 'owner' ? (
+                            <Tag color={roleColors.owner} icon={<CrownOutlined />}>Owner</Tag>
+                          ) : canChangeRole ? (
+                            <Select
+                              value={member.role}
+                              options={roleOptions}
+                              size="small"
+                              style={{ width: 100 }}
+                              loading={updateRoleMutation.isPending}
+                              onChange={(role) =>
+                                updateRoleMutation.mutate({
+                                  userId: member.user_id,
+                                  role: role as Exclude<Role, 'owner'>,
+                                })
+                              }
+                            />
+                          ) : (
+                            <Tag color={roleColors[member.role]}>
+                              {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
+                            </Tag>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-gray-400 text-xs mt-2">
+                        Joined {new Date(member.joined_at).toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+                  {canRemove && (
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      <Popconfirm
+                        title="Remove member"
+                        description={`Are you sure you want to remove ${member.user.name}?`}
+                        onConfirm={() => removeMemberMutation.mutate(member.user_id)}
+                        okText="Remove"
+                      >
+                        <Button block size="small" icon={<DeleteOutlined />} loading={removeMemberMutation.isPending}>
+                          Remove
+                        </Button>
+                      </Popconfirm>
+                    </div>
+                  )}
+                </div>
+              )
+            })
+          )}
+        </div>
+
+        {/* Desktop: Table view */}
+        <div className="hidden md:block">
+          <Table
+            dataSource={members}
+            columns={memberColumns}
+            rowKey="id"
+            loading={membersLoading}
+            pagination={false}
+            size="middle"
+          />
+        </div>
       </div>
 
       {/* Pending Invitations Section - only show if there are pending invitations */}
@@ -364,14 +466,76 @@ export function TeamSettings({ workspaceId, userRole }: TeamSettingsProps) {
             Pending Invitations ({pendingInvitations.length})
           </Title>
 
-          <Table
-            dataSource={pendingInvitations}
-            columns={invitationColumns}
-            rowKey="id"
-            loading={invitationsLoading}
-            pagination={false}
-            size="middle"
-          />
+          {/* Mobile: Card view */}
+          <div className="md:hidden space-y-3">
+            {invitationsLoading ? (
+              <div className="bg-white rounded-lg p-6 text-center text-gray-500">Loading...</div>
+            ) : (
+              pendingInvitations.map((invitation) => (
+                <div key={invitation.id} className="bg-white rounded-lg border border-gray-200 p-4">
+                  <div className="flex items-start gap-3">
+                    <Avatar size="default" src={getGravatarUrl(invitation.email, 40)}>
+                      {invitation.email.charAt(0).toUpperCase()}
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="font-medium truncate">{invitation.email}</div>
+                        <div className="shrink-0">
+                          <Tag color={roleColors[invitation.role]}>
+                            {invitation.role.charAt(0).toUpperCase() + invitation.role.slice(1)}
+                          </Tag>
+                        </div>
+                      </div>
+                      <div className="text-gray-400 text-xs mt-2">
+                        Invited by {invitation.inviter.name} · Expires {new Date(invitation.expires_at).toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+                    <Popconfirm
+                      title="Revoke invitation"
+                      description={`Are you sure you want to revoke the invitation for ${invitation.email}?`}
+                      onConfirm={() => revokeInvitationMutation.mutate(invitation.id)}
+                      okText="Revoke"
+                    >
+                      <Button block size="small" icon={<CloseOutlined />} loading={revokeInvitationMutation.isPending}>
+                        Revoke
+                      </Button>
+                    </Popconfirm>
+                    <Popconfirm
+                      title="Resend invitation"
+                      description={`Resend invitation email to ${invitation.email}?`}
+                      onConfirm={() => resendInvitationMutation.mutate(invitation.id)}
+                      okText="Resend"
+                      disabled={!smtpStatus?.available}
+                    >
+                      <Button
+                        block
+                        size="small"
+                        icon={<ReloadOutlined />}
+                        loading={resendInvitationMutation.isPending}
+                        disabled={!smtpStatus?.available}
+                      >
+                        Resend
+                      </Button>
+                    </Popconfirm>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop: Table view */}
+          <div className="hidden md:block">
+            <Table
+              dataSource={pendingInvitations}
+              columns={invitationColumns}
+              rowKey="id"
+              loading={invitationsLoading}
+              pagination={false}
+              size="middle"
+            />
+          </div>
         </div>
       )}
 

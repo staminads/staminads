@@ -34,11 +34,11 @@ interface SortableDimensionChipProps {
   id: string
   dimension: string
   onRemove: () => void
-  isFirst: boolean
+  isLast: boolean
   customDimensionLabels?: CustomDimensionLabels | null
 }
 
-function SortableDimensionChip({ id, dimension, onRemove, isFirst, customDimensionLabels }: SortableDimensionChipProps) {
+function SortableDimensionChip({ id, dimension, onRemove, isLast, customDimensionLabels }: SortableDimensionChipProps) {
   const {
     attributes,
     listeners,
@@ -56,7 +56,6 @@ function SortableDimensionChip({ id, dimension, onRemove, isFirst, customDimensi
 
   return (
     <div ref={setNodeRef} style={style} className="inline-flex items-center">
-      {!isFirst && <span className="mx-1 text-gray-400">›</span>}
       <Tag
         color="blue"
         className="m-0 flex items-center gap-1 cursor-grab"
@@ -71,6 +70,7 @@ function SortableDimensionChip({ id, dimension, onRemove, isFirst, customDimensi
       >
         {getDimensionLabel(dimension, customDimensionLabels)}
       </Tag>
+      {!isLast && <span className="mx-1 text-gray-400">›</span>}
     </div>
   )
 }
@@ -207,49 +207,45 @@ export function DimensionSelector({ value, onChange, customDimensionLabels }: Di
   )
 
   return (
-    <div className="flex items-center gap-2 flex-wrap">
-      <Dropdown
-        trigger={['click']}
-        open={dropdownOpen}
-        onOpenChange={(open) => {
-          setDropdownOpen(open)
-          if (!open) setSearchTerm('')
-        }}
-        disabled={allDimensionsSelected}
-        popupRender={() => dropdownContent}
-      >
-        <Button
-          type="link"
-          size="small"
-          icon={<PlusCircleOutlined />}
-          disabled={allDimensionsSelected}
-        >
-          Add dimension
-        </Button>
-      </Dropdown>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleDragEnd}
+    >
+      <SortableContext items={value} strategy={horizontalListSortingStrategy}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Dropdown
+            trigger={['click']}
+            open={dropdownOpen}
+            onOpenChange={(open) => {
+              setDropdownOpen(open)
+              if (!open) setSearchTerm('')
+            }}
+            disabled={allDimensionsSelected}
+            popupRender={() => dropdownContent}
+          >
+            <Button
+              type="link"
+              size="small"
+              icon={<PlusCircleOutlined />}
+              disabled={allDimensionsSelected}
+            >
+              Add dimension
+            </Button>
+          </Dropdown>
 
-      {value.length > 0 && (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext items={value} strategy={horizontalListSortingStrategy}>
-            <div className="flex items-center">
-              {value.map((dimension, index) => (
-                <SortableDimensionChip
-                  key={dimension}
-                  id={dimension}
-                  dimension={dimension}
-                  onRemove={() => handleRemoveDimension(dimension)}
-                  isFirst={index === 0}
-                  customDimensionLabels={customDimensionLabels}
-                />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
-      )}
-    </div>
+          {value.map((dimension, index) => (
+            <SortableDimensionChip
+              key={dimension}
+              id={dimension}
+              dimension={dimension}
+              onRemove={() => handleRemoveDimension(dimension)}
+              isLast={index === value.length - 1}
+              customDimensionLabels={customDimensionLabels}
+            />
+          ))}
+        </div>
+      </SortableContext>
+    </DndContext>
   )
 }

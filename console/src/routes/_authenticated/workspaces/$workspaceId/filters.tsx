@@ -77,27 +77,28 @@ function FiltersPage() {
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
+      <div className="mb-6">
+        <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold text-gray-900">Filters</h1>
-          <p className="text-gray-500 mt-1">
-            Define filters to map channels, set custom dimensions, and modify traffic source fields
-          </p>
+          <Space>
+            <Button type="primary" ghost icon={<ExperimentOutlined />} onClick={() => setTestModalOpen(true)}>
+              Test
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+              <span className="hidden md:inline">Create Filter</span>
+              <span className="md:hidden">Create</span>
+            </Button>
+          </Space>
         </div>
-        <Space>
-          <Button type="primary" ghost icon={<ExperimentOutlined />} onClick={() => setTestModalOpen(true)}>
-            Test
-          </Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-            Create Filter
-          </Button>
-        </Space>
+        <p className="text-gray-500 mt-3 md:mt-1">
+          Define filters to map channels, set custom dimensions, and modify traffic source fields
+        </p>
       </div>
 
       <BackfillStatus workspaceId={workspaceId} />
 
       {filters.length > 0 && (
-        <div className="mb-4 flex items-center gap-4">
+        <div className="mb-4 flex flex-col md:flex-row md:items-center gap-4">
           {tags.length > 0 && (
             <Segmented
               value={selectedTag}
@@ -110,8 +111,7 @@ function FiltersPage() {
             allowClear
             prefix={<SearchOutlined className="text-gray-400" />}
             onChange={(e) => setSearchText(e.target.value)}
-            style={{ width: 250 }}
-            className="ml-auto"
+            className="w-full md:w-[250px] md:ml-auto"
           />
         </div>
       )}

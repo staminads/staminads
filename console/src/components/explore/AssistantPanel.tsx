@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState } from 'react'
-import { Card, Button, Space, Tag, Drawer, Spin, Typography } from 'antd'
-import { CloseOutlined, ReloadOutlined, ThunderboltOutlined, CheckOutlined } from '@ant-design/icons'
+import { Card, Button, Tag, Drawer, Spin, Typography } from 'antd'
+import { ThunderboltOutlined, CheckOutlined } from '@ant-design/icons'
 import { Bubble, Sender } from '@ant-design/x'
 import { XMarkdown } from '@ant-design/x-markdown'
 import '@ant-design/x-markdown/themes/light.css'
@@ -229,25 +229,16 @@ export function AssistantPanel({
     </div>
   )
 
-  const extra = (
-    <Space>
-      <Button
-        size="small"
-        icon={<ReloadOutlined />}
-        onClick={onClear}
-        disabled={messages.length === 0}
-        aria-label="Clear conversation"
-      >
-        Clear
-      </Button>
-      <Button
-        size="small"
-        icon={<CloseOutlined />}
-        onClick={onClose}
-        aria-label="Close assistant"
-      />
-    </Space>
-  )
+  const extra = messages.length > 0 ? (
+    <Button
+      type="link"
+      size="small"
+      onClick={onClear}
+      aria-label="Reset conversation"
+    >
+      Reset
+    </Button>
+  ) : null
 
   // Use Drawer on mobile, Card on desktop
   if (isMobile) {
@@ -259,6 +250,7 @@ export function AssistantPanel({
         onClose={onClose}
         placement="bottom"
         height="80vh"
+        zIndex={1100}
         styles={{ body: { padding: 0 } }}
       >
         {content}

@@ -3,7 +3,8 @@ import { createFileRoute, Outlet, Link, useNavigate, useRouterState } from '@tan
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { Select, Button, Avatar, Spin, Space, Popover, Tooltip, App, Dropdown } from 'antd'
 import type { RefSelectProps } from 'antd/es/select'
-import { LogoutOutlined, PlusOutlined, GlobalOutlined, QuestionCircleOutlined, MenuOutlined, CloseOutlined } from '@ant-design/icons'
+import { LogoutOutlined, PlusOutlined, GlobalOutlined, QuestionCircleOutlined, MenuOutlined, CloseOutlined, LeftOutlined, RightOutlined, ExclamationCircleOutlined } from '@ant-design/icons'
+import { ExternalLink } from 'lucide-react'
 import { workspacesQueryOptions, workspaceQueryOptions, backfillSummaryQueryOptions } from '../../../lib/queries'
 import { SyncStatusIcon } from '../../../components/layout/SyncStatusIcon'
 import { useAuth } from '../../../lib/useAuth'
@@ -51,6 +52,7 @@ function WorkspaceLayout() {
   const currentPath = routerState.location.pathname
   const [timezonePopoverOpen, setTimezonePopoverOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [mobileMenuLevel, setMobileMenuLevel] = useState<'main' | 'settings'>('main')
   const timezoneSelectRef = useRef<RefSelectProps>(null)
 
   // Focus the Select search input when popover opens
@@ -98,6 +100,21 @@ function WorkspaceLayout() {
     } else {
       navigate({ to: '/workspaces/$workspaceId', params: { workspaceId: id } })
     }
+  }
+
+  const settingsMenuItems = [
+    { key: 'workspace', label: 'Workspace' },
+    { key: 'dimensions', label: 'Custom Dimensions' },
+    { key: 'team', label: 'Team' },
+    { key: 'integrations', label: 'Integrations' },
+    { key: 'smtp', label: 'Email (SMTP)' },
+    { key: 'api-keys', label: 'API Keys' },
+    { key: 'sdk', label: 'Install SDK' },
+  ] as const
+
+  const closeMobileMenu = () => {
+    setMobileMenuOpen(false)
+    setMobileMenuLevel('main')
   }
 
   return (
@@ -248,17 +265,21 @@ function WorkspaceLayout() {
                 items: [
                   {
                     key: 'documentation',
+                    icon: <QuestionCircleOutlined />,
                     label: (
-                      <a href="https://docs.staminads.com" target="_blank" rel="noopener noreferrer">
+                      <a href="https://docs.staminads.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
                         Documentation
+                        <ExternalLink size={12} className="text-gray-400" />
                       </a>
                     ),
                   },
                   {
                     key: 'report-issue',
+                    icon: <ExclamationCircleOutlined />,
                     label: (
-                      <a href="https://github.com/staminads/staminads/issues" target="_blank" rel="noopener noreferrer">
+                      <a href="https://github.com/staminads/staminads/issues" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
                         Report an issue
+                        <ExternalLink size={12} className="text-gray-400" />
                       </a>
                     ),
                   },
@@ -295,7 +316,7 @@ function WorkspaceLayout() {
       {mobileMenuOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-40 md:hidden"
-          onClick={() => setMobileMenuOpen(false)}
+          onClick={closeMobileMenu}
         />
       )}
 
@@ -310,7 +331,7 @@ function WorkspaceLayout() {
           <Button
             type="text"
             icon={<CloseOutlined />}
-            onClick={() => setMobileMenuOpen(false)}
+            onClick={closeMobileMenu}
           />
         </div>
 
@@ -320,7 +341,7 @@ function WorkspaceLayout() {
               value={workspaceId}
               onChange={(id) => {
                 handleWorkspaceChange(id)
-                setMobileMenuOpen(false)
+                closeMobileMenu()
               }}
               variant="filled"
               className="w-full"
@@ -361,33 +382,69 @@ function WorkspaceLayout() {
           {/* Navigation Links */}
           {isWorkspaceActive && (
             <nav className="flex flex-col py-2">
-              {[
-                { to: '/workspaces/$workspaceId', label: 'Dashboard', exact: true },
-                { to: '/workspaces/$workspaceId/explore', label: 'Explore' },
-                { to: '/workspaces/$workspaceId/filters', label: 'Filters' },
-                { to: '/workspaces/$workspaceId/annotations', label: 'Annotations' },
-                { to: '/workspaces/$workspaceId/settings', label: 'Settings' },
-              ].map(({ to, label, exact }) => {
-                const resolvedPath = to.replace('$workspaceId', workspaceId)
-                const isActive = exact
-                  ? currentPath === resolvedPath
-                  : currentPath.startsWith(resolvedPath)
-                return (
-                  <Link
-                    key={to}
-                    to={to}
-                    params={{ workspaceId }}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`px-4 py-3 transition-colors ${
-                      isActive
+              {mobileMenuLevel === 'main' ? (
+                <>
+                  {[
+                    { to: '/workspaces/$workspaceId', label: 'Dashboard', exact: true },
+                    { to: '/workspaces/$workspaceId/explore', label: 'Explore' },
+                    { to: '/workspaces/$workspaceId/filters', label: 'Filters' },
+                    { to: '/workspaces/$workspaceId/annotations', label: 'Annotations' },
+                  ].map(({ to, label, exact }) => {
+                    const resolvedPath = to.replace('$workspaceId', workspaceId)
+                    const isActive = exact
+                      ? currentPath === resolvedPath
+                      : currentPath.startsWith(resolvedPath)
+                    return (
+                      <Link
+                        key={to}
+                        to={to}
+                        params={{ workspaceId }}
+                        onClick={closeMobileMenu}
+                        className={`px-4 py-3 transition-colors ${
+                          isActive
+                            ? '!text-[var(--primary)] bg-purple-50'
+                            : '!text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {label}
+                      </Link>
+                    )
+                  })}
+                  <button
+                    onClick={() => setMobileMenuLevel('settings')}
+                    className={`flex items-center justify-between px-4 py-3 transition-colors w-full text-left ${
+                      currentPath.includes('/settings')
                         ? '!text-[var(--primary)] bg-purple-50'
-                        : '!text-gray-700 hover:bg-gray-50'
+                        : 'text-gray-700 hover:bg-gray-50'
                     }`}
                   >
-                    {label}
-                  </Link>
-                )
-              })}
+                    Settings
+                    <RightOutlined className="text-gray-400" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setMobileMenuLevel('main')}
+                    className="flex items-center gap-2 px-4 py-3 text-gray-700 hover:bg-gray-50 w-full text-left border-b border-gray-200"
+                  >
+                    <LeftOutlined />
+                    Back
+                  </button>
+                  {settingsMenuItems.map((item) => (
+                    <Link
+                      key={item.key}
+                      to="/workspaces/$workspaceId/settings"
+                      params={{ workspaceId }}
+                      search={{ section: item.key }}
+                      onClick={closeMobileMenu}
+                      className="px-4 py-3 text-gray-700 hover:bg-gray-50 block"
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </>
+              )}
             </nav>
           )}
 
@@ -425,7 +482,8 @@ function WorkspaceLayout() {
               className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50"
             >
               <QuestionCircleOutlined />
-              Documentation
+              <span className="flex-1">Documentation</span>
+              <ExternalLink size={12} className="text-gray-400" />
             </a>
             <a
               href="https://github.com/staminads/staminads/issues"
@@ -433,7 +491,9 @@ function WorkspaceLayout() {
               rel="noopener noreferrer"
               className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50"
             >
-              Report an issue
+              <ExclamationCircleOutlined />
+              <span className="flex-1">Report an issue</span>
+              <ExternalLink size={12} className="text-gray-400" />
             </a>
             <div className="px-4 py-2 text-xs text-gray-400">
               v{__APP_VERSION__}
@@ -446,7 +506,7 @@ function WorkspaceLayout() {
           {/* Logout */}
           <button
             onClick={() => {
-              setMobileMenuOpen(false)
+              closeMobileMenu()
               handleLogout()
             }}
             className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 w-full text-left"

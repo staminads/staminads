@@ -155,6 +155,7 @@ export function FilterFormModal({
         width={800}
         placement="right"
         destroyOnClose
+        styles={{ wrapper: { maxWidth: '100%' } }}
         footer={
           <div className="flex justify-between">
             <Button onClick={handleTest} icon={<ExperimentOutlined />}>

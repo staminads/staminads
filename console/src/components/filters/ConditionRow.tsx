@@ -52,20 +52,22 @@ export function ConditionRow({ index, value, onChange, onRemove, isOnlyCondition
   }, [autoFocus, onFocused])
 
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-gray-400 w-4 shrink-0">{index + 1}.</span>
-      <Select
-        ref={handleSelectRef}
-        value={value.field}
-        onChange={(field) => onChange({ ...value, field })}
-        options={fieldOptions}
-        placeholder="Select field"
-        style={{ width: 180, flexShrink: 0 }}
-        showSearch
-        optionFilterProp="label"
-        open={isOpen}
-        onDropdownVisibleChange={setIsOpen}
-      />
+    <div className="flex flex-col md:flex-row md:items-center gap-2">
+      <div className="flex items-center gap-2 flex-1">
+        <span className="text-xs text-gray-400 w-4 shrink-0">{index + 1}.</span>
+        <Select
+          ref={handleSelectRef}
+          value={value.field}
+          onChange={(field) => onChange({ ...value, field })}
+          options={fieldOptions}
+          placeholder="Select field"
+          className="w-full md:!w-[180px] md:shrink-0"
+          showSearch
+          optionFilterProp="label"
+          open={isOpen}
+          onDropdownVisibleChange={setIsOpen}
+        />
+      </div>
       <Select
         value={value.operator}
         onChange={(operator) => {
@@ -78,14 +80,14 @@ export function ConditionRow({ index, value, onChange, onRemove, isOnlyCondition
           }
         }}
         options={OPERATORS.map((op) => ({ value: op.value, label: op.label }))}
-        style={{ width: 160, flexShrink: 0 }}
+        className="w-full md:!w-[160px] md:shrink-0"
       />
       {!VALUELESS_OPERATORS.includes(value.operator) && (
         <Input
           value={value.value ?? ''}
           onChange={(e) => onChange({ ...value, value: e.target.value })}
           placeholder={value.operator === 'regex' ? 'Regular expression' : 'Value'}
-          style={{ flex: 1, minWidth: 0 }}
+          className="flex-1 min-w-0"
         />
       )}
       <Popconfirm
@@ -99,7 +101,7 @@ export function ConditionRow({ index, value, onChange, onRemove, isOnlyCondition
           type="text"
           icon={<DeleteOutlined />}
           disabled={isOnlyCondition}
-          className="shrink-0"
+          className="shrink-0 self-end md:self-auto"
         />
       </Popconfirm>
     </div>

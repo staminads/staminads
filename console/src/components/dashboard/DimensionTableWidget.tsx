@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useCallback } from 'react'
 import { Tooltip, Empty, Spin, Drawer, Pagination } from 'antd'
-import { ChevronUp, ChevronDown, ArrowUp, ArrowDown, Info, Maximize2 } from 'lucide-react'
+import { ChevronUp, ChevronDown, ArrowUp, ArrowDown, Info, Maximize2, TrendingUp } from 'lucide-react'
 import { formatValue } from '../../lib/chart-utils'
 import { getHeatMapStyle } from '../../lib/explore-utils'
 import { useDimensionQuery } from '../../hooks/useDimensionQuery'
@@ -28,6 +28,7 @@ export function DimensionTableWidget({
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
+  const [showEvoDetails, setShowEvoDetails] = useState(false)
 
   const activeTab = tabs.find((t) => t.key === activeTabKey) ?? tabs[0]
   const isMapView = activeTab.type === 'country_map'
@@ -125,14 +126,27 @@ export function DimensionTableWidget({
         </h3>
         {/* Hide expand button for map views */}
         {!isMapView && (
-          <Tooltip title="Expand">
-            <button
-              onClick={() => setDrawerOpen(true)}
-              className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
-            >
-              <Maximize2 size={16} />
-            </button>
-          </Tooltip>
+          <div className="flex items-center gap-1">
+            {/* Growth toggle - mobile only, only when comparison is shown */}
+            {showComparison && (
+              <Tooltip title={showEvoDetails ? 'Hide percentages' : 'Show percentages'}>
+                <button
+                  onClick={() => setShowEvoDetails(!showEvoDetails)}
+                  className={`p-1.5 rounded hover:bg-gray-100 transition-colors cursor-pointer md:hidden ${showEvoDetails ? 'text-[var(--primary)]' : 'text-gray-400 hover:text-gray-600'}`}
+                >
+                  <TrendingUp size={16} />
+                </button>
+              </Tooltip>
+            )}
+            <Tooltip title="Expand">
+              <button
+                onClick={() => setDrawerOpen(true)}
+                className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+              >
+                <Maximize2 size={16} />
+              </button>
+            </Tooltip>
+          </div>
         )}
       </div>
 
@@ -165,42 +179,44 @@ export function DimensionTableWidget({
           }}
         />
       ) : (
-        <>
+        <div className="overflow-x-auto">
           {/* Table header with clickable sort */}
       <div className="flex items-center px-4 py-3 border-b border-gray-200">
-        <span className="flex-1 text-xs font-medium text-gray-600">
+        <span className="flex-1 min-w-[150px] md:min-w-0 text-xs font-medium text-gray-600 md:truncate whitespace-nowrap">
           {activeTab.dimensionLabel}
         </span>
-        <button
-          onClick={() => handleHeaderClick('sessions')}
-          className={`text-xs font-medium text-right cursor-pointer hover:text-gray-900 flex items-center justify-end gap-0.5 ${showComparison ? 'w-28' : 'w-16'} ${sortBy === 'sessions' ? 'text-gray-900' : 'text-gray-500'}`}
-        >
-          Sessions
-          {sortBy === 'sessions' ? (
-            sortDirection === 'desc' ? (
-              <ArrowDown size={12} className="text-[var(--primary)]" />
+        <div className="flex items-center sticky right-0 bg-white pl-2 md:static md:pl-0 md:bg-transparent">
+          <button
+            onClick={() => handleHeaderClick('sessions')}
+            className={`text-xs font-medium text-right cursor-pointer hover:text-gray-900 flex items-center justify-end gap-0.5 w-16 md:w-24 flex-shrink-0 ${sortBy === 'sessions' ? 'text-gray-900' : 'text-gray-500'}`}
+          >
+            Sessions
+            {sortBy === 'sessions' ? (
+              sortDirection === 'desc' ? (
+                <ArrowDown size={12} className="text-[var(--primary)]" />
+              ) : (
+                <ArrowUp size={12} className="text-[var(--primary)]" />
+              )
             ) : (
-              <ArrowUp size={12} className="text-[var(--primary)]" />
-            )
-          ) : (
-            <ArrowDown size={12} className="opacity-0" />
-          )}
-        </button>
-        <button
-          onClick={() => handleHeaderClick('median_duration')}
-          className={`text-xs font-medium pl-6 cursor-pointer hover:text-gray-900 flex items-center gap-0.5 ${showComparison ? 'w-34' : 'w-24'} ${sortBy === 'median_duration' ? 'text-gray-900' : 'text-gray-500'}`}
-        >
-          TimeScore
-          {sortBy === 'median_duration' ? (
-            sortDirection === 'desc' ? (
-              <ArrowDown size={12} className="text-[var(--primary)]" />
+              <ArrowDown size={12} className="opacity-0" />
+            )}
+          </button>
+          <button
+            onClick={() => handleHeaderClick('median_duration')}
+            className={`text-xs font-medium pl-6 cursor-pointer hover:text-gray-900 flex items-center gap-0.5 w-28 md:w-36 flex-shrink-0 ${sortBy === 'median_duration' ? 'text-gray-900' : 'text-gray-500'}`}
+          >
+            TimeScore
+            {sortBy === 'median_duration' ? (
+              sortDirection === 'desc' ? (
+                <ArrowDown size={12} className="text-[var(--primary)]" />
+              ) : (
+                <ArrowUp size={12} className="text-[var(--primary)]" />
+              )
             ) : (
-              <ArrowUp size={12} className="text-[var(--primary)]" />
-            )
-          ) : (
-            <ArrowDown size={12} className="opacity-0" />
-          )}
-        </button>
+              <ArrowDown size={12} className="opacity-0" />
+            )}
+          </button>
+        </div>
       </div>
 
       {loading && data.length === 0 ? (
@@ -224,6 +240,7 @@ export function DimensionTableWidget({
               maxMedianDuration={maxMedianDuration}
               timescoreReference={timescoreReference}
               showComparison={showComparison}
+              showEvoDetails={showEvoDetails}
               iconPrefix={iconPrefix?.(row.dimension_value, activeTabKey)}
               onClick={onRowClick ? () => onRowClick(row, activeTabKey) : undefined}
               getChange={getChange}
@@ -231,7 +248,7 @@ export function DimensionTableWidget({
           ))}
         </div>
       )}
-        </>
+        </div>
       )}
 
       {/* Expanded Drawer (only for table views) */}
@@ -271,12 +288,12 @@ export function DimensionTableWidget({
 
         {/* Table header with clickable sort */}
         <div className="flex items-center px-4 py-3 border-b border-gray-200">
-          <span className="flex-1 text-xs font-medium text-gray-600">
+          <span className="flex-1 min-w-0 text-xs font-medium text-gray-600 truncate">
             {activeTab.dimensionLabel}
           </span>
           <button
             onClick={() => handleHeaderClick('sessions')}
-            className={`text-xs font-medium text-right cursor-pointer hover:text-gray-900 flex items-center justify-end gap-0.5 ${showComparison ? 'w-28' : 'w-16'} ${sortBy === 'sessions' ? 'text-gray-900' : 'text-gray-500'}`}
+            className={`text-xs font-medium text-right cursor-pointer hover:text-gray-900 flex items-center justify-end gap-0.5 w-16 md:w-24 flex-shrink-0 ${sortBy === 'sessions' ? 'text-gray-900' : 'text-gray-500'}`}
           >
             Sessions
             {sortBy === 'sessions' ? (
@@ -291,7 +308,7 @@ export function DimensionTableWidget({
           </button>
           <button
             onClick={() => handleHeaderClick('median_duration')}
-            className={`text-xs font-medium pl-6 cursor-pointer hover:text-gray-900 flex items-center gap-0.5 ${showComparison ? 'w-34' : 'w-24'} ${sortBy === 'median_duration' ? 'text-gray-900' : 'text-gray-500'}`}
+            className={`text-xs font-medium pl-6 cursor-pointer hover:text-gray-900 flex items-center gap-0.5 w-28 md:w-36 flex-shrink-0 ${sortBy === 'median_duration' ? 'text-gray-900' : 'text-gray-500'}`}
           >
             TimeScore
             {sortBy === 'median_duration' ? (
@@ -329,6 +346,7 @@ export function DimensionTableWidget({
                   maxMedianDuration={expandedMaxMedianDuration}
                   timescoreReference={timescoreReference}
                   showComparison={showComparison}
+                  showEvoDetails={true}
                   iconPrefix={iconPrefix?.(row.dimension_value, activeTabKey)}
                   onClick={onRowClick ? () => onRowClick(row, activeTabKey) : undefined}
                   getChange={getChange}
@@ -362,6 +380,7 @@ interface DimensionRowProps {
   maxMedianDuration: number
   timescoreReference: number
   showComparison: boolean
+  showEvoDetails: boolean
   iconPrefix?: React.ReactNode
   onClick?: () => void
   getChange: (current: number, previous?: number) => number | null
@@ -374,6 +393,7 @@ function DimensionRow({
   maxMedianDuration,
   timescoreReference,
   showComparison,
+  showEvoDetails,
   iconPrefix,
   onClick,
   getChange,
@@ -389,7 +409,7 @@ function DimensionRow({
       className={`group/row relative flex items-center h-9 px-4 border-b border-transparent hover:border-[var(--primary)] ${onClick ? 'cursor-pointer' : ''}`}
     >
       {/* Dimension value */}
-      <div className="relative flex-1 min-w-0 pr-4 h-full flex items-center pl-1.5 gap-2">
+      <div className="relative flex-1 min-w-0 pr-4 h-full flex items-center pl-1.5 gap-2 overflow-hidden">
         {/* Background bar */}
         <div
           className="absolute left-0 top-1 bottom-1 bg-[var(--primary)] opacity-[0.06] pointer-events-none rounded"
@@ -404,55 +424,77 @@ function DimensionRow({
       </div>
 
       {/* Sessions value */}
-      <div className="w-16 text-right">
-        <span className="text-xs text-gray-800">
-          {formatValue(row.sessions, 'number')}
-        </span>
-      </div>
-      {showComparison && (
-        <span
-          className={`text-[10px] w-12 text-right ${sessionsChange !== null ? (sessionsChange >= 0 ? 'text-green-600' : 'text-orange-500') : 'text-transparent'}`}
-        >
-          {sessionsChange !== null ? (
-            <>
-              {sessionsChange >= 0 ? (
-                <ChevronUp size={10} className="inline" />
-              ) : (
-                <ChevronDown size={10} className="inline" />
-              )}
-              {Math.abs(sessionsChange).toFixed(0)}%
-            </>
+      <div className="text-right w-16 md:w-24 flex-shrink-0">
+        {/* Mobile: toggle between value+caret and evo% */}
+        <span className="md:hidden">
+          {showEvoDetails && showComparison ? (
+            <span
+              className={`text-xs ${sessionsChange !== null ? (sessionsChange >= 0 ? 'text-green-600' : 'text-orange-500') : 'text-gray-400'}`}
+            >
+              {sessionsChange !== null ? (
+                <>
+                  {sessionsChange >= 0 ? <ChevronUp size={14} className="inline" /> : <ChevronDown size={14} className="inline" />}
+                  {Math.abs(sessionsChange).toFixed(0)}%
+                </>
+              ) : '—'}
+            </span>
           ) : (
-            '—'
+            <span className="text-xs text-gray-800 inline-flex items-center justify-end gap-0.5">
+              {formatValue(row.sessions, 'number')}
+              {showComparison && sessionsChange !== null && (
+                sessionsChange >= 0 ? <ChevronUp size={14} className="text-green-600" /> : <ChevronDown size={14} className="text-orange-500" />
+              )}
+            </span>
           )}
         </span>
-      )}
+        {/* Desktop: always show value + full evo% */}
+        <span className="hidden md:inline-flex items-center justify-end gap-1 text-xs text-gray-800">
+          {formatValue(row.sessions, 'number')}
+          {showComparison && sessionsChange !== null && (
+            <span className={sessionsChange >= 0 ? 'text-green-600' : 'text-orange-500'}>
+              {sessionsChange >= 0 ? <ChevronUp size={14} className="inline" /> : <ChevronDown size={14} className="inline" />}
+              {Math.abs(sessionsChange).toFixed(0)}%
+            </span>
+          )}
+        </span>
+      </div>
 
       {/* TimeScore value */}
-      <div className="w-24 flex items-center gap-2 pl-6">
+      <div className="w-28 md:w-36 flex-shrink-0 flex items-center gap-2 pl-6">
         <span style={getHeatMapStyle(row.median_duration, maxMedianDuration, timescoreReference)} />
-        <span className="text-xs text-gray-800">
-          {formatValue(row.median_duration, 'duration')}
-        </span>
-      </div>
-      {showComparison && (
-        <span
-          className={`text-[10px] w-10 text-right ${durationChange !== null ? (durationChange >= 0 ? 'text-green-600' : 'text-orange-500') : 'text-transparent'}`}
-        >
-          {durationChange !== null ? (
-            <>
-              {durationChange >= 0 ? (
-                <ChevronUp size={10} className="inline" />
-              ) : (
-                <ChevronDown size={10} className="inline" />
-              )}
-              {Math.abs(durationChange).toFixed(0)}%
-            </>
+        {/* Mobile: toggle between value+caret and evo% */}
+        <span className="md:hidden">
+          {showEvoDetails && showComparison ? (
+            <span
+              className={`text-xs ${durationChange !== null ? (durationChange >= 0 ? 'text-green-600' : 'text-orange-500') : 'text-gray-400'}`}
+            >
+              {durationChange !== null ? (
+                <>
+                  {durationChange >= 0 ? <ChevronUp size={14} className="inline" /> : <ChevronDown size={14} className="inline" />}
+                  {Math.abs(durationChange).toFixed(0)}%
+                </>
+              ) : '—'}
+            </span>
           ) : (
-            '—'
+            <span className="text-xs text-gray-800 inline-flex items-center gap-0.5">
+              {formatValue(row.median_duration, 'duration')}
+              {showComparison && durationChange !== null && (
+                durationChange >= 0 ? <ChevronUp size={14} className="text-green-600" /> : <ChevronDown size={14} className="text-orange-500" />
+              )}
+            </span>
           )}
         </span>
-      )}
+        {/* Desktop: always show value + full evo% */}
+        <span className="hidden md:inline-flex items-center gap-1 text-xs text-gray-800">
+          {formatValue(row.median_duration, 'duration')}
+          {showComparison && durationChange !== null && (
+            <span className={durationChange >= 0 ? 'text-green-600' : 'text-orange-500'}>
+              {durationChange >= 0 ? <ChevronUp size={14} className="inline" /> : <ChevronDown size={14} className="inline" />}
+              {Math.abs(durationChange).toFixed(0)}%
+            </span>
+          )}
+        </span>
+      </div>
     </div>
   )
 }

@@ -439,12 +439,10 @@ window.StaminadsConfig = {
 
   const sdkContent = (
     <div className="max-w-xl">
-      <p className="text-gray-500 mb-6">
-        Add this code snippet to your website's{' '}
-        <code className="bg-gray-100 px-1 rounded">&lt;head&gt;</code> or{' '}
-        <code className="bg-gray-100 px-1 rounded">&lt;body&gt;</code> tag.
-      </p>
       <CodeSnippet code={sdkSnippet} />
+      <p className="text-gray-500 mt-4">
+        Add this code snippet to your website's <code>&lt;head&gt;</code> or <code>&lt;body&gt;</code> tag.
+      </p>
       {sessionCount === 0 && (
         <div className="mt-6 flex items-center gap-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
           <Spin indicator={<LoadingOutlined style={{ fontSize: 20 }} spin />} />
@@ -461,11 +459,11 @@ window.StaminadsConfig = {
 
   return (
     <div className="flex-1 p-6">
-      <h1 className="text-2xl font-light text-gray-800 mb-6">Settings</h1>
+      <h1 className="hidden md:block text-2xl font-light text-gray-800 mb-6">Settings</h1>
 
       <div className="flex gap-6">
-        {/* Sidebar Menu */}
-        <div className="w-56 flex-shrink-0">
+        {/* Sidebar Menu - hidden on mobile, accessible via hamburger menu */}
+        <div className="hidden md:block w-56 flex-shrink-0">
           <nav className="space-y-1">
             {menuItems.map((item) => {
               const isActive = section === item.key

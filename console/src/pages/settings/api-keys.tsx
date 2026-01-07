@@ -16,8 +16,9 @@ import {
   App,
   Space,
   Tooltip,
+  Empty,
 } from 'antd'
-import { PlusOutlined, CopyOutlined, DeleteOutlined } from '@ant-design/icons'
+import { PlusOutlined, CopyOutlined, DeleteOutlined, LoadingOutlined } from '@ant-design/icons'
 import { api } from '../../lib/api'
 import type { PublicApiKey, ApiScope, CreateApiKeyInput, ApiKeyRole } from '../../types/api-keys'
 import { API_KEY_ROLES } from '../../types/api-keys'
@@ -236,29 +237,87 @@ export function ApiKeysPage({ workspaceId }: ApiKeysPageProps) {
 
   return (
     <div className="max-w-xl">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <p className="text-gray-500">
-            Manage API keys for programmatic access to this workspace
-          </p>
-        </div>
+      <div className="flex justify-end mb-4">
         <Button
           type="primary"
           icon={<PlusOutlined />}
           onClick={() => setIsCreateModalOpen(true)}
         >
-          Create API Key
+          <span className="hidden md:inline">Create API Key</span>
+          <span className="md:hidden">Create</span>
         </Button>
       </div>
 
-      <Table
-        dataSource={apiKeys}
-        columns={columns}
-        rowKey="id"
-        loading={isLoading}
-        pagination={false}
-        size="small"
-      />
+      {/* Mobile: Card view */}
+      <div className="md:hidden space-y-3">
+        {isLoading ? (
+          <div className="bg-white rounded-lg p-6 text-center text-gray-500">
+            <LoadingOutlined className="mr-2" />Loading...
+          </div>
+        ) : apiKeys.length === 0 ? (
+          <div className="bg-white rounded-lg p-6">
+            <Empty description="No API keys" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          </div>
+        ) : (
+          apiKeys.map((apiKey) => {
+            const { status, text } = getStatusInfo(apiKey)
+            const role = getRoleFromScopes(apiKey.scopes)
+            const isDisabled = apiKey.status === 'revoked'
+
+            return (
+              <div key={apiKey.id} className={`bg-white rounded-lg border border-gray-200 p-4 ${isDisabled ? 'opacity-60' : ''}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Tooltip title={text}>
+                      <Badge status={status} />
+                    </Tooltip>
+                    <span className="font-medium truncate">{apiKey.name}</span>
+                  </div>
+                  <div className="shrink-0">
+                    {role ? (
+                      <Tag color={roleColors[role]}>{API_KEY_ROLES[role].label}</Tag>
+                    ) : (
+                      <Tag color="default">Custom</Tag>
+                    )}
+                  </div>
+                </div>
+                <div className="text-gray-400 text-xs mt-2 space-y-1">
+                  <div>Created {formatDate(apiKey.created_at)}</div>
+                  <div>Last used {formatDateTime(apiKey.last_used_at)}</div>
+                </div>
+                {!isDisabled && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <Popconfirm
+                      title="Revoke API Key"
+                      description="Are you sure you want to revoke this API key? This action cannot be undone."
+                      onConfirm={() => handleRevokeKey(apiKey.id)}
+                      okText="Revoke"
+                      cancelText="Cancel"
+                      okButtonProps={{ danger: true }}
+                    >
+                      <Button block size="small" icon={<DeleteOutlined />}>
+                        Revoke
+                      </Button>
+                    </Popconfirm>
+                  </div>
+                )}
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      {/* Desktop: Table view */}
+      <div className="hidden md:block">
+        <Table
+          dataSource={apiKeys}
+          columns={columns}
+          rowKey="id"
+          loading={isLoading}
+          pagination={false}
+          size="small"
+        />
+      </div>
 
       {/* Create API Key Modal */}
       <Modal
@@ -372,6 +431,7 @@ export function ApiKeysPage({ workspaceId }: ApiKeysPageProps) {
                 className="font-mono"
               />
               <Button
+                type="primary"
                 icon={<CopyOutlined />}
                 onClick={() => {
                   navigator.clipboard.writeText(newKeyResponse?.key || '')

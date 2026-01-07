@@ -184,6 +184,7 @@ export function TestFilterModal({
       onCancel={handleClose}
       footer={null}
       width={900}
+      className="max-md:!top-0 max-md:!pb-0 max-md:!m-0 max-md:!max-w-full"
     >
       <div className="mt-8">
         {/* Form view */}

@@ -88,139 +88,149 @@ export function ExploreSummary({
 
   const valueStyle = { fontSize: 20 }
 
+  const showBestTimeScore = bestTimeScore !== undefined && bestTimeScore > 0
+
+  // Build KPI items for rendering
+  const kpiItems = [
+    <Statistic
+      key="sessions"
+      title="Sessions"
+      value={formatNumber(totals.sessions)}
+      valueStyle={valueStyle}
+      suffix={
+        <ChangeIndicator
+          value={totals.sessions_change}
+          showComparison={showComparison}
+        />
+      }
+    />,
+    <Statistic
+      key="timescore"
+      title="Median TimeScore"
+      value={formatDuration(totals.median_duration)}
+      valueStyle={valueStyle}
+      prefix={
+        <span
+          style={{
+            display: 'inline-block',
+            width: 10,
+            height: 10,
+            borderRadius: '50%',
+            backgroundColor: timescoreHeatColor,
+            marginRight: 6,
+          }}
+        />
+      }
+      suffix={
+        <ChangeIndicator
+          value={totals.median_duration_change}
+          showComparison={showComparison}
+        />
+      }
+    />,
+    ...(showBestTimeScore ? [
+      <Popover
+        key="best-timescore"
+        content={
+          <div className="text-sm">
+            <div className="font-medium mb-2">Best performing combination:</div>
+            {maxDimensionValues && Object.keys(maxDimensionValues).length > 0 ? (
+              <div className="space-y-1">
+                {Object.entries(maxDimensionValues).map(([dim, value]) => (
+                  <div key={dim} className="flex gap-2">
+                    <span className="text-gray-500">{getDimensionLabel(dim, customDimensionLabels)}:</span>
+                    <span className="font-medium">
+                      {value === null || value === ''
+                        ? '(not set)'
+                        : dim === 'day_of_week' && typeof value === 'number'
+                          ? DaysOfWeek[value] ?? String(value)
+                          : String(value)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-gray-500">No dimension data available</div>
+            )}
+          </div>
+        }
+        title={null}
+        trigger="hover"
+      >
+        <div style={{ cursor: 'pointer' }}>
+          <Statistic
+            title="Best TimeScore"
+            value={formatDuration(bestTimeScore)}
+            valueStyle={valueStyle}
+            prefix={
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  backgroundColor: getHeatMapColor(
+                    bestTimeScore,
+                    maxMedianDuration ?? bestTimeScore,
+                    timescoreReference
+                  ),
+                  marginRight: 6,
+                }}
+              />
+            }
+          />
+        </div>
+      </Popover>
+    ] : []),
+    <Statistic
+      key="bounce"
+      title="Bounce Rate"
+      value={totals.bounce_rate.toFixed(1)}
+      valueStyle={valueStyle}
+      suffix={
+        <>
+          %
+          <ChangeIndicator
+            value={totals.bounce_rate_change}
+            invertColors
+            showComparison={showComparison}
+          />
+        </>
+      }
+    />,
+    <Statistic
+      key="scroll"
+      title={<span className="md:pr-[70px]">Median Scroll Depth</span>}
+      value={totals.median_scroll.toFixed(1)}
+      valueStyle={valueStyle}
+      suffix={
+        <>
+          %
+          <ChangeIndicator
+            value={totals.median_scroll_change}
+            showComparison={showComparison}
+          />
+        </>
+      }
+    />,
+  ]
+
   return (
     <div className="bg-white rounded-md px-6 py-4 mb-6">
-      <div className="flex justify-between items-center">
-        <Statistic
-          title="Sessions"
-          value={formatNumber(totals.sessions)}
-          valueStyle={valueStyle}
-          suffix={
-            <ChangeIndicator
-              value={totals.sessions_change}
-              showComparison={showComparison}
-            />
-          }
-        />
-
-        <Divider type="vertical" style={{ height: 40 }} />
-
-        <Statistic
-          title="Median TimeScore"
-          value={formatDuration(totals.median_duration)}
-          valueStyle={valueStyle}
-          prefix={
-            <span
-              style={{
-                display: 'inline-block',
-                width: 10,
-                height: 10,
-                borderRadius: '50%',
-                backgroundColor: timescoreHeatColor,
-                marginRight: 6,
-              }}
-            />
-          }
-          suffix={
-            <ChangeIndicator
-              value={totals.median_duration_change}
-              showComparison={showComparison}
-            />
-          }
-        />
-
-        {bestTimeScore !== undefined && bestTimeScore > 0 && (
-          <Divider type="vertical" style={{ height: 40 }} />
-        )}
-
-        {bestTimeScore !== undefined && bestTimeScore > 0 && (
-          <Popover
-            content={
-              <div className="text-sm">
-                <div className="font-medium mb-2">Best performing combination:</div>
-                {maxDimensionValues && Object.keys(maxDimensionValues).length > 0 ? (
-                  <div className="space-y-1">
-                    {Object.entries(maxDimensionValues).map(([dim, value]) => (
-                      <div key={dim} className="flex gap-2">
-                        <span className="text-gray-500">{getDimensionLabel(dim, customDimensionLabels)}:</span>
-                        <span className="font-medium">
-                          {value === null || value === ''
-                            ? '(not set)'
-                            : dim === 'day_of_week' && typeof value === 'number'
-                              ? DaysOfWeek[value] ?? String(value)
-                              : String(value)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-gray-500">No dimension data available</div>
-                )}
-              </div>
-            }
-            title={null}
-            trigger="hover"
-          >
-            <div style={{ cursor: 'pointer' }}>
-              <Statistic
-                title="Best TimeScore"
-                value={formatDuration(bestTimeScore)}
-                valueStyle={valueStyle}
-                prefix={
-                  <span
-                    style={{
-                      display: 'inline-block',
-                      width: 10,
-                      height: 10,
-                      borderRadius: '50%',
-                      backgroundColor: getHeatMapColor(
-                        bestTimeScore,
-                        maxMedianDuration ?? bestTimeScore,
-                        timescoreReference
-                      ),
-                      marginRight: 6,
-                    }}
-                  />
-                }
-              />
-            </div>
-          </Popover>
-        )}
-
-        <Divider type="vertical" style={{ height: 40 }} />
-
-        <Statistic
-          title="Bounce Rate"
-          value={totals.bounce_rate.toFixed(1)}
-          valueStyle={valueStyle}
-          suffix={
-            <>
-              %
-              <ChangeIndicator
-                value={totals.bounce_rate_change}
-                invertColors
-                showComparison={showComparison}
-              />
-            </>
-          }
-        />
-
-        <Divider type="vertical" style={{ height: 40 }} />
-
-        <Statistic
-          title={<span className="pr-[70px]">Median Scroll Depth</span>}
-          value={totals.median_scroll.toFixed(1)}
-          valueStyle={valueStyle}
-          suffix={
-            <>
-              %
-              <ChangeIndicator
-                value={totals.median_scroll_change}
-                showComparison={showComparison}
-              />
-            </>
-          }
-        />
+      {/* Mobile: 2-column grid */}
+      <div className="grid grid-cols-2 gap-4 md:hidden">
+        {kpiItems}
+      </div>
+      {/* Desktop: horizontal flex with dividers */}
+      <div className="hidden md:flex justify-between items-center">
+        {kpiItems.map((item, index) => (
+          <div key={index} className="contents">
+            {item}
+            {index < kpiItems.length - 1 && (
+              <Divider type="vertical" style={{ height: 40 }} />
+            )}
+          </div>
+        ))}
       </div>
     </div>
   )
