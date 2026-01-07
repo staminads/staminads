@@ -218,20 +218,18 @@ export function DimensionTableWidget({
                 return (
                   <div
                     key={row.dimension_value}
-                    className={`${getRowClasses(index)} px-4 pl-1.5 gap-2 relative`}
+                    className={`${getRowClasses(index)} px-4 gap-2 relative`}
                     {...rowInteractionProps(index, row)}
                   >
                     {/* Background bar */}
                     <div
-                      className="absolute inset-y-1 left-0 bg-[var(--primary)] opacity-[0.06] rounded pointer-events-none"
+                      className="absolute inset-y-1 left-1.5 bg-[var(--primary)] opacity-[0.06] rounded pointer-events-none"
                       style={{ width: `${percent}%`, minWidth: '0.5rem' }}
                     />
                     {iconPrefix?.(row.dimension_value, activeTabKey)}
-                    <Tooltip title={row.dimension_value || '(empty)'} placement="topLeft">
-                      <span className="relative whitespace-nowrap md:truncate text-xs text-gray-700 pr-2">
-                        {row.dimension_value || '(empty)'}
-                      </span>
-                    </Tooltip>
+                    <span className="relative whitespace-nowrap md:truncate text-xs text-gray-700 pr-2">
+                      {row.dimension_value || '(empty)'}
+                    </span>
                   </div>
                 )
               })}

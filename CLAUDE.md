@@ -129,6 +129,69 @@ Version is defined in `api/src/version.ts` and used by both API and console.
 - **Major (X.0.0)**: Database schema changes (requires migration)
 - **Minor (0.X.0)**: Features and fixes without schema changes
 
+## Release Process
+
+When releasing a new version:
+
+1. Update version in `api/src/version.ts`
+2. Update `CHANGELOG.md`
+3. Create release notes file in `releases/`
+
+### Minor Version Release
+
+- **CHANGELOG.md**: Add short entry (1-2 lines per change)
+- **Release notes**: Create `releases/v{X.Y.0}.md` with concise bullet points
+
+Example CHANGELOG entry:
+```
+## 2.1.0
+- Add dashboard mobile layout
+- Fix SDK snippet configuration
+```
+
+Example release notes (`releases/v2.1.0.md`):
+```markdown
+# v2.1.0
+
+- Mobile-responsive dashboard layout
+- Updated SDK integration snippet
+```
+
+### Major Version Release
+
+- **CHANGELOG.md**: Add detailed entry describing breaking changes and migration steps
+- **Release notes**: Create `releases/v{X.0.0}.md` with full feature descriptions
+
+Example CHANGELOG entry:
+```
+## 3.0.0
+### Breaking Changes
+- New session schema with additional metrics columns
+- Requires database migration (see releases/v3.0.0.md)
+
+### New Features
+- Real-time analytics dashboard
+- Custom event tracking
+```
+
+Example release notes (`releases/v3.0.0.md`):
+```markdown
+# v3.0.0
+
+## Breaking Changes
+Database schema updated. Run migration before upgrading.
+
+## New Features
+### Real-time Analytics
+Description of the feature and how to use it.
+
+### Custom Event Tracking
+Description of the feature and configuration options.
+
+## Migration Guide
+Step-by-step migration instructions.
+```
+
 ## Development Guidelines
 
 ### Running the API Server

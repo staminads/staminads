@@ -350,7 +350,7 @@ export function ExploreFilterBuilder({ value, onChange, customDimensionLabels }:
   )
 
   return (
-    <span className="flex items-center gap-2">
+    <span className="flex flex-wrap items-center gap-2">
       <Popover
         content={popoverContent}
         trigger="click"
