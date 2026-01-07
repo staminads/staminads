@@ -65,7 +65,10 @@ export class MembersController {
       },
     },
   })
-  async list(@Query('workspace_id') workspaceId: string, @Request() req: any) {
+  async list(
+    @Query('workspace_id') workspaceId: string,
+    @Request() req: { user: { id: string } },
+  ) {
     const dto: ListMembersDto = { workspace_id: workspaceId };
     return this.membersService.list(dto, req.user.id);
   }

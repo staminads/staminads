@@ -152,6 +152,7 @@ export class SmtpService {
       throw new BadRequestException('Workspace not found');
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { smtp, ...restSettings } = workspace.settings || {};
     await this.workspacesService.update({
       id: workspaceId,

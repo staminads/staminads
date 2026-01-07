@@ -29,6 +29,7 @@ export class CustomThrottlerGuard extends ThrottlerGuard {
    * Extract tracker key (client IP) for rate limiting.
    * Uses the shared IP utility for consistent behavior with @ClientIp decorator.
    */
+  // eslint-disable-next-line @typescript-eslint/require-await
   protected async getTracker(req: Request): Promise<string> {
     const ip = getClientIp(req);
     return ip || req.socket?.remoteAddress || 'unknown';
@@ -37,9 +38,11 @@ export class CustomThrottlerGuard extends ThrottlerGuard {
   /**
    * Custom error message for rate limit exceeded.
    */
+  /* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-unused-vars */
   protected async throwThrottlingException(
     _context: ExecutionContext,
   ): Promise<void> {
     throw new ThrottlerException('Too many requests. Please try again later.');
   }
+  /* eslint-enable @typescript-eslint/require-await, @typescript-eslint/no-unused-vars */
 }

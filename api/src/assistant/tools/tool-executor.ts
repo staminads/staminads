@@ -11,9 +11,12 @@ import { ToolName } from './tool-definitions';
 
 /**
  * Input types for each tool.
+ * Empty interfaces represent tools that take no input parameters.
  */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type, @typescript-eslint/no-unused-vars
 interface GetDimensionsInput {}
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type, @typescript-eslint/no-unused-vars
 interface GetMetricsInput {}
 
 interface GetDimensionValuesInput {

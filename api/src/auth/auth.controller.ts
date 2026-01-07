@@ -131,7 +131,9 @@ export class AuthController {
       },
     },
   })
-  async sessions(@Request() req: any): Promise<PublicSession[]> {
+  async sessions(
+    @Request() req: Request & { user: { id: string } },
+  ): Promise<PublicSession[]> {
     return this.authService.listSessions(req.user.id);
   }
 
@@ -151,7 +153,7 @@ export class AuthController {
     },
   })
   async revokeSession(
-    @Request() req: any,
+    @Request() req: Request & { user: { id: string } },
     @Query('sessionId') sessionId: string,
   ): Promise<{ success: boolean }> {
     await this.authService.revokeSession(sessionId, req.user.id);
@@ -172,7 +174,9 @@ export class AuthController {
       },
     },
   })
-  async revokeAllSessions(@Request() req: any): Promise<{ success: boolean }> {
+  async revokeAllSessions(
+    @Request() req: Request & { user: { id: string } },
+  ): Promise<{ success: boolean }> {
     await this.authService.revokeAllSessions(req.user.id);
     return { success: true };
   }

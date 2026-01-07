@@ -202,61 +202,74 @@ export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
     await this.clickhouse.insertSystem('backfill_tasks', [task]);
 
     // Spawn processor asynchronously
-    const timeoutHandle = setTimeout(async () => {
-      this.pendingTimeouts.delete(timeoutHandle);
-      const processor = new FilterBackfillProcessor(this.clickhouse, this);
-      this.runningProcessors.set(taskId, processor);
-      const startTime = Date.now();
-      let finalStatus: 'completed' | 'failed' | 'cancelled' = 'failed';
+    const timeoutHandle = setTimeout(
+      () =>
+        void (async () => {
+          this.pendingTimeouts.delete(timeoutHandle);
+          const processor = new FilterBackfillProcessor(this.clickhouse, this);
+          this.runningProcessors.set(taskId, processor);
+          const startTime = Date.now();
+          let finalStatus: 'completed' | 'failed' | 'cancelled' = 'failed';
 
-      try {
-        await processor.process(task);
-        if (!processor.isCancelled()) {
-          await this.updateTaskStatusWithRetry(task, 'completed');
-          this.eventEmitter.emit('backfill.completed', {
-            workspaceId: task.workspace_id,
-          });
-          finalStatus = 'completed';
-        } else {
-          await this.updateTaskStatusWithRetry(task, 'cancelled');
-          finalStatus = 'cancelled';
-        }
-      } catch (error) {
-        const errorMsg =
-          error instanceof Error ? error.message : 'Unknown error';
-        console.error(`Backfill task ${task.id} failed:`, errorMsg);
-        // Only strip control chars, keep useful chars like @, ., /
-        const sanitizedError =
-          errorMsg
-            .slice(0, 200)
-            .replace(/[\x00-\x1F\x7F]/g, '')
-            .trim() || 'Unknown error';
-        try {
-          await this.updateTaskStatusWithRetry(task, 'failed', sanitizedError);
-        } catch (statusError) {
-          // Last resort: log critical error. Stale recovery will handle on restart.
-          console.error('CRITICAL: Cannot update task status after retries', {
-            taskId: task.id,
-            workspaceId: task.workspace_id,
-            originalError: sanitizedError,
-            statusError:
-              statusError instanceof Error ? statusError.message : statusError,
-          });
-        }
-        finalStatus = 'failed';
-      } finally {
-        // Metrics logging
-        console.log('Backfill task finished', {
-          taskId: task.id,
-          workspaceId: task.workspace_id,
-          status: finalStatus,
-          durationMs: Date.now() - startTime,
-          sessionsProcessed: task.processed_sessions,
-          eventsProcessed: task.processed_events,
-        });
-        this.runningProcessors.delete(taskId);
-      }
-    }, 0);
+          try {
+            await processor.process(task);
+            if (!processor.isCancelled()) {
+              await this.updateTaskStatusWithRetry(task, 'completed');
+              this.eventEmitter.emit('backfill.completed', {
+                workspaceId: task.workspace_id,
+              });
+              finalStatus = 'completed';
+            } else {
+              await this.updateTaskStatusWithRetry(task, 'cancelled');
+              finalStatus = 'cancelled';
+            }
+          } catch (error) {
+            const errorMsg =
+              error instanceof Error ? error.message : 'Unknown error';
+            console.error(`Backfill task ${task.id} failed:`, errorMsg);
+            // Only strip control chars, keep useful chars like @, ., /
+            const sanitizedError =
+              errorMsg
+                .slice(0, 200)
+                .replace(/[\x00-\x1F\x7F]/g, '')
+                .trim() || 'Unknown error';
+            try {
+              await this.updateTaskStatusWithRetry(
+                task,
+                'failed',
+                sanitizedError,
+              );
+            } catch (statusError) {
+              // Last resort: log critical error. Stale recovery will handle on restart.
+              console.error(
+                'CRITICAL: Cannot update task status after retries',
+                {
+                  taskId: task.id,
+                  workspaceId: task.workspace_id,
+                  originalError: sanitizedError,
+                  statusError:
+                    statusError instanceof Error
+                      ? statusError.message
+                      : statusError,
+                },
+              );
+            }
+            finalStatus = 'failed';
+          } finally {
+            // Metrics logging
+            console.log('Backfill task finished', {
+              taskId: task.id,
+              workspaceId: task.workspace_id,
+              status: finalStatus,
+              durationMs: Date.now() - startTime,
+              sessionsProcessed: task.processed_sessions,
+              eventsProcessed: task.processed_events,
+            });
+            this.runningProcessors.delete(taskId);
+          }
+        })(),
+      0,
+    );
     this.pendingTimeouts.add(timeoutHandle);
 
     return { task_id: taskId };

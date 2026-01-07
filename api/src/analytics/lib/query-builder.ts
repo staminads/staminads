@@ -48,12 +48,13 @@ export function buildAnalyticsQuery(
   metricContext?: MetricContext,
 ): BuiltQuery {
   // Validate and build metrics SQL
+  // Default context for metrics that require it (e.g., bounce_rate)
+  const defaultContext: MetricContext = { bounce_threshold: 10 };
+  const ctx = metricContext ?? defaultContext;
   const metricsSql = query.metrics.map((m) => {
     const metric = METRICS[m];
     if (!metric) throw new Error(`Unknown metric: ${m}`);
-    const sql = metricContext
-      ? getMetricSql(metric, metricContext)
-      : metric.sql;
+    const sql = getMetricSql(metric, ctx);
     return `${sql} as ${m}`;
   });
 
@@ -166,9 +167,10 @@ export function buildExtremesQuery(
 ): BuiltQuery {
   const metric = METRICS[query.metric];
   if (!metric) throw new Error(`Unknown metric: ${query.metric}`);
-  const metricSql = metricContext
-    ? getMetricSql(metric, metricContext)
-    : metric.sql;
+  // Default context for metrics that require it (e.g., bounce_rate)
+  const defaultContext: MetricContext = { bounce_threshold: 10 };
+  const ctx = metricContext ?? defaultContext;
+  const metricSql = getMetricSql(metric, ctx);
 
   // Validate and get dimension columns
   const groupByCols = query.groupBy.map((d) => {

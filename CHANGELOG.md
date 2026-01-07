@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.4.0] - 2026-01-07
+
+- Fix all ESLint errors and warnings in API
+
 ## [2.3.0] - 2026-01-07
 
 - Topbar logo now navigates to dashboard

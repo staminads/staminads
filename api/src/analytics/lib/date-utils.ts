@@ -225,7 +225,12 @@ export function fillGaps<T extends Record<string, unknown>>(
 
   for (const row of data) {
     const dateKey = dayjs(row[dateColumn] as string).format(dateFormat);
-    const dimValues = dimensions.map((d) => String(row[d] ?? ''));
+    const dimValues = dimensions.map((d) => {
+      const val = row[d];
+      if (val === null || val === undefined) return '';
+      if (typeof val === 'object') return JSON.stringify(val);
+      return String(val);
+    });
     const comboKey = dimValues.join('|');
     dimensionCombos.add(comboKey);
     dataMap.set(`${dateKey}|${comboKey}`, row);

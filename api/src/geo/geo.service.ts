@@ -172,7 +172,7 @@ export class GeoService implements OnModuleInit {
   private cacheResult(ip: string, geo: GeoLocation): void {
     // Evict oldest entries if cache is full
     if (this.cache.size >= this.CACHE_MAX_SIZE) {
-      const firstKey = this.cache.keys().next().value;
+      const firstKey = this.cache.keys().next().value as string | undefined;
       if (firstKey) {
         this.cache.delete(firstKey);
       }

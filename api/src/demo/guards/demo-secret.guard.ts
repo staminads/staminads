@@ -13,6 +13,7 @@ export class DemoSecretGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
+
     const secret = request.query.secret as string;
 
     const demoSecret = this.configService.get<string>('DEMO_SECRET');

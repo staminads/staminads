@@ -18,7 +18,6 @@ import { ExploreConfigOutput } from './dto/explore-config.dto';
 import {
   AssistantJob,
   createAssistantJob,
-  JOB_EXPIRATION_MS,
 } from './entities/assistant-job.entity';
 import {
   ASSISTANT_TOOLS,

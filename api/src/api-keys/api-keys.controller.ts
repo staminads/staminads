@@ -44,10 +44,10 @@ export class ApiKeysController {
   })
   async create(
     @Body() dto: CreateApiKeyDto,
-    @Req() req: any,
+    @Req() req: Request & { user?: { id: string } },
   ): Promise<CreateApiKeyResponseDto> {
     // Get user_id from authenticated user (JWT token) - fallback to dto for backwards compatibility
-    const user_id = req.user?.id || dto.user_id;
+    const user_id = req.user?.id ?? dto.user_id ?? '';
     return this.apiKeysService.create({ ...dto, user_id }, user_id);
   }
 

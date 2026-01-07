@@ -37,7 +37,7 @@ function parseApiKey(row: ApiKeyRow): ApiKey {
     workspace_id: row.workspace_id,
     name: row.name,
     description: row.description,
-    scopes: JSON.parse(row.scopes),
+    scopes: JSON.parse(row.scopes) as ApiScope[],
     status: row.status,
     expires_at: row.expires_at,
     last_used_at: row.last_used_at,
@@ -77,6 +77,7 @@ function serializeApiKey(
 }
 
 function toPublicApiKey(apiKey: ApiKey): PublicApiKey {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { key_hash, ...publicKey } = apiKey;
   return publicKey;
 }
@@ -187,7 +188,8 @@ export class ApiKeysService {
   }
 
   async revoke(dto: RevokeApiKeyDto): Promise<PublicApiKey> {
-    const apiKey = await this.get(dto.id);
+    // Verify the key exists first (will throw NotFoundException if not)
+    await this.get(dto.id);
 
     // Get the full API key from database to perform update
     const rows = await this.clickhouse.querySystem<ApiKeyRow>(

@@ -6,7 +6,7 @@ import { TrackEventDto } from './dto/track-event.dto';
 import { TrackingEvent } from './entities/event.entity';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { Workspace } from '../workspaces/entities/workspace.entity';
-import { GeoService, GeoLocation, EMPTY_GEO } from '../geo';
+import { GeoService, GeoLocation } from '../geo';
 import {
   extractFieldValues,
   applyFilterResults,
@@ -119,7 +119,7 @@ export class EventsService {
         expiresAt: now + CACHE_TTL_MS,
       });
       return workspace;
-    } catch (error) {
+    } catch {
       throw new BadRequestException(`Invalid workspace_id: ${workspaceId}`);
     }
   }

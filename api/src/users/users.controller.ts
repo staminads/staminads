@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Body, UseGuards, Req } from '@nestjs/common';
+import { Request } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -26,7 +27,9 @@ export class UsersController {
   @Get('auth.me')
   @ApiOperation({ summary: 'Get current user profile' })
   @ApiResponse({ status: 200, description: 'Current user profile' })
-  async me(@Req() req: any): Promise<PublicUser> {
+  async me(
+    @Req() req: Request & { user: { id: string } },
+  ): Promise<PublicUser> {
     const user = await this.usersService.findById(req.user.id);
     if (!user) {
       throw new Error('User not found');

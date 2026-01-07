@@ -20,7 +20,7 @@ import {
   verifyPassword,
   hashPassword,
 } from '../common/crypto';
-import { User, Session, PublicSession } from '../common/entities';
+import { Session, PublicSession } from '../common/entities';
 import { PasswordResetToken } from '../common/entities/password-reset.entity';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -311,6 +311,7 @@ export class AuthService {
     );
 
     // Remove token_hash from response
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     return result.map(({ token_hash, ...session }) => session as PublicSession);
   }
 
@@ -417,6 +418,7 @@ export class AuthService {
     userAgent?: string,
   ): Promise<{ id: string; tokenHash: string }> {
     const id = generateId();
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { token, hash } = generateToken();
     const now = new Date();
     const expiresAt = new Date(

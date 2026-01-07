@@ -6,7 +6,7 @@ export interface TrackingEvent {
   received_at: string; // Server timestamp
   created_at: string; // SDK session start
   updated_at: string; // SDK last interaction
-  name: EventName | string;
+  name: string;
   path: string;
   duration: number;
 

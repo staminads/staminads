@@ -13,14 +13,12 @@ import { AuthService } from '../auth/auth.service';
 import {
   WorkspaceMembership,
   MemberWithUser,
-  Role,
 } from '../common/entities/membership.entity';
 import {
   hasPermission,
   canModifyMember,
   ROLE_HIERARCHY,
 } from '../common/permissions';
-import { generateId } from '../common/crypto';
 import { ListMembersDto } from './dto/list-members.dto';
 import { GetMemberDto } from './dto/get-member.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';

@@ -55,7 +55,10 @@ export class InvitationsController {
     status: 201,
     description: 'Invitation created and email sent',
   })
-  async create(@Req() req: any, @Body() dto: CreateInvitationDto) {
+  async create(
+    @Req() req: Request & { user: { id: string } },
+    @Body() dto: CreateInvitationDto,
+  ) {
     return this.invitationsService.create(dto, req.user.id);
   }
 

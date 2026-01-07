@@ -12,10 +12,7 @@ import {
   WorkspaceSettings,
   DEFAULT_WORKSPACE_SETTINGS,
 } from './entities/workspace.entity';
-import {
-  Integration,
-  AnthropicIntegration,
-} from './entities/integration.entity';
+import { Integration } from './entities/integration.entity';
 import { encryptApiKey, generateId } from '../common/crypto';
 import { toClickHouseDateTime } from '../common/utils/datetime.util';
 

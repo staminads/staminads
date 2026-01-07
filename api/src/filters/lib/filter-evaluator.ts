@@ -249,7 +249,8 @@ export interface CustomDimensionValues {
 export function applyFilterResults(
   filters: FilterDefinition[],
   fieldValues: Record<string, string | null | undefined>,
-  baseEvent: Record<string, unknown>,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _baseEvent: Record<string, unknown>,
 ): {
   customDimensions: CustomDimensionValues;
   modifiedFields: Record<string, string | null>;

@@ -8,6 +8,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { Request } from 'express';
 import {
   ApiBody,
   ApiOperation,
@@ -22,6 +23,13 @@ import { WorkspaceAuthGuard } from '../common/guards/workspace.guard';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { DemoRestricted } from '../common/decorators/demo-restricted.decorator';
 
+interface CurrentUser {
+  id: string;
+  email: string;
+  name: string;
+  isSuperAdmin: boolean;
+}
+
 @ApiTags('workspaces')
 @ApiSecurity('jwt-auth')
 @Controller('api')
@@ -30,7 +38,7 @@ export class WorkspacesController {
 
   @Get('workspaces.list')
   @ApiOperation({ summary: 'List workspaces for current user' })
-  list(@Req() req: any) {
+  list(@Req() req: Request & { user: CurrentUser }) {
     return this.workspacesService.list(req.user);
   }
 

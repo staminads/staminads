@@ -78,7 +78,7 @@ export class DemoService {
     const endDate = new Date();
 
     // Create new workspace with fixed ID (needs endDate for annotations)
-    const workspace = await this.createWorkspace(DEMO_WORKSPACE_ID, endDate);
+    await this.createWorkspace(DEMO_WORKSPACE_ID, endDate);
 
     this.logger.log(`Created workspace: ${DEMO_WORKSPACE_ID}`);
     this.logger.log(

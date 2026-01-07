@@ -19,7 +19,9 @@ function parseAuditLog(row: AuditLogRow): AuditLog {
     action: row.action,
     target_type: row.target_type,
     target_id: row.target_id,
-    metadata: row.metadata ? JSON.parse(row.metadata) : {},
+    metadata: row.metadata
+      ? (JSON.parse(row.metadata) as Record<string, unknown>)
+      : {},
     ip_address: row.ip_address,
     user_agent: row.user_agent,
     created_at: row.created_at,

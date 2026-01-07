@@ -63,7 +63,8 @@ export class EventBufferService implements OnModuleDestroy {
     }
 
     // Add each group to its workspace buffer
-    for (const [workspaceId, workspaceEvents] of byWorkspace) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    for (const [_workspaceId, workspaceEvents] of byWorkspace) {
       for (const event of workspaceEvents) {
         await this.add(event);
       }

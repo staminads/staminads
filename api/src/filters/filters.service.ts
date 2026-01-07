@@ -18,10 +18,7 @@ import {
 import { CreateFilterDto } from './dto/create-filter.dto';
 import { UpdateFilterDto } from './dto/update-filter.dto';
 import { ReorderFiltersDto } from './dto/reorder-filters.dto';
-import {
-  computeFilterVersion,
-  evaluateConditions,
-} from './lib/filter-evaluator';
+import { computeFilterVersion } from './lib/filter-evaluator';
 import { toClickHouseDateTime } from '../common/utils/datetime.util';
 
 @Injectable()

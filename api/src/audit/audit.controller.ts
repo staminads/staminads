@@ -29,8 +29,8 @@ export class AuditController {
     const dto = new ListAuditDto();
     dto.workspace_id = workspace_id;
     dto.user_id = user_id;
-    dto.action = action as any;
-    dto.target_type = target_type as any;
+    dto.action = action as ListAuditDto['action'];
+    dto.target_type = target_type as ListAuditDto['target_type'];
     dto.limit = limit;
     dto.offset = offset;
 
