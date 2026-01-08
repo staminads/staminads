@@ -1,19 +1,17 @@
+/**
+ * Tests for V3 Sender
+ */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Sender } from './sender';
-import { Storage, STORAGE_KEYS } from '../storage/storage';
-import type { TrackEventPayload, QueuedPayload } from '../types';
+import { Storage } from '../storage/storage';
+import type { SessionPayload } from '../types/session-state';
 
-// Mock UUID generation
-vi.mock('../utils/uuid', () => ({
-  generateUUIDv4: vi.fn(() => 'mock-queue-id-' + Math.random().toString(36).slice(2, 10)),
-}));
-
-describe('Sender', () => {
+describe('Sender V3', () => {
   let sender: Sender;
-  let storage: Storage;
+  let mockStorage: Storage;
   let mockLocalStorage: ReturnType<typeof createMockStorage>;
-  let mockFetch: ReturnType<typeof vi.fn>;
-  let mockSendBeacon: ReturnType<typeof vi.fn>;
+  let fetchMock: ReturnType<typeof vi.fn>;
+  let sendBeaconMock: ReturnType<typeof vi.fn>;
 
   const createMockStorage = () => {
     const store: Record<string, string> = {};
@@ -34,15 +32,23 @@ describe('Sender', () => {
     };
   };
 
-  const createPayload = (overrides: Partial<TrackEventPayload> = {}): TrackEventPayload => ({
-    workspace_id: 'ws_123',
-    session_id: 'session_456',
-    name: 'ping',
-    path: '/page',
-    landing_page: 'https://example.com',
-    created_at: 1705320000000,  // 2024-01-15T12:00:00.000Z
-    updated_at: 1705320000000,
-    ...overrides,
+  const createPayload = (): SessionPayload => ({
+    workspace_id: 'ws-123',
+    session_id: 'session-123',
+    actions: [
+      {
+        type: 'pageview',
+        path: '/home',
+        page_number: 1,
+        duration: 5000,
+        scroll: 50,
+        entered_at: Date.now() - 5000,
+        exited_at: Date.now(),
+      },
+    ],
+    created_at: Date.now() - 60000,
+    updated_at: Date.now(),
+    sdk_version: '6.0.0',
   });
 
   beforeEach(() => {
@@ -52,14 +58,17 @@ describe('Sender', () => {
     mockLocalStorage = createMockStorage();
     vi.stubGlobal('localStorage', mockLocalStorage);
 
-    mockFetch = vi.fn().mockResolvedValue({ ok: true });
-    vi.stubGlobal('fetch', mockFetch);
+    fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ success: true, checkpoint: 0 }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
 
-    mockSendBeacon = vi.fn().mockReturnValue(true);
-    vi.stubGlobal('navigator', { sendBeacon: mockSendBeacon });
+    sendBeaconMock = vi.fn().mockReturnValue(true);
+    vi.stubGlobal('navigator', { sendBeacon: sendBeaconMock });
 
-    storage = new Storage();
-    sender = new Sender('https://api.example.com', storage);
+    mockStorage = new Storage();
+    sender = new Sender('https://api.example.com', mockStorage);
   });
 
   afterEach(() => {
@@ -68,424 +77,229 @@ describe('Sender', () => {
     vi.clearAllMocks();
   });
 
-  describe('payload handling', () => {
-    it('sends payload with sent_at timestamp via fetch fallback', async () => {
-      // Use fetch path to verify payload content (easier to inspect than Blob)
-      mockSendBeacon.mockReturnValue(false);
+  describe('sendSession', () => {
+    it('sends payload via fetch to correct endpoint', async () => {
+      const payload = createPayload();
+      await sender.sendSession(payload);
 
-      const sentAt = Date.now();
-      const payload = createPayload({ sent_at: sentAt });
-      await sender.send(payload);
-
-      expect(mockFetch).toHaveBeenCalled();
-      const fetchBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(fetchBody.sent_at).toBe(sentAt);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://api.example.com/api/track.session',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          keepalive: true,
+        })
+      );
     });
 
-    it('preserves sent_at when queuing failed payload', async () => {
-      mockSendBeacon.mockReturnValue(false);
-      mockFetch.mockRejectedValue(new Error('fail'));
+    it('returns success with checkpoint on successful response', async () => {
+      fetchMock.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ success: true, checkpoint: 5 }),
+      });
 
-      const sentAt = Date.now();
-      const payload = createPayload({ sent_at: sentAt });
-      await sender.send(payload);
+      const result = await sender.sendSession(createPayload());
 
-      const storedQueue = JSON.parse(mockLocalStorage._store['stm_pending']);
-      expect(storedQueue[0].payload.sent_at).toBe(sentAt);
+      expect(result.success).toBe(true);
+      expect(result.checkpoint).toBe(5);
+    });
+
+    it('returns error on HTTP failure', async () => {
+      fetchMock.mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      });
+
+      const result = await sender.sendSession(createPayload());
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('HTTP 500: Internal Server Error');
+    });
+
+    it('returns error on network failure', async () => {
+      fetchMock.mockRejectedValue(new Error('Network error'));
+
+      const result = await sender.sendSession(createPayload());
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Network error');
+    });
+
+    it('returns error on unknown error', async () => {
+      fetchMock.mockRejectedValue('unknown');
+
+      const result = await sender.sendSession(createPayload());
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Unknown error');
     });
   });
 
-  describe('send methods', () => {
-    describe('beacon', () => {
-      it('send() tries beacon first', async () => {
-        const payload = createPayload();
-        await sender.send(payload);
+  describe('sendSessionBeacon', () => {
+    it('sends payload via sendBeacon', () => {
+      const payload = createPayload();
+      const result = sender.sendSessionBeacon(payload);
 
-        expect(mockSendBeacon).toHaveBeenCalledWith(
-          'https://api.example.com/api/track',
-          expect.any(Blob)
-        );
-      });
-
-      it('sendBeacon returns false when payload > 15KB', async () => {
-        // Create a payload larger than 15KB
-        const largeData = 'x'.repeat(16 * 1024);
-        const payload = createPayload({ properties: { data: largeData } });
-
-        await sender.send(payload);
-
-        // Beacon should NOT be called for large payloads
-        expect(mockSendBeacon).not.toHaveBeenCalled();
-        // Should fall back to fetch
-        expect(mockFetch).toHaveBeenCalled();
-      });
-
-      it('sendBeacon creates Blob with application/json type', async () => {
-        const payload = createPayload();
-        await sender.send(payload);
-
-        const blobArg = mockSendBeacon.mock.calls[0][1] as Blob;
-        expect(blobArg.type).toBe('application/json');
-      });
+      expect(result).toBe(true);
+      expect(sendBeaconMock).toHaveBeenCalledWith(
+        'https://api.example.com/api/track.session',
+        expect.any(Blob)
+      );
     });
 
-    describe('fetch', () => {
-      it('falls back to fetch when beacon unavailable', async () => {
-        vi.stubGlobal('navigator', { sendBeacon: undefined });
+    it('creates Blob with application/json type', () => {
+      const payload = createPayload();
+      sender.sendSessionBeacon(payload);
 
-        const payload = createPayload();
-        await sender.send(payload);
-
-        expect(mockFetch).toHaveBeenCalledWith(
-          'https://api.example.com/api/track',
-          expect.objectContaining({
-            method: 'POST',
-            keepalive: true,
-            headers: { 'Content-Type': 'application/json' },
-          })
-        );
-      });
-
-      it('sendFetch uses keepalive: true', async () => {
-        mockSendBeacon.mockReturnValue(false);
-
-        const payload = createPayload();
-        await sender.send(payload);
-
-        expect(mockFetch).toHaveBeenCalledWith(
-          expect.any(String),
-          expect.objectContaining({ keepalive: true })
-        );
-      });
-
-      it('falls back to fetch when beacon returns false', async () => {
-        mockSendBeacon.mockReturnValue(false);
-
-        const payload = createPayload();
-        await sender.send(payload);
-
-        expect(mockFetch).toHaveBeenCalled();
-      });
+      const blobArg = sendBeaconMock.mock.calls[0][1] as Blob;
+      expect(blobArg.type).toBe('application/json');
     });
 
-    describe('queuing on failure', () => {
-      it('queues when all methods fail', async () => {
-        mockSendBeacon.mockReturnValue(false);
-        mockFetch.mockRejectedValue(new Error('Fetch failed'));
+    it('falls back to fetch when sendBeacon fails', () => {
+      sendBeaconMock.mockReturnValue(false);
 
-        const payload = createPayload();
-        await sender.send(payload);
+      const payload = createPayload();
+      const result = sender.sendSessionBeacon(payload);
 
-        // Check queue was updated
-        expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
-          'stm_pending',
-          expect.any(String)
-        );
+      expect(result).toBe(true);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://api.example.com/api/track.session',
+        expect.objectContaining({
+          method: 'POST',
+          keepalive: true,
+        })
+      );
+    });
+
+    it('falls back to fetch when sendBeacon throws', () => {
+      sendBeaconMock.mockImplementation(() => {
+        throw new Error('Beacon error');
       });
+
+      const payload = createPayload();
+      const result = sender.sendSessionBeacon(payload);
+
+      expect(result).toBe(true);
+      expect(fetchMock).toHaveBeenCalled();
+    });
+
+    it('returns false when both sendBeacon and fetch fail', () => {
+      sendBeaconMock.mockReturnValue(false);
+      fetchMock.mockImplementation(() => {
+        throw new Error('Fetch error');
+      });
+
+      const payload = createPayload();
+      const result = sender.sendSessionBeacon(payload);
+
+      expect(result).toBe(false);
+    });
+
+    it('works when sendBeacon is not available', () => {
+      vi.stubGlobal('navigator', { sendBeacon: undefined });
+
+      const payload = createPayload();
+      const result = sender.sendSessionBeacon(payload);
+
+      expect(result).toBe(true);
+      expect(fetchMock).toHaveBeenCalled();
+    });
+
+    it('skips sendBeacon for payloads > 15KB and uses fetch directly', () => {
+      // Create a payload larger than 15KB
+      const largePayload = createPayload();
+      largePayload.attributes = {
+        landing_page: 'https://example.com',
+        user_agent: 'x'.repeat(16 * 1024), // 16KB string
+      };
+
+      const result = sender.sendSessionBeacon(largePayload);
+
+      // Should NOT call sendBeacon for large payloads
+      expect(sendBeaconMock).not.toHaveBeenCalled();
+      // Should use fetch directly
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://api.example.com/api/track.session',
+        expect.objectContaining({
+          method: 'POST',
+          keepalive: true,
+        })
+      );
+      expect(result).toBe(true);
     });
   });
 
-  describe('queue management', () => {
-    it('queuePayload creates item with id (UUIDv4)', async () => {
-      // Force beacon and fetch to fail
-      mockSendBeacon.mockReturnValue(false);
-      mockFetch.mockRejectedValue(new Error('fail'));
+  describe('debug mode', () => {
+    let consoleSpy: ReturnType<typeof vi.spyOn>;
+    let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
-      const payload = createPayload();
-      await sender.send(payload);
-
-      // Verify queue was updated with a UUID
-      const storedQueue = JSON.parse(mockLocalStorage._store['stm_pending']);
-      expect(storedQueue[0].id).toMatch(/^mock-queue-id-/);
+    beforeEach(() => {
+      consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      sender = new Sender('https://api.example.com', mockStorage, true);
     });
 
-    it('queuePayload sets created_at = Date.now()', async () => {
-      mockSendBeacon.mockReturnValue(false);
-      mockFetch.mockRejectedValue(new Error('fail'));
-
-      const payload = createPayload();
-      await sender.send(payload);
-
-      const storedQueue = JSON.parse(mockLocalStorage._store['stm_pending']);
-      expect(storedQueue[0].created_at).toBe(Date.now());
+    afterEach(() => {
+      consoleSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
     });
 
-    it('queuePayload sets attempts = 0, last_attempt = null', async () => {
-      mockSendBeacon.mockReturnValue(false);
-      mockFetch.mockRejectedValue(new Error('fail'));
+    it('logs sendSession payload in debug mode', async () => {
+      await sender.sendSession(createPayload());
 
-      const payload = createPayload();
-      await sender.send(payload);
-
-      const storedQueue = JSON.parse(mockLocalStorage._store['stm_pending']);
-      expect(storedQueue[0].attempts).toBe(0);
-      expect(storedQueue[0].last_attempt).toBeNull();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[Staminads] Sending session payload:',
+        expect.any(Object)
+      );
     });
 
-    it('queue limited to MAX_QUEUE_SIZE (50 items), removes oldest', async () => {
-      // Pre-fill queue with 50 items
-      const existingQueue: QueuedPayload[] = [];
-      for (let i = 0; i < 50; i++) {
-        existingQueue.push({
-          id: `item-${i}`,
-          payload: createPayload(),
-          created_at: Date.now() - (50 - i) * 1000,
-          attempts: 0,
-          last_attempt: null,
-        });
-      }
-      mockLocalStorage._store['stm_pending'] = JSON.stringify(existingQueue);
-
-      // Force failure to queue new item
-      mockSendBeacon.mockReturnValue(false);
-      mockFetch.mockRejectedValue(new Error('fail'));
-
-      storage = new Storage();
-      sender = new Sender('https://api.example.com', storage);
-
-      const payload = createPayload();
-      await sender.send(payload);
-
-      const storedQueue = JSON.parse(mockLocalStorage._store['stm_pending']);
-      expect(storedQueue.length).toBe(50);
-      // First item should have been removed (item-0)
-      expect(storedQueue[0].id).toBe('item-1');
-    });
-
-    it('getQueueLength() returns queue.length', () => {
-      const existingQueue: QueuedPayload[] = [
-        { id: '1', payload: createPayload(), created_at: Date.now(), attempts: 0, last_attempt: null },
-        { id: '2', payload: createPayload(), created_at: Date.now(), attempts: 0, last_attempt: null },
-      ];
-      mockLocalStorage._store['stm_pending'] = JSON.stringify(existingQueue);
-
-      storage = new Storage();
-      sender = new Sender('https://api.example.com', storage);
-
-      expect(sender.getQueueLength()).toBe(2);
-    });
-  });
-
-  describe('flushQueue', () => {
-    it('skips items older than 24 hours', async () => {
-      const oldItem: QueuedPayload = {
-        id: 'old-item',
-        payload: createPayload(),
-        created_at: Date.now() - 25 * 60 * 60 * 1000, // 25 hours ago
-        attempts: 0,
-        last_attempt: null,
-      };
-      mockLocalStorage._store['stm_pending'] = JSON.stringify([oldItem]);
-
-      storage = new Storage();
-      sender = new Sender('https://api.example.com', storage);
-
-      await sender.flushQueue();
-
-      // Old item should be removed without attempting to send
-      const storedQueue = JSON.parse(mockLocalStorage._store['stm_pending'] || '[]');
-      expect(storedQueue.length).toBe(0);
-      expect(mockFetch).not.toHaveBeenCalled();
-    });
-
-    it('skips items with attempts >= 5', async () => {
-      const maxAttemptItem: QueuedPayload = {
-        id: 'max-attempt-item',
-        payload: createPayload(),
-        created_at: Date.now() - 1000,
-        attempts: 5,
-        last_attempt: Date.now() - 60000,
-      };
-      mockLocalStorage._store['stm_pending'] = JSON.stringify([maxAttemptItem]);
-
-      storage = new Storage();
-      sender = new Sender('https://api.example.com', storage);
-
-      await sender.flushQueue();
-
-      const storedQueue = JSON.parse(mockLocalStorage._store['stm_pending'] || '[]');
-      expect(storedQueue.length).toBe(0);
-    });
-
-    describe('exponential backoff', () => {
-      const testBackoff = async (attempts: number, expectedBackoff: number) => {
-        const item: QueuedPayload = {
-          id: 'backoff-item',
-          payload: createPayload(),
-          created_at: Date.now() - 1000,
-          attempts,
-          last_attempt: Date.now() - (expectedBackoff - 100), // Just under backoff
-        };
-        mockLocalStorage._store['stm_pending'] = JSON.stringify([item]);
-
-        storage = new Storage();
-        sender = new Sender('https://api.example.com', storage);
-
-        mockSendBeacon.mockReturnValue(false); // Force fetch
-        mockFetch.mockResolvedValue({ ok: false }); // Force failure
-
-        await sender.flushQueue();
-
-        // Should skip due to backoff not elapsed
-        const storedQueue = JSON.parse(mockLocalStorage._store['stm_pending'] || '[]');
-        expect(storedQueue.length).toBe(1);
-        expect(storedQueue[0].attempts).toBe(attempts); // Not incremented
-      };
-
-      it('has no backoff for attempts=0 (immediate retry)', async () => {
-        // attempts=0 should retry immediately with no backoff
-        const item: QueuedPayload = {
-          id: 'immediate-retry-item',
-          payload: createPayload(),
-          created_at: Date.now() - 1000,
-          attempts: 0,
-          last_attempt: Date.now() - 100, // Very recent, but should still retry
-        };
-        mockLocalStorage._store['stm_pending'] = JSON.stringify([item]);
-
-        storage = new Storage();
-        sender = new Sender('https://api.example.com', storage);
-
-        mockSendBeacon.mockReturnValue(false);
-        mockFetch.mockResolvedValue({ ok: false }); // Force failure to increment attempts
-
-        await sender.flushQueue();
-
-        // Should have attempted (attempts incremented)
-        const storedQueue = JSON.parse(mockLocalStorage._store['stm_pending'] || '[]');
-        expect(storedQueue.length).toBe(1);
-        expect(storedQueue[0].attempts).toBe(1); // Incremented from 0 to 1
+    it('logs sendSession response in debug mode', async () => {
+      fetchMock.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ success: true, checkpoint: 3 }),
       });
 
-      it('respects 2s backoff for attempts=1', async () => {
-        await testBackoff(1, 2000);
-      });
+      await sender.sendSession(createPayload());
 
-      it('respects 4s backoff for attempts=2', async () => {
-        await testBackoff(2, 4000);
-      });
-
-      it('respects 8s backoff for attempts=3', async () => {
-        await testBackoff(3, 8000);
-      });
-
-      it('respects 16s backoff for attempts=4', async () => {
-        await testBackoff(4, 16000);
-      });
-
-      it('caps backoff at 30s for high attempt counts', async () => {
-        // At attempts=4, backoff = min(1000 * 2^4, 30000) = 16000ms
-        // At attempts=5, item would be skipped due to max attempts
-        // So we test with attempts=4 and last_attempt within the 16s backoff
-        const item: QueuedPayload = {
-          id: 'backoff-item',
-          payload: createPayload(),
-          created_at: Date.now() - 1000,
-          attempts: 4,
-          last_attempt: Date.now() - 10000, // 10s ago, but backoff is 16s
-        };
-        mockLocalStorage._store['stm_pending'] = JSON.stringify([item]);
-
-        storage = new Storage();
-        sender = new Sender('https://api.example.com', storage);
-
-        await sender.flushQueue();
-
-        // Should skip due to backoff not elapsed
-        const storedQueue = JSON.parse(mockLocalStorage._store['stm_pending'] || '[]');
-        expect(storedQueue.length).toBe(1);
-        // Attempts should not be incremented since we skipped
-        expect(storedQueue[0].attempts).toBe(4);
-      });
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[Staminads] Session response:',
+        { success: true, checkpoint: 3 }
+      );
     });
 
-    it('increments attempts on retry', async () => {
-      const item: QueuedPayload = {
-        id: 'retry-item',
-        payload: createPayload(),
-        created_at: Date.now() - 1000,
-        attempts: 1,
-        last_attempt: Date.now() - 5000, // Backoff elapsed
-      };
-      mockLocalStorage._store['stm_pending'] = JSON.stringify([item]);
+    it('logs errors in debug mode', async () => {
+      fetchMock.mockRejectedValue(new Error('Network error'));
 
-      mockSendBeacon.mockReturnValue(false);
-      mockFetch.mockResolvedValue({ ok: false }); // Fail
+      await sender.sendSession(createPayload());
 
-      storage = new Storage();
-      sender = new Sender('https://api.example.com', storage);
-
-      await sender.flushQueue();
-
-      const storedQueue = JSON.parse(mockLocalStorage._store['stm_pending']);
-      expect(storedQueue[0].attempts).toBe(2);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        '[Staminads] Send failed:',
+        expect.any(Error)
+      );
     });
 
-    it('updates last_attempt on retry', async () => {
-      const item: QueuedPayload = {
-        id: 'retry-item',
-        payload: createPayload(),
-        created_at: Date.now() - 1000,
-        attempts: 0,
-        last_attempt: null,
-      };
-      mockLocalStorage._store['stm_pending'] = JSON.stringify([item]);
+    it('logs beacon send in debug mode', () => {
+      sender.sendSessionBeacon(createPayload());
 
-      mockSendBeacon.mockReturnValue(false);
-      mockFetch.mockResolvedValue({ ok: false }); // Fail
-
-      storage = new Storage();
-      sender = new Sender('https://api.example.com', storage);
-
-      await sender.flushQueue();
-
-      const storedQueue = JSON.parse(mockLocalStorage._store['stm_pending']);
-      expect(storedQueue[0].last_attempt).toBe(Date.now());
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[Staminads] Sending session beacon:',
+        expect.any(Object)
+      );
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[Staminads] Session sent via beacon'
+      );
     });
 
-    it('removes item on successful send', async () => {
-      const item: QueuedPayload = {
-        id: 'success-item',
-        payload: createPayload(),
-        created_at: Date.now() - 1000,
-        attempts: 0,
-        last_attempt: null,
-      };
-      mockLocalStorage._store['stm_pending'] = JSON.stringify([item]);
+    it('logs fetch fallback in debug mode', () => {
+      sendBeaconMock.mockReturnValue(false);
 
-      mockSendBeacon.mockReturnValue(false);
-      mockFetch.mockResolvedValue({ ok: true }); // Success
+      sender.sendSessionBeacon(createPayload());
 
-      storage = new Storage();
-      sender = new Sender('https://api.example.com', storage);
-
-      await sender.flushQueue();
-
-      const storedQueue = JSON.parse(mockLocalStorage._store['stm_pending'] || '[]');
-      expect(storedQueue.length).toBe(0);
-    });
-
-    it('keeps item in remaining on failed send', async () => {
-      const item: QueuedPayload = {
-        id: 'fail-item',
-        payload: createPayload(),
-        created_at: Date.now() - 1000,
-        attempts: 0,
-        last_attempt: null,
-      };
-      mockLocalStorage._store['stm_pending'] = JSON.stringify([item]);
-
-      mockSendBeacon.mockReturnValue(false);
-      mockFetch.mockResolvedValue({ ok: false }); // Fail
-
-      storage = new Storage();
-      sender = new Sender('https://api.example.com', storage);
-
-      await sender.flushQueue();
-
-      const storedQueue = JSON.parse(mockLocalStorage._store['stm_pending']);
-      expect(storedQueue.length).toBe(1);
-      expect(storedQueue[0].id).toBe('fail-item');
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[Staminads] Session sent via fetch keepalive'
+      );
     });
   });
 });

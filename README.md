@@ -21,6 +21,7 @@ A source of traffic can be any dimensions or combination of dimensions such as:
 ## Roadmap
 
 - docs
+- whitelist domains
 - clean anonymizeIP in interface
 - remove trackEvent() from sdk?
 - quid fresh install schemas?

@@ -1,34 +1,33 @@
 /**
- * Staminads SDK v5.0
+ * Staminads SDK v6.0
  * Ultra-reliable web analytics for tracking TimeScore metrics
+ * V3 Session Payload Architecture
  */
 
 import type {
   StaminadsConfig,
   InternalConfig,
-  TrackEventPayload,
   GoalData,
   SessionDebugInfo,
   DeviceInfo,
-  EventName,
   HeartbeatTier,
   HeartbeatState,
 } from './types';
+import type { SessionAttributes } from './types/session-state';
 import { Storage, TabStorage } from './storage/storage';
 import { SessionManager } from './core/session';
-import { DurationTracker } from './core/duration';
+import { SessionState, SessionStateConfig } from './core/session-state';
 import { Sender } from './transport/sender';
 import { DeviceDetector } from './detection/device';
 import { ScrollTracker } from './events/scroll';
 import { NavigationTracker } from './events/navigation';
 import { isBot } from './detection/bot';
-import { parseReferrer, DEFAULT_AD_CLICK_IDS } from './utils/utm';
-
-const SDK_VERSION = '5.0.0';
+import { DEFAULT_AD_CLICK_IDS } from './utils/utm';
 
 // Heartbeat constants
 const MIN_HEARTBEAT_INTERVAL = 5000; // 5 seconds minimum
 const MIN_HEARTBEAT_MAX_DURATION = 60 * 1000; // 1 minute minimum
+const SEND_DEBOUNCE_MS = 100;
 
 // Default heartbeat tiers
 const DEFAULT_HEARTBEAT_TIERS: HeartbeatTier[] = [
@@ -60,13 +59,14 @@ export class StaminadsSDK {
   private storage: Storage | null = null;
   private tabStorage: TabStorage | null = null;
   private sessionManager: SessionManager | null = null;
-  private durationTracker: DurationTracker | null = null;
+  private sessionState: SessionState | null = null;
   private sender: Sender | null = null;
   private deviceDetector: DeviceDetector | null = null;
   private scrollTracker: ScrollTracker | null = null;
   private navigationTracker: NavigationTracker | null = null;
   private deviceInfo: DeviceInfo | null = null;
   private heartbeatTimeout: ReturnType<typeof setTimeout> | null = null;
+  private sendDebounceTimeout: ReturnType<typeof setTimeout> | null = null;
   private heartbeatState: HeartbeatState = {
     activeStartTime: 0,
     accumulatedActiveMs: 0,
@@ -83,7 +83,6 @@ export class StaminadsSDK {
   private isInitialized = false;
   private initPromise: Promise<void> | null = null;
   private flushed = false;
-  private previousPath: string = '';  // Track previous path for page duration calculation (v3)
 
   /**
    * Initialize the SDK (called by index.ts from global config or manual init)
@@ -153,17 +152,7 @@ export class StaminadsSDK {
       this.tabStorage,
       this.config
     );
-    this.sessionManager.getOrCreateSession();
-
-    // Initialize duration tracker
-    this.durationTracker = new DurationTracker(this.config.debug);
-    this.durationTracker.setTickCallback(() => this.onTick());
-
-    // Restore duration if session was resumed
-    const session = this.sessionManager.getSession();
-    if (session && session.focus_duration_ms > 0) {
-      this.durationTracker.setAccumulatedDuration(session.focus_duration_ms);
-    }
+    const session = this.sessionManager.getOrCreateSession();
 
     // Initialize sender
     this.sender = new Sender(this.config.endpoint, this.storage, this.config.debug);
@@ -171,7 +160,7 @@ export class StaminadsSDK {
     // Initialize scroll tracker
     if (this.config.trackScroll) {
       this.scrollTracker = new ScrollTracker();
-      this.scrollTracker.setMilestoneCallback((percent) => this.onScrollMilestone(percent));
+      // No milestone callback needed - we just track max scroll
       this.scrollTracker.start();
     }
 
@@ -182,34 +171,39 @@ export class StaminadsSDK {
       this.navigationTracker.start();
     }
 
+    // Initialize SessionState (V3)
+    const sessionStateConfig: SessionStateConfig = {
+      workspace_id: this.config.workspace_id,
+      session_id: session.id,
+      created_at: session.created_at,
+    };
+    this.sessionState = new SessionState(sessionStateConfig);
+    this.sessionState.restore(); // Restore from sessionStorage if available
+
+    // Add initial pageview
+    this.sessionState.addPageview(window.location.pathname);
+
     // Bind events
     this.bindEvents();
 
     // Start tracking
     this.isTracking = true;
     this.isInitialized = true;
-    this.durationTracker.startFocus();
 
     // Initialize heartbeat state
     const now = Date.now();
     this.heartbeatState.pageStartTime = now;
     this.heartbeatState.activeStartTime = now;
 
-    // Initialize previous path for page duration tracking (v3)
-    this.previousPath = window.location.pathname;
-
     // Start heartbeat
     this.startHeartbeat();
 
-    // Send initial screen_view
-    this.sendEvent('screen_view');
-
-    // Flush any pending queue
-    this.sender.flushQueue();
+    // Send initial payload (immediate, with attributes)
+    await this.sendPayload();
 
     if (this.config.debug) {
       console.log('[Staminads] Initialized', {
-        session_id: this.sessionManager.getSessionId(),
+        session_id: session.id,
         visitor_id: this.sessionManager.getVisitorId(),
         device: this.deviceInfo,
       });
@@ -237,9 +231,6 @@ export class StaminadsSDK {
 
     // Back-forward cache
     window.addEventListener('pageshow', this.onPageShow);
-
-    // Online/offline
-    window.addEventListener('online', this.onOnline);
   }
 
   /**
@@ -247,18 +238,14 @@ export class StaminadsSDK {
    */
   private onVisibilityChange = (): void => {
     if (document.visibilityState === 'hidden') {
-      this.durationTracker?.hideFocus();
       this.stopHeartbeat(true); // Accumulate active time
       this.flushOnce();
     } else if (document.visibilityState === 'visible') {
       this.flushed = false;
       if (!this.isPaused && !this.heartbeatState.maxDurationReached) {
-        this.durationTracker?.resumeFocus();
         // Resume heartbeat with fresh timing
         this.resumeHeartbeat();
       }
-      // Flush any pending queue when page becomes visible again
-      this.sender?.flushQueue();
     }
   };
 
@@ -268,17 +255,14 @@ export class StaminadsSDK {
   private onFocus = (): void => {
     this.flushed = false;
     if (!this.isPaused && !this.heartbeatState.maxDurationReached) {
-      this.durationTracker?.resumeFocus();
       this.resumeHeartbeat();
     }
-    this.sender?.flushQueue();
   };
 
   /**
    * Window blur handler
    */
   private onBlur = (): void => {
-    this.durationTracker?.pauseFocus();
     this.stopHeartbeat(true); // Accumulate active time
     this.flushOnce();
   };
@@ -287,7 +271,6 @@ export class StaminadsSDK {
    * Page freeze handler (mobile)
    */
   private onFreeze = (): void => {
-    this.durationTracker?.hideFocus();
     this.stopHeartbeat(true); // Accumulate active time
     this.flushOnce();
   };
@@ -298,7 +281,6 @@ export class StaminadsSDK {
   private onResume = (): void => {
     this.flushed = false;
     if (!this.isPaused && !this.heartbeatState.maxDurationReached) {
-      this.durationTracker?.resumeFocus();
       this.resumeHeartbeat();
     }
   };
@@ -318,20 +300,14 @@ export class StaminadsSDK {
       // Page was restored from bfcache
       this.flushed = false;
       if (!this.isPaused && !this.heartbeatState.maxDurationReached) {
-        this.durationTracker?.resumeFocus();
         this.resumeHeartbeat();
       }
+      // Restore SessionState if needed
+      this.sessionState?.restore();
       if (this.config?.debug) {
         console.log('[Staminads] Restored from bfcache');
       }
     }
-  };
-
-  /**
-   * Online handler
-   */
-  private onOnline = (): void => {
-    this.sender?.flushQueue();
   };
 
   /**
@@ -340,42 +316,49 @@ export class StaminadsSDK {
   private flushOnce(): void {
     if (this.flushed) return;
     this.flushed = true;
-    this.updateSession();
 
-    // Include final page duration in unload ping (v3)
-    const pageActiveMs = this.getPageActiveMs();
-    this.sendEvent('ping', {
-      page_duration: String(Math.round(pageActiveMs / 1000)),
-    });
-  }
+    if (!this.sessionState || !this.sender) return;
 
-  /**
-   * Tick callback (every second while focused)
-   */
-  private onTick(): void {
-    this.updateSession();
+    // Update scroll before finalizing
+    if (this.scrollTracker) {
+      this.sessionState.updateScroll(this.scrollTracker.getMaxScrollPercent());
+    }
+
+    // Finalize current page
+    this.sessionState.finalizeForUnload();
+
+    // Build and send via beacon
+    const attributes = this.buildAttributes();
+    const payload = this.sessionState.buildPayload(attributes);
+    this.sender.sendSessionBeacon(payload);
+
+    // Persist final state
+    this.sessionState.persist();
   }
 
   /**
    * Navigation callback
    */
   private onNavigation(url: string): void {
+    if (!this.sessionState) return;
+
     if (this.config?.debug) {
       console.log('[Staminads] Navigation:', url);
     }
 
-    // Capture previous page data BEFORE reset (v3)
-    const previousPageDuration = Math.round(this.getPageActiveMs() / 1000);
-    const previousPath = this.previousPath;
+    // Update scroll before finalizing page
+    if (this.scrollTracker) {
+      this.sessionState.updateScroll(this.scrollTracker.getMaxScrollPercent());
+    }
+
+    // Add new pageview (this finalizes the previous page)
+    this.sessionState.addPageview(window.location.pathname);
 
     // Reset scroll tracking for new page
     this.scrollTracker?.reset();
 
-    // Reset page timer AFTER capturing duration
+    // Reset page timer
     this.resetPageActiveTime();
-
-    // Update previous path to current (for next navigation)
-    this.previousPath = window.location.pathname;
 
     // Optionally reset session heartbeat timer
     if (this.config?.resetHeartbeatOnNavigation) {
@@ -383,35 +366,11 @@ export class StaminadsSDK {
       this.startHeartbeat();
     }
 
-    // Send screen_view with previous page path and duration (v3)
-    // previous_path identifies which page the duration belongs to
-    this.sendEvent('screen_view', {
-      page_duration: String(previousPageDuration),
-      previous_path: previousPath,
-    });
-  }
+    // Debounced send (navigation can be rapid in SPAs)
+    this.scheduleDebouncedSend();
 
-  /**
-   * Scroll milestone callback
-   */
-  private onScrollMilestone(percent: number): void {
-    if (this.config?.debug) {
-      console.log('[Staminads] Scroll milestone:', percent);
-    }
-    this.sendEvent('scroll');
-  }
-
-  /**
-   * Update session state
-   */
-  private updateSession(): void {
-    if (!this.sessionManager || !this.durationTracker) return;
-
-    this.sessionManager.updateSession({
-      focus_duration_ms: this.durationTracker.getFocusDurationMs(),
-      total_duration_ms: Date.now() - (this.sessionManager.getSession()?.created_at || Date.now()),
-      max_scroll_percent: this.scrollTracker?.getMaxScrollPercent() || 0,
-    });
+    // Persist state
+    this.sessionState.persist();
   }
 
   /**
@@ -509,7 +468,7 @@ export class StaminadsSDK {
           this.heartbeatState.currentTierIndex = tierResult.index;
         }
 
-        // Send ping with tier metadata
+        // Send ping with SessionState payload
         this.sendPingEvent();
 
         // Update last ping time for next calculation
@@ -536,18 +495,18 @@ export class StaminadsSDK {
   }
 
   /**
-   * Send ping event with tier metadata.
+   * Send ping event with SessionState payload
    */
   private sendPingEvent(): void {
-    const tierResult = this.getCurrentTier();
-    const totalActiveMs = this.getTotalActiveMs();
-    const pageActiveMs = this.getPageActiveMs();
+    if (!this.sessionState) return;
 
-    this.sendEvent('ping', {
-      tier: String(tierResult?.index ?? 0),
-      active_time: String(Math.round(totalActiveMs / 1000)),
-      page_active_time: String(Math.round(pageActiveMs / 1000)),
-    });
+    // Update scroll from ScrollTracker
+    if (this.scrollTracker) {
+      this.sessionState.updateScroll(this.scrollTracker.getMaxScrollPercent());
+    }
+
+    // Send periodic payload (non-blocking)
+    this.sendPayload().catch(() => {});
   }
 
   /**
@@ -580,17 +539,6 @@ export class StaminadsSDK {
     let total = this.heartbeatState.accumulatedActiveMs;
     if (this.heartbeatState.isActive) {
       total += Date.now() - this.heartbeatState.activeStartTime;
-    }
-    return total;
-  }
-
-  /**
-   * Get page active time in milliseconds
-   */
-  private getPageActiveMs(): number {
-    let total = this.heartbeatState.pageActiveMs;
-    if (this.heartbeatState.isActive) {
-      total += Date.now() - this.heartbeatState.pageStartTime;
     }
     return total;
   }
@@ -717,87 +665,76 @@ export class StaminadsSDK {
   }
 
   /**
-   * Send event
+   * Schedule a debounced send (for rapid navigations)
    */
-  private sendEvent(name: EventName, properties?: Record<string, string>): void {
-    if (!this.isTracking || !this.sessionManager || !this.sender || !this.config) {
-      return;
+  private scheduleDebouncedSend(): void {
+    if (this.sendDebounceTimeout) {
+      clearTimeout(this.sendDebounceTimeout);
     }
 
-    const session = this.sessionManager.getSession();
-    if (!session) return;
+    this.sendDebounceTimeout = setTimeout(async () => {
+      this.sendDebounceTimeout = null;
+      await this.sendPayload();
+    }, SEND_DEBOUNCE_MS);
+  }
 
-    const referrerInfo = parseReferrer(session.referrer || '');
+  /**
+   * Send session payload to server
+   */
+  private async sendPayload(): Promise<void> {
+    if (!this.sessionState || !this.sender) return;
 
-    const payload: TrackEventPayload = {
-      // Required
-      workspace_id: session.workspace_id,
-      session_id: session.id,
-      name,
-      path: window.location.pathname,
-      landing_page: session.landing_page,
+    const attributes = this.buildAttributes();
+    const payload = this.sessionState.buildPayload(attributes);
 
-      // Traffic source
-      referrer: session.referrer || undefined,
-      referrer_domain: referrerInfo.domain || undefined,
-      referrer_path: referrerInfo.path || undefined,
+    const result = await this.sender.sendSession(payload);
 
-      // UTM
-      utm_source: session.utm?.source || undefined,
-      utm_medium: session.utm?.medium || undefined,
-      utm_campaign: session.utm?.campaign || undefined,
-      utm_term: session.utm?.term || undefined,
-      utm_content: session.utm?.content || undefined,
-      utm_id: session.utm?.id || undefined,
-      utm_id_from: session.utm?.id_from || undefined,
+    if (result.success) {
+      // Mark attributes as sent after first successful send
+      if (!this.sessionState.hasAttributesSent()) {
+        this.sessionState.markAttributesSent();
+      }
 
-      // Device
-      screen_width: this.deviceInfo?.screen_width,
-      screen_height: this.deviceInfo?.screen_height,
-      viewport_width: this.deviceInfo?.viewport_width,
-      viewport_height: this.deviceInfo?.viewport_height,
-      device: this.deviceInfo?.device,
-      browser: this.deviceInfo?.browser,
-      browser_type: this.deviceInfo?.browser_type,
-      os: this.deviceInfo?.os,
-      user_agent: this.deviceInfo?.user_agent,
-      connection_type: this.deviceInfo?.connection_type,
+      // Apply checkpoint from server
+      if (result.checkpoint !== undefined) {
+        this.sessionState.applyCheckpoint(result.checkpoint);
+      }
 
-      // Locale
-      language: this.deviceInfo?.language,
-      timezone: this.deviceInfo?.timezone,
+      // Persist updated state
+      this.sessionState.persist();
+    }
+  }
 
-      // Engagement
-      duration: this.durationTracker?.getFocusDurationSeconds() || 0,
-      max_scroll: this.scrollTracker?.getMaxScrollPercent() || 0,
+  /**
+   * Build session attributes from current state
+   */
+  private buildAttributes(): SessionAttributes {
+    const session = this.sessionManager?.getSession();
+    const device = this.deviceInfo;
 
-      // SDK
-      sdk_version: SDK_VERSION,
-      tab_id: this.sessionManager.getTabId(),
-
-      // Timestamps (sent_at set by sender on transmission)
-      created_at: session.created_at,  // Session start (stable)
-      updated_at: Date.now(),          // User interaction time (now, before queue)
-
-      // Custom dimensions
-      ...this.sessionManager.getDimensionsPayload(),
-
-      // Spread properties at top level for easier access (excluding page_duration/previous_path which are handled specially)
-      ...(properties ? Object.fromEntries(
-        Object.entries(properties).filter(([k]) => k !== 'page_duration' && k !== 'previous_path')
-      ) : {}),
-
-      // Page duration tracking (v3) - must be after spread to ensure proper type conversion
-      page_duration: properties?.page_duration ? parseInt(properties.page_duration, 10) : undefined,
-      previous_path: properties?.previous_path || undefined,
+    return {
+      landing_page: session?.landing_page || window.location.href,
+      referrer: session?.referrer || undefined,
+      utm_source: session?.utm?.source || undefined,
+      utm_medium: session?.utm?.medium || undefined,
+      utm_campaign: session?.utm?.campaign || undefined,
+      utm_term: session?.utm?.term || undefined,
+      utm_content: session?.utm?.content || undefined,
+      utm_id: session?.utm?.id || undefined,
+      utm_id_from: session?.utm?.id_from || undefined,
+      screen_width: device?.screen_width,
+      screen_height: device?.screen_height,
+      viewport_width: device?.viewport_width,
+      viewport_height: device?.viewport_height,
+      device: device?.device,
+      browser: device?.browser,
+      browser_type: device?.browser_type || undefined,
+      os: device?.os,
+      user_agent: device?.user_agent,
+      connection_type: device?.connection_type,
+      language: device?.language,
+      timezone: device?.timezone,
     };
-
-    // Remove undefined values
-    const cleanPayload = Object.fromEntries(
-      Object.entries(payload).filter(([_, v]) => v !== undefined)
-    ) as TrackEventPayload;
-
-    this.sender.send(cleanPayload);
   }
 
   // Public API
@@ -820,10 +757,28 @@ export class StaminadsSDK {
 
   /**
    * Get focus duration in milliseconds
+   * In V3, this is calculated from completed pageview durations + current page time
    */
   async getFocusDuration(): Promise<number> {
     await this.ensureInitialized();
-    return this.durationTracker?.getFocusDurationMs() || 0;
+    if (!this.sessionState) return 0;
+
+    // Sum completed pageview durations
+    const actions = this.sessionState.getActions();
+    let total = 0;
+    for (const action of actions) {
+      if (action.type === 'pageview') {
+        total += action.duration;
+      }
+    }
+
+    // Add current page time
+    const currentPage = this.sessionState.getCurrentPage();
+    if (currentPage) {
+      total += Date.now() - currentPage.entered_at;
+    }
+
+    return total;
   }
 
   /**
@@ -841,37 +796,58 @@ export class StaminadsSDK {
    */
   async trackPageView(url?: string): Promise<void> {
     await this.ensureInitialized();
-    if (url) {
-      // Update navigation tracker
-      window.history.pushState({}, '', url);
+    if (!this.sessionState) return;
+
+    // Update scroll before navigation
+    if (this.scrollTracker) {
+      this.sessionState.updateScroll(this.scrollTracker.getMaxScrollPercent());
     }
-    this.sendEvent('screen_view');
+
+    const path = url || window.location.pathname;
+    this.sessionState.addPageview(path);
+
+    // Reset scroll tracking
+    this.scrollTracker?.reset();
+
+    // Reset page timer
+    this.resetPageActiveTime();
+
+    // Debounced send
+    this.scheduleDebouncedSend();
+
+    // Persist state
+    this.sessionState.persist();
   }
 
   /**
-   * Track custom event
+   * Track custom event - DEPRECATED, use trackGoal instead
    */
   async trackEvent(name: string, properties?: Record<string, string>): Promise<void> {
-    await this.ensureInitialized();
-    this.sendEvent('ping', { event_name: name, ...properties });
+    console.warn('[Staminads] trackEvent is deprecated, use trackGoal instead');
+    await this.trackGoal({ action: name, properties });
   }
 
   /**
-   * Track goal
+   * Track goal (immediate send)
    */
   async trackGoal(data: GoalData): Promise<void> {
     await this.ensureInitialized();
+    if (!this.sessionState) return;
 
-    const properties: Record<string, string> = {
-      goal_name: data.action,
-    };
+    // Add goal to SessionState
+    this.sessionState.addGoal(data.action, data.value, data.properties);
 
-    if (data.id) properties.goal_id = data.id;
-    if (data.value !== undefined) properties.goal_value = String(data.value);
-    if (data.currency) properties.goal_currency = data.currency;
-    if (data.properties) Object.assign(properties, data.properties);
+    // Cancel any pending debounced send
+    if (this.sendDebounceTimeout) {
+      clearTimeout(this.sendDebounceTimeout);
+      this.sendDebounceTimeout = null;
+    }
 
-    this.sendEvent('goal', properties);
+    // Immediate send for goals (critical for conversion timing)
+    await this.sendPayload();
+
+    // Persist state
+    this.sessionState.persist();
   }
 
   /**
@@ -912,7 +888,6 @@ export class StaminadsSDK {
   async pause(): Promise<void> {
     await this.ensureInitialized();
     this.isPaused = true;
-    this.durationTracker?.pauseFocus();
     this.stopHeartbeat(true); // Accumulate time
   }
 
@@ -922,7 +897,6 @@ export class StaminadsSDK {
   async resume(): Promise<void> {
     await this.ensureInitialized();
     this.isPaused = false;
-    this.durationTracker?.resumeFocus();
 
     // Reset max duration flag on explicit resume (allows user to restart tracking)
     this.resetHeartbeatState();
@@ -934,14 +908,28 @@ export class StaminadsSDK {
    */
   async reset(): Promise<void> {
     await this.ensureInitialized();
-    if (!this.sessionManager) return;
+    if (!this.sessionManager || !this.config) return;
 
+    // Create new session
     this.sessionManager.reset();
-    this.durationTracker?.reset();
+    const session = this.sessionManager.getOrCreateSession();
+
+    // Reinitialize SessionState with new session
+    const sessionStateConfig: SessionStateConfig = {
+      workspace_id: this.config.workspace_id,
+      session_id: session.id,
+      created_at: session.created_at,
+    };
+    this.sessionState = new SessionState(sessionStateConfig);
+    this.sessionState.addPageview(window.location.pathname);
+
+    // Reset scroll and heartbeat
     this.scrollTracker?.reset();
     this.resetHeartbeatState();
     this.startHeartbeat();
-    this.sendEvent('screen_view');
+
+    // Send initial payload for new session
+    await this.sendPayload();
   }
 
   /**
@@ -959,9 +947,10 @@ export class StaminadsSDK {
     return {
       session: this.sessionManager?.getSession() || null,
       config: this.config,
-      focusState: this.durationTracker?.getState() || 'FOCUSED',
       isTracking: this.isTracking,
-      queueLength: this.sender?.getQueueLength() || 0,
+      actionsCount: this.sessionState?.getActions().length || 0,
+      checkpoint: this.sessionState?.getCheckpoint() || -1,
+      currentPage: this.sessionState?.getCurrentPage()?.path || null,
     };
   }
 

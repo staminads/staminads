@@ -1,5 +1,6 @@
 /**
  * Staminads SDK Types
+ * V3 Session Payload Architecture
  */
 
 // Global window declaration for StaminadsConfig
@@ -121,78 +122,6 @@ export interface DeviceInfo {
   language: string;
 }
 
-// Events
-export type EventName = 'screen_view' | 'ping' | 'scroll' | 'goal';
-
-export interface TrackEventPayload {
-  // Required
-  workspace_id: string;
-  session_id: string;
-  name: EventName;
-  path: string;
-  landing_page: string;
-
-  // Traffic source
-  referrer?: string;
-  referrer_domain?: string;
-  referrer_path?: string;
-
-  // UTM
-  utm_source?: string;
-  utm_medium?: string;
-  utm_campaign?: string;
-  utm_term?: string;
-  utm_content?: string;
-  utm_id?: string;
-  utm_id_from?: string;
-
-  // Device
-  screen_width?: number;
-  screen_height?: number;
-  viewport_width?: number;
-  viewport_height?: number;
-  device?: string;
-  browser?: string;
-  browser_type?: string | null;
-  os?: string;
-  user_agent?: string;
-  connection_type?: string;
-
-  // Locale
-  language?: string;
-  timezone?: string;
-
-  // Engagement
-  duration?: number;
-  max_scroll?: number;
-  page_duration?: number;  // Time spent on page in seconds (v3)
-  previous_path?: string;  // Path of page being left (v3) - used with page_duration
-
-  // SDK
-  sdk_version?: string;
-  tab_id?: string;
-
-  // Timestamps
-  created_at: number;    // Session start timestamp (ms) - required
-  updated_at: number;    // User interaction timestamp (ms) - required
-  sent_at?: number;      // Network transmission timestamp (ms) - set by sender
-
-  // Custom dimensions
-  stm_1?: string;
-  stm_2?: string;
-  stm_3?: string;
-  stm_4?: string;
-  stm_5?: string;
-  stm_6?: string;
-  stm_7?: string;
-  stm_8?: string;
-  stm_9?: string;
-  stm_10?: string;
-
-  // Custom properties
-  properties?: Record<string, string>;
-}
-
 // Goal
 export interface GoalData {
   id?: string;
@@ -200,18 +129,6 @@ export interface GoalData {
   value?: number;
   currency?: string;
   properties?: Record<string, string>;
-}
-
-// Focus states
-export type FocusState = 'FOCUSED' | 'BLURRED' | 'HIDDEN';
-
-// Queue
-export interface QueuedPayload {
-  id: string;
-  payload: TrackEventPayload;
-  created_at: number;
-  attempts: number;
-  last_attempt: number | null;
 }
 
 // Public API
@@ -235,10 +152,12 @@ export interface StaminadsAPI {
   debug(): SessionDebugInfo;
 }
 
+// Debug info (V3)
 export interface SessionDebugInfo {
   session: Session | null;
   config: InternalConfig | null;
-  focusState: FocusState;
   isTracking: boolean;
-  queueLength: number;
+  actionsCount: number;
+  checkpoint: number;
+  currentPage: string | null;
 }

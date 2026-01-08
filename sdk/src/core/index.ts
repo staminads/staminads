@@ -1,2 +1,3 @@
 export { SessionManager } from './session';
-export { DurationTracker } from './duration';
+export { SessionState } from './session-state';
+export type { SessionStateConfig } from './session-state';

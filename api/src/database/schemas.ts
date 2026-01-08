@@ -234,6 +234,11 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
       latitude Nullable(Float32),
       longitude Nullable(Float32),
       max_scroll UInt8 DEFAULT 0,
+      page_number UInt16 DEFAULT 0,
+      _version UInt64 DEFAULT 0,
+      goal_name String DEFAULT '',
+      goal_value Float32 DEFAULT 0,
+      dedup_token String DEFAULT '',
       sdk_version String DEFAULT '',
       properties Map(String, String) DEFAULT map(),
       INDEX idx_name name TYPE bloom_filter(0.01) GRANULARITY 1,
@@ -305,6 +310,8 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
       device String DEFAULT '',
       connection_type String DEFAULT '',
       max_scroll UInt8 DEFAULT 0,
+      goal_count UInt16 DEFAULT 0,
+      goal_value Float32 DEFAULT 0,
       sdk_version String DEFAULT '',
       INDEX idx_created_at created_at TYPE minmax GRANULARITY 1
     ) ENGINE = ReplacingMergeTree(updated_at)
@@ -381,6 +388,8 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
       any(e.device) as device,
       any(e.connection_type) as connection_type,
       max(e.max_scroll) as max_scroll,
+      countIf(e.name = 'goal') as goal_count,
+      sumIf(e.goal_value, e.name = 'goal') as goal_value,
       any(e.sdk_version) as sdk_version
     FROM {database}.events e
     GROUP BY e.session_id, e.workspace_id
@@ -390,6 +399,7 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
     CREATE TABLE IF NOT EXISTS {database}.pages (
       -- Identity
       id UUID DEFAULT generateUUIDv4(),
+      page_id String DEFAULT '',
       session_id String,
       workspace_id String,
 
@@ -406,7 +416,7 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
       max_scroll UInt8 DEFAULT 0,
 
       -- Sequence
-      page_number UInt8 DEFAULT 1,
+      page_number UInt16 DEFAULT 1,
       is_landing Bool DEFAULT false,
       is_exit Bool DEFAULT false,
 
@@ -414,10 +424,11 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
       entry_type LowCardinality(String) DEFAULT 'navigation',
 
       -- Technical
-      received_at DateTime64(3) DEFAULT now64(3)
-    ) ENGINE = MergeTree()
+      received_at DateTime64(3) DEFAULT now64(3),
+      _version UInt64 DEFAULT 0
+    ) ENGINE = ReplacingMergeTree(_version)
     PARTITION BY toYYYYMMDD(received_at)
-    ORDER BY (session_id, entered_at)
+    ORDER BY (session_id, page_number)
     TTL toDateTime(received_at) + INTERVAL 7 DAY
   `,
 
@@ -426,23 +437,22 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
     TO {database}.pages AS
     SELECT
       generateUUIDv4() as id,
+      concat(e.session_id, '_', toString(e.page_number)) as page_id,
       e.session_id,
       e.workspace_id,
-      -- For navigation: previous_path is the page being left (has duration)
-      -- For unload ping: path is the current page being left (has duration)
-      if(e.name = 'screen_view' AND e.previous_path != '', e.previous_path, e.path) as path,
+      e.path,
       e.landing_page as full_url,
-      subtractSeconds(e.updated_at, e.page_duration) as entered_at,
+      subtractSeconds(e.updated_at, intDiv(e.page_duration, 1000)) as entered_at,
       e.updated_at as exited_at,
       e.page_duration as duration,
       e.max_scroll,
-      1 as page_number,
-      if(e.name = 'screen_view' AND e.previous_path != '', e.previous_path, e.path) = e.landing_path as is_landing,
-      e.name = 'ping' as is_exit,
-      if(if(e.name = 'screen_view' AND e.previous_path != '', e.previous_path, e.path) = e.landing_path, 'landing', 'navigation') as entry_type,
-      now64(3) as received_at
+      e.page_number,
+      e.path = e.landing_path as is_landing,
+      0 as is_exit,
+      if(e.path = e.landing_path, 'landing', 'navigation') as entry_type,
+      now64(3) as received_at,
+      e._version
     FROM {database}.events e
-    WHERE (e.name = 'screen_view' AND e.previous_path != '' AND e.page_duration > 0)
-       OR (e.name = 'ping' AND e.page_duration > 0)
+    WHERE e.name = 'screen_view' AND e.page_duration > 0
   `,
 };

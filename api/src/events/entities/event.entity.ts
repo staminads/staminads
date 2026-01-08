@@ -1,4 +1,4 @@
-export type EventName = 'screen_view' | 'scroll' | 'click' | 'ping';
+export type EventName = 'screen_view' | 'scroll' | 'click' | 'ping' | 'goal';
 
 export interface TrackingEvent {
   session_id: string;
@@ -81,4 +81,11 @@ export interface TrackingEvent {
 
   // Flexible properties
   properties?: Record<string, string>;
+
+  // V3 Session Payload fields
+  dedup_token?: string; // Deterministic token for deduplication
+  page_number?: number; // Page sequence within session
+  _version?: number; // Server timestamp for conflict resolution
+  goal_name?: string; // Goal identifier
+  goal_value?: number; // Goal value (e.g., purchase amount)
 }
