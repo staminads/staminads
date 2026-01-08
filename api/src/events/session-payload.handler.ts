@@ -265,6 +265,10 @@ export class SessionPayloadHandler {
       goal_name: '',
       goal_value: 0,
       properties: {},
+      // SDK timestamps
+      entered_at: toClickHouseDateTime(new Date(action.entered_at)),
+      exited_at: toClickHouseDateTime(new Date(action.exited_at)),
+      goal_timestamp: '', // Not applicable for pageviews
     } as TrackingEvent;
   }
 
@@ -286,6 +290,10 @@ export class SessionPayloadHandler {
       goal_name: action.name,
       goal_value: action.value ?? 0,
       properties: action.properties ?? {},
+      // SDK timestamps
+      entered_at: '', // Not applicable for goals
+      exited_at: '', // Not applicable for goals
+      goal_timestamp: toClickHouseDateTime(new Date(action.timestamp)),
     } as TrackingEvent;
   }
 

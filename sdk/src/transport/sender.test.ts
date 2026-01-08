@@ -1,12 +1,12 @@
 /**
- * Tests for V3 Sender
+ * Tests for Sender
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Sender } from './sender';
 import { Storage } from '../storage/storage';
 import type { SessionPayload } from '../types/session-state';
 
-describe('Sender V3', () => {
+describe('Sender', () => {
   let sender: Sender;
   let mockStorage: Storage;
   let mockLocalStorage: ReturnType<typeof createMockStorage>;
@@ -83,7 +83,7 @@ describe('Sender V3', () => {
       await sender.sendSession(payload);
 
       expect(fetchMock).toHaveBeenCalledWith(
-        'https://api.example.com/api/track.session',
+        'https://api.example.com/api/track',
         expect.objectContaining({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -144,7 +144,7 @@ describe('Sender V3', () => {
 
       expect(result).toBe(true);
       expect(sendBeaconMock).toHaveBeenCalledWith(
-        'https://api.example.com/api/track.session',
+        'https://api.example.com/api/track',
         expect.any(Blob)
       );
     });
@@ -165,7 +165,7 @@ describe('Sender V3', () => {
 
       expect(result).toBe(true);
       expect(fetchMock).toHaveBeenCalledWith(
-        'https://api.example.com/api/track.session',
+        'https://api.example.com/api/track',
         expect.objectContaining({
           method: 'POST',
           keepalive: true,
@@ -221,7 +221,7 @@ describe('Sender V3', () => {
       expect(sendBeaconMock).not.toHaveBeenCalled();
       // Should use fetch directly
       expect(fetchMock).toHaveBeenCalledWith(
-        'https://api.example.com/api/track.session',
+        'https://api.example.com/api/track',
         expect.objectContaining({
           method: 'POST',
           keepalive: true,
@@ -300,6 +300,264 @@ describe('Sender V3', () => {
       expect(consoleSpy).toHaveBeenCalledWith(
         '[Staminads] Session sent via fetch keepalive'
       );
+    });
+  });
+
+  describe('offline detection and queue', () => {
+    describe('when offline', () => {
+      beforeEach(() => {
+        vi.stubGlobal('navigator', { onLine: false, sendBeacon: vi.fn() });
+      });
+
+      it('queues payload to storage when offline', async () => {
+        const result = await sender.sendSession(createPayload());
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('offline');
+        expect(result.queued).toBe(true);
+        expect(fetchMock).not.toHaveBeenCalled();
+
+        // Verify queued in storage (Storage class adds 'stm_' prefix to 'pending')
+        const queue = JSON.parse(mockLocalStorage._store['stm_pending'] || '[]');
+        expect(queue.length).toBe(1);
+      });
+
+      it('sendSessionBeacon queues and returns false when offline', () => {
+        const result = sender.sendSessionBeacon(createPayload());
+
+        expect(result).toBe(false);
+
+        const queue = JSON.parse(mockLocalStorage._store['stm_pending'] || '[]');
+        expect(queue.length).toBe(1);
+      });
+    });
+
+    describe('when back online', () => {
+      it('flushes queue when online event fires', async () => {
+        // Queue a payload while offline
+        vi.stubGlobal('navigator', { onLine: false, sendBeacon: vi.fn() });
+        await sender.sendSession(createPayload());
+
+        // Come back online
+        vi.stubGlobal('navigator', { onLine: true, sendBeacon: vi.fn() });
+
+        // Simulate online event
+        await sender.handleOnline();
+
+        expect(fetchMock).toHaveBeenCalled();
+
+        // Queue should be empty
+        const queue = JSON.parse(mockLocalStorage._store['stm_pending'] || '[]');
+        expect(queue.length).toBe(0);
+      });
+
+      it('removes successfully sent items from queue', async () => {
+        // Queue multiple payloads
+        vi.stubGlobal('navigator', { onLine: false, sendBeacon: vi.fn() });
+        await sender.sendSession(createPayload());
+        await sender.sendSession(createPayload());
+
+        let queue = JSON.parse(mockLocalStorage._store['stm_pending'] || '[]');
+        expect(queue.length).toBe(2);
+
+        // Come back online
+        vi.stubGlobal('navigator', { onLine: true, sendBeacon: vi.fn() });
+        await sender.handleOnline();
+
+        queue = JSON.parse(mockLocalStorage._store['stm_pending'] || '[]');
+        expect(queue.length).toBe(0);
+      });
+
+      it('keeps failed items in queue for retry', async () => {
+        vi.stubGlobal('navigator', { onLine: false, sendBeacon: vi.fn() });
+        await sender.sendSession(createPayload());
+
+        // Come online but server fails
+        vi.stubGlobal('navigator', { onLine: true, sendBeacon: vi.fn() });
+        fetchMock.mockResolvedValueOnce({ ok: false, status: 500, statusText: 'Error' });
+
+        await sender.handleOnline();
+
+        // Should still be in queue
+        const queue = JSON.parse(mockLocalStorage._store['stm_pending'] || '[]');
+        expect(queue.length).toBe(1);
+      });
+    });
+
+    describe('queue management', () => {
+      it('limits queue size to prevent storage bloat', async () => {
+        vi.stubGlobal('navigator', { onLine: false, sendBeacon: vi.fn() });
+
+        // Queue 100+ payloads
+        for (let i = 0; i < 110; i++) {
+          await sender.sendSession(createPayload());
+        }
+
+        const queue = JSON.parse(mockLocalStorage._store['stm_pending'] || '[]');
+        expect(queue.length).toBeLessThanOrEqual(100); // Max 100 items
+      });
+
+      it('expires old queue items after 24 hours', async () => {
+        vi.stubGlobal('navigator', { onLine: false, sendBeacon: vi.fn() });
+
+        // Queue payload
+        await sender.sendSession(createPayload());
+
+        // Advance 25 hours
+        vi.advanceTimersByTime(25 * 60 * 60 * 1000);
+
+        // Come online
+        vi.stubGlobal('navigator', { onLine: true, sendBeacon: vi.fn() });
+        await sender.handleOnline();
+
+        // Expired items should be discarded, not sent
+        expect(fetchMock).not.toHaveBeenCalled();
+
+        // Queue should be empty (expired item discarded)
+        const queue = JSON.parse(mockLocalStorage._store['stm_pending'] || '[]');
+        expect(queue.length).toBe(0);
+      });
+    });
+  });
+
+  describe('request timeout', () => {
+    it('aborts fetch after 10 seconds', async () => {
+      vi.stubGlobal('navigator', { onLine: true, sendBeacon: vi.fn() });
+      // Mock fetch that respects abort signal
+      fetchMock.mockImplementation((_url: string, options?: RequestInit) => {
+        return new Promise((_resolve, reject) => {
+          if (options?.signal) {
+            options.signal.addEventListener('abort', () => {
+              const error = new Error('The operation was aborted');
+              error.name = 'AbortError';
+              reject(error);
+            });
+          }
+        });
+      });
+
+      const sendPromise = sender.sendSession(createPayload());
+
+      await vi.advanceTimersByTimeAsync(10001);
+
+      const result = await sendPromise;
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Request timeout');
+    });
+
+    it('clears timeout on successful response', async () => {
+      vi.stubGlobal('navigator', { onLine: true, sendBeacon: vi.fn() });
+
+      const result = await sender.sendSession(createPayload());
+
+      expect(result.success).toBe(true);
+    });
+
+    it('clears timeout on network error', async () => {
+      vi.stubGlobal('navigator', { onLine: true, sendBeacon: vi.fn() });
+      fetchMock.mockRejectedValue(new Error('Network error'));
+
+      const result = await sender.sendSession(createPayload());
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Network error');
+    });
+
+    it('passes AbortSignal to fetch', async () => {
+      vi.stubGlobal('navigator', { onLine: true, sendBeacon: vi.fn() });
+
+      await sender.sendSession(createPayload());
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+        })
+      );
+    });
+
+    it('queues payload on timeout for retry', async () => {
+      vi.stubGlobal('navigator', { onLine: true, sendBeacon: vi.fn() });
+      // Mock fetch that respects abort signal
+      fetchMock.mockImplementation((_url: string, options?: RequestInit) => {
+        return new Promise((_resolve, reject) => {
+          if (options?.signal) {
+            options.signal.addEventListener('abort', () => {
+              const error = new Error('The operation was aborted');
+              error.name = 'AbortError';
+              reject(error);
+            });
+          }
+        });
+      });
+
+      const sendPromise = sender.sendSession(createPayload());
+      await vi.advanceTimersByTimeAsync(10001);
+      const result = await sendPromise;
+
+      expect(result.queued).toBe(true);
+
+      const queue = JSON.parse(mockLocalStorage._store['stm_pending'] || '[]');
+      expect(queue.length).toBe(1);
+    });
+  });
+
+  describe('fetchLater progressive enhancement', () => {
+    it('uses fetchLater when available', () => {
+      const fetchLaterMock = vi.fn().mockReturnValue({ activated: false });
+      vi.stubGlobal('fetchLater', fetchLaterMock);
+      vi.stubGlobal('navigator', { onLine: true, sendBeacon: sendBeaconMock });
+
+      const result = sender.sendSessionBeacon(createPayload());
+
+      expect(result).toBe(true);
+      expect(fetchLaterMock).toHaveBeenCalledWith(
+        'https://api.example.com/api/track',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.any(String),
+          activateAfter: 0,
+        })
+      );
+      expect(sendBeaconMock).not.toHaveBeenCalled();
+    });
+
+    it('falls back to sendBeacon when fetchLater unavailable', () => {
+      vi.stubGlobal('fetchLater', undefined);
+      vi.stubGlobal('navigator', { onLine: true, sendBeacon: sendBeaconMock });
+
+      sender.sendSessionBeacon(createPayload());
+
+      expect(sendBeaconMock).toHaveBeenCalled();
+    });
+
+    it('falls back to sendBeacon when fetchLater throws', () => {
+      vi.stubGlobal('fetchLater', vi.fn().mockImplementation(() => {
+        throw new Error('fetchLater error');
+      }));
+      vi.stubGlobal('navigator', { onLine: true, sendBeacon: sendBeaconMock });
+
+      const result = sender.sendSessionBeacon(createPayload());
+
+      expect(result).toBe(true);
+      expect(sendBeaconMock).toHaveBeenCalled();
+    });
+
+    it('logs fetchLater usage in debug mode', () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const fetchLaterMock = vi.fn().mockReturnValue({ activated: false });
+      vi.stubGlobal('fetchLater', fetchLaterMock);
+      vi.stubGlobal('navigator', { onLine: true, sendBeacon: vi.fn() });
+
+      const debugSender = new Sender('https://api.example.com', mockStorage, true);
+      debugSender.sendSessionBeacon(createPayload());
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[Staminads] Session queued via fetchLater'
+      );
+
+      consoleSpy.mockRestore();
     });
   });
 });

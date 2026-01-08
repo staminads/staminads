@@ -1,37 +1,29 @@
 /**
  * Clock Skew E2E Tests
  *
- * Tests that `sent_at` timestamp is properly included in all payloads
+ * Tests that timestamps are properly included in all payloads
  * and can be used by the server for clock skew detection.
+ *
+ * Updated for V3 SessionPayload format.
  *
  * Clock skew = received_at - sent_at
  *   - Positive skew: client clock is behind server (or network latency)
  *   - Negative skew: client clock is ahead of server (always wrong)
  */
 
-import { test, expect, APIRequestContext } from './fixtures';
-
-interface CapturedEvent {
-  payload: {
-    name: string;
-    event_name?: string;
-    sent_at?: number;
-    session_id?: string;
-    [key: string]: unknown;
-  };
-  _received_at: number;
-}
+import { test, expect, CapturedPayload } from './fixtures';
+import type { APIRequestContext } from '@playwright/test';
 
 // Helper to wait for events with retry
 async function waitForEvents(
   request: APIRequestContext,
   minCount: number = 1,
   maxWaitMs: number = 5000
-): Promise<CapturedEvent[]> {
+): Promise<CapturedPayload[]> {
   const startTime = Date.now();
   while (Date.now() - startTime < maxWaitMs) {
     const response = await request.get('/api/test/events');
-    const events: CapturedEvent[] = await response.json();
+    const events: CapturedPayload[] = await response.json();
     if (events.length >= minCount) {
       return events;
     }
@@ -49,7 +41,7 @@ test.describe('Clock Skew Detection', () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
   });
 
-  test('all events include sent_at timestamp', async ({ page, request }) => {
+  test('all payloads include created_at and updated_at timestamps', async ({ page, request }) => {
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
@@ -57,11 +49,15 @@ test.describe('Clock Skew Detection', () => {
     const events = await waitForEvents(request, 1);
     expect(events.length).toBeGreaterThanOrEqual(1);
 
-    // All events should have sent_at timestamp
+    // All payloads should have timestamps
     for (const event of events) {
-      expect(event.payload.sent_at).toBeDefined();
-      expect(typeof event.payload.sent_at).toBe('number');
-      expect(event.payload.sent_at).toBeGreaterThan(0);
+      expect(event.payload.created_at).toBeDefined();
+      expect(typeof event.payload.created_at).toBe('number');
+      expect(event.payload.created_at).toBeGreaterThan(0);
+
+      expect(event.payload.updated_at).toBeDefined();
+      expect(typeof event.payload.updated_at).toBe('number');
+      expect(event.payload.updated_at).toBeGreaterThan(0);
     }
   });
 
@@ -73,9 +69,9 @@ test.describe('Clock Skew Detection', () => {
     const events = await waitForEvents(request, 1);
     expect(events.length).toBeGreaterThanOrEqual(1);
 
-    // Check skew for each event
+    // Check skew for each payload
     for (const event of events) {
-      const skewMs = event._received_at - event.payload.sent_at!;
+      const skewMs = event._received_at - event.payload.updated_at;
       // Normal latency should be well under 5 seconds
       expect(Math.abs(skewMs)).toBeLessThan(5000);
     }
@@ -96,9 +92,9 @@ test.describe('Clock Skew Detection', () => {
     const events = await waitForEvents(request, 1);
     expect(events.length).toBeGreaterThanOrEqual(1);
 
-    // Check first event
+    // Check first payload
     const event = events[0];
-    const skewMs = event._received_at - event.payload.sent_at!;
+    const skewMs = event._received_at - event.payload.updated_at;
     const skewMinutes = skewMs / 1000 / 60;
 
     // Skew should be approximately -60 minutes (client ahead)
@@ -123,9 +119,9 @@ test.describe('Clock Skew Detection', () => {
     const events = await waitForEvents(request, 1);
     expect(events.length).toBeGreaterThanOrEqual(1);
 
-    // Check first event
+    // Check first payload
     const event = events[0];
-    const skewMs = event._received_at - event.payload.sent_at!;
+    const skewMs = event._received_at - event.payload.updated_at;
     const skewMinutes = skewMs / 1000 / 60;
 
     // Skew should be approximately +30 minutes (client behind)
@@ -145,7 +141,7 @@ test.describe('Clock Skew Detection', () => {
 
     // Verify server can calculate skew and apply threshold logic
     const event = events[0];
-    const skewMs = event._received_at - event.payload.sent_at!;
+    const skewMs = event._received_at - event.payload.updated_at;
 
     // In normal conditions, skew should be minimal (<5s)
     // Server-side logic would check: |skew| > 5000ms to determine if correction needed
@@ -157,16 +153,3 @@ test.describe('Clock Skew Detection', () => {
     console.log(`Normal skew: ${skewMs}ms, needsCorrection = ${needsCorrection}`);
   });
 });
-
-// TypeScript declarations
-declare global {
-  interface Window {
-    SDK_READY: Promise<void>;
-    SDK_INITIALIZED: boolean;
-    Staminads: {
-      getSessionId: () => string;
-      trackEvent: (name: string, properties?: Record<string, unknown>) => void;
-    };
-  }
-  const Staminads: Window['Staminads'];
-}

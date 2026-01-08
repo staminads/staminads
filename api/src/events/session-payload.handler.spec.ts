@@ -127,6 +127,30 @@ describe('SessionPayloadHandler', () => {
       });
     });
 
+    it('preserves entered_at and exited_at timestamps from SDK', async () => {
+      const enteredAt = Date.now() - 5000;
+      const exitedAt = Date.now();
+
+      const payload = createPayload({
+        actions: [
+          createPageviewAction({
+            entered_at: enteredAt,
+            exited_at: exitedAt,
+          }),
+        ],
+        attributes: { landing_page: 'https://example.com/' },
+      });
+
+      await handler.handle(payload, null);
+
+      const events = bufferService.addBatch.mock.calls[0][0];
+      expect(events[0].entered_at).toBeDefined();
+      expect(events[0].exited_at).toBeDefined();
+      // Verify they are ClickHouse DateTime format strings
+      expect(typeof events[0].entered_at).toBe('string');
+      expect(typeof events[0].exited_at).toBe('string');
+    });
+
     it('sets previous_path from prior pageview', async () => {
       const payload = createPayload({
         actions: [
@@ -216,6 +240,27 @@ describe('SessionPayloadHandler', () => {
 
       const events = bufferService.addBatch.mock.calls[0][0];
       expect(events[0].goal_value).toBe(0);
+    });
+
+    it('preserves goal timestamp from SDK', async () => {
+      const goalTimestamp = Date.now() - 1000;
+
+      const payload = createPayload({
+        actions: [
+          createGoalAction({
+            name: 'purchase',
+            timestamp: goalTimestamp,
+          }),
+        ],
+        attributes: { landing_page: 'https://example.com/' },
+      });
+
+      await handler.handle(payload, null);
+
+      const events = bufferService.addBatch.mock.calls[0][0];
+      expect(events[0].goal_timestamp).toBeDefined();
+      // Verify it's a ClickHouse DateTime format string
+      expect(typeof events[0].goal_timestamp).toBe('string');
     });
   });
 

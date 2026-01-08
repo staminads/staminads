@@ -2,9 +2,10 @@
  * Data Persistence E2E Tests
  *
  * Tests that data persists correctly in localStorage across sessions and reloads.
+ * Updated for V3 SessionPayload format.
  */
 
-import { test, expect } from './fixtures';
+import { test, expect, CapturedPayload, hasGoal } from './fixtures';
 
 test.describe('Data Persistence', () => {
   test.beforeEach(async ({ request, page }) => {
@@ -64,10 +65,10 @@ test.describe('Data Persistence', () => {
     await page.evaluate(() => window.SDK_READY);
 
     // Set dimensions
-    await page.evaluate(() => {
-      Staminads.setDimension(1, 'value1');
-      Staminads.setDimension(2, 'value2');
-      Staminads.setDimension(5, 'value5');
+    await page.evaluate(async () => {
+      await Staminads.setDimension(1, 'value1');
+      await Staminads.setDimension(2, 'value2');
+      await Staminads.setDimension(5, 'value5');
     });
 
     // Reload
@@ -103,81 +104,7 @@ test.describe('Data Persistence', () => {
     expect(storedSession.workspace_id).toBe('test_workspace');
   });
 
-  test('queue persists after failed send', async ({ page, request }) => {
-    // Disable sendBeacon - it doesn't report server errors (fire-and-forget)
-    await page.addInitScript(() => {
-      // @ts-expect-error - Mocking navigator
-      navigator.sendBeacon = () => false;
-    });
-
-    // Configure server to fail
-    await request.post('/api/test/fail');
-
-    await page.goto('/test-page.html');
-    await page.waitForFunction(() => window.SDK_INITIALIZED);
-    await page.evaluate(() => window.SDK_READY);
-
-    // Track event (will fail and queue)
-    await page.evaluate(() => Staminads.trackEvent('failed_event'));
-    await page.waitForTimeout(1000);
-
-    // Check queue in localStorage
-    const queue = await page.evaluate(() => {
-      const data = localStorage.getItem('stm_pending');
-      return data ? JSON.parse(data) : [];
-    });
-
-    expect(queue.length).toBeGreaterThanOrEqual(1);
-  });
-
-  test('queue flushes on page revisit', async ({ page, request, context }) => {
-    // Disable sendBeacon on first page - it doesn't report server errors
-    await page.addInitScript(() => {
-      // @ts-expect-error - Mocking navigator
-      navigator.sendBeacon = () => false;
-    });
-
-    // Configure server to fail
-    await request.post('/api/test/fail');
-
-    await page.goto('/test-page.html');
-    await page.waitForFunction(() => window.SDK_INITIALIZED);
-    await page.evaluate(() => window.SDK_READY);
-
-    // Track event (will fail and queue since sendBeacon disabled)
-    await page.evaluate(() => Staminads.trackEvent('queued_event'));
-    await page.waitForTimeout(1000);
-
-    // Verify queue has items
-    const queueBefore = await page.evaluate(() => {
-      const data = localStorage.getItem('stm_pending');
-      return data ? JSON.parse(data) : [];
-    });
-    expect(queueBefore.length).toBeGreaterThanOrEqual(1);
-
-    // Fix server
-    await request.post('/api/test/succeed');
-
-    // Close and reopen page (new page has normal sendBeacon for flush)
-    await page.close();
-    const newPage = await context.newPage();
-    await newPage.goto('/test-page.html');
-    await newPage.waitForFunction(() => window.SDK_INITIALIZED);
-    await newPage.evaluate(() => window.SDK_READY);
-
-    // Wait for queue flush
-    await newPage.waitForTimeout(2000);
-
-    // Queue should be empty now
-    const queueAfter = await newPage.evaluate(() => {
-      const data = localStorage.getItem('stm_pending');
-      return data ? JSON.parse(data) : [];
-    });
-
-    expect(queueAfter.length).toBe(0);
-  });
-
-  test('session timestamp updates correctly', async ({ page }) => {
+  test('session timestamp updates on activity', async ({ page, request }) => {
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
@@ -191,7 +118,7 @@ test.describe('Data Persistence', () => {
 
     // Wait and trigger activity
     await page.waitForTimeout(1000);
-    await page.evaluate(() => Staminads.trackEvent('activity'));
+    await page.evaluate(() => Staminads.trackGoal({ action: 'activity' }));
     await page.waitForTimeout(500);
 
     // Get updated timestamp
@@ -231,7 +158,10 @@ test.describe('Data Persistence', () => {
     await page.evaluate(() => window.SDK_READY);
 
     // Get tab_id from sessionStorage
-    const tabId1 = await page.evaluate(() => sessionStorage.getItem('stm_tab_id'));
+    const tabId1 = await page.evaluate(() => {
+      const data = sessionStorage.getItem('stm_tab_id');
+      return data ? JSON.parse(data) : null;
+    });
 
     // Open new tab
     const newPage = await context.newPage();
@@ -239,26 +169,87 @@ test.describe('Data Persistence', () => {
     await newPage.waitForFunction(() => window.SDK_INITIALIZED);
     await newPage.evaluate(() => window.SDK_READY);
 
-    const tabId2 = await newPage.evaluate(() => sessionStorage.getItem('stm_tab_id'));
+    const tabId2 = await newPage.evaluate(() => {
+      const data = sessionStorage.getItem('stm_tab_id');
+      return data ? JSON.parse(data) : null;
+    });
 
     // Tab IDs should be different
     expect(tabId1).toBeTruthy();
     expect(tabId2).toBeTruthy();
     expect(tabId2).not.toBe(tabId1);
   });
-});
 
-// TypeScript declarations
-declare global {
-  interface Window {
-    SDK_READY: Promise<void>;
-    Staminads: {
-      getSessionId: () => string;
-      getVisitorId: () => string;
-      track: (name: string, data?: Record<string, unknown>) => void;
-      setDimension: (index: number, value: string) => void;
-      getDimension: (index: number) => string | null;
-    };
-  }
-  const Staminads: Window['Staminads'];
-}
+  test('session state persists in sessionStorage', async ({ page }) => {
+    await page.goto('/test-page.html');
+    await page.waitForFunction(() => window.SDK_INITIALIZED);
+    await page.evaluate(() => window.SDK_READY);
+
+    // Track a goal
+    await page.evaluate(() => Staminads.trackGoal({ action: 'persist_test' }));
+    await page.waitForTimeout(500);
+
+    // Check sessionStorage has session state
+    const sessionState = await page.evaluate(() => {
+      const data = sessionStorage.getItem('stm_session_state');
+      return data ? JSON.parse(data) : null;
+    });
+
+    expect(sessionState).toBeTruthy();
+    expect(sessionState.actions).toBeDefined();
+    expect(sessionState.actions.some((a: { type: string; name?: string }) =>
+      a.type === 'goal' && a.name === 'persist_test'
+    )).toBe(true);
+  });
+
+  test('session state restored after navigation', async ({ page, request }) => {
+    await page.goto('/test-page.html');
+    await page.waitForFunction(() => window.SDK_INITIALIZED);
+    await page.evaluate(() => window.SDK_READY);
+
+    // Track a goal
+    await page.evaluate(() => Staminads.trackGoal({ action: 'before_nav' }));
+    await page.waitForTimeout(500);
+
+    // Navigate to SPA page and back
+    await page.goto('/spa-page.html');
+    await page.waitForFunction(() => window.SDK_INITIALIZED);
+    await page.evaluate(() => window.SDK_READY);
+    await page.waitForTimeout(500);
+
+    // Go back to test page
+    await page.goto('/test-page.html');
+    await page.waitForFunction(() => window.SDK_INITIALIZED);
+    await page.evaluate(() => window.SDK_READY);
+    await page.waitForTimeout(500);
+
+    // Track another goal
+    await page.evaluate(() => Staminads.trackGoal({ action: 'after_nav' }));
+    await page.waitForTimeout(500);
+
+    // Check the latest payload has both goals
+    const response = await request.get('/api/test/events');
+    const events: CapturedPayload[] = await response.json();
+
+    // Find payload with after_nav goal
+    const finalPayload = events.find(e => hasGoal(e.payload, 'after_nav'));
+    expect(finalPayload).toBeTruthy();
+
+    // Note: Goals from different sessions may not be combined
+    // The 'before_nav' goal would be in a different session's payload
+  });
+
+  test('workspace_id stored with session', async ({ page }) => {
+    await page.goto('/test-page.html');
+    await page.waitForFunction(() => window.SDK_INITIALIZED);
+    await page.evaluate(() => window.SDK_READY);
+
+    const storedSession = await page.evaluate(() => {
+      const data = localStorage.getItem('stm_session');
+      return data ? JSON.parse(data) : null;
+    });
+
+    expect(storedSession).toBeTruthy();
+    expect(storedSession.workspace_id).toBe('test_workspace');
+  });
+});

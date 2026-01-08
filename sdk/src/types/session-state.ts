@@ -1,8 +1,8 @@
 /**
- * V3 Session Payload Types
+ * Session Payload Types
  *
- * These types define the session payload format for the V3 SDK.
- * The SDK builds a cumulative actions[] array that gets sent to track.session.
+ * These types define the session payload format for the SDK.
+ * The SDK builds a cumulative actions[] array that gets sent to /api/track.
  */
 
 export type ActionType = 'pageview' | 'goal';
@@ -74,7 +74,7 @@ export interface SessionAttributes {
 }
 
 /**
- * Full session payload sent to /api/track.session
+ * Full session payload sent to /api/track
  */
 export interface SessionPayload {
   workspace_id: string;
@@ -105,4 +105,5 @@ export interface SendResult {
   success: boolean;
   checkpoint?: number; // Server's acknowledged checkpoint
   error?: string;
+  queued?: boolean; // Payload was queued for later (offline/timeout)
 }

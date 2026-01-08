@@ -2,9 +2,10 @@
  * Session Lifecycle E2E Tests
  *
  * Tests the full session lifecycle: init, track, navigate, close, reopen, resume.
+ * Updated for V3 SessionPayload format with actions[] array.
  */
 
-import { test, expect } from './fixtures';
+import { test, expect, CapturedPayload, getGoals, hasGoal } from './fixtures';
 
 test.describe('Session Lifecycle', () => {
   test.beforeEach(async ({ request }) => {
@@ -36,20 +37,34 @@ test.describe('Session Lifecycle', () => {
     expect(typeof visitorId).toBe('string');
   });
 
-  test('tracks screen_view on init', async ({ page, request }) => {
+  test('sends initial payload with current_page on init', async ({ page, request }) => {
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
 
-    // Wait for initial screen_view event
+    // Wait for initial payload
     await page.waitForTimeout(500);
 
-    const response = await request.get('/api/test/events/screen_view');
-    const events = await response.json();
+    const response = await request.get('/api/test/events');
+    const events: CapturedPayload[] = await response.json();
 
     expect(events.length).toBeGreaterThanOrEqual(1);
-    expect(events[0].payload.name).toBe('screen_view');
-    expect(events[0].payload.workspace_id).toBe('test_workspace');
+
+    // V3: Check payload structure
+    const payload = events[0].payload;
+    expect(payload.workspace_id).toBe('test_workspace');
+    expect(payload.session_id).toBeTruthy();
+    expect(payload.sdk_version).toBeTruthy();
+    expect(payload.created_at).toBeGreaterThan(0);
+    expect(payload.updated_at).toBeGreaterThan(0);
+
+    // Should have current_page (the page user is currently on)
+    expect(payload.current_page).toBeTruthy();
+    expect(payload.current_page?.path).toBe('/test-page.html');
+
+    // First payload should include attributes
+    expect(payload.attributes).toBeTruthy();
+    expect(payload.attributes?.landing_page).toContain('test-page.html');
   });
 
   test('session survives page reload', async ({ page }) => {
@@ -73,38 +88,23 @@ test.describe('Session Lifecycle', () => {
     expect(visitorId2).toBe(visitorId1);
   });
 
-  test('tracks ping events on heartbeat', async ({ page, request }) => {
+  test('sends periodic payloads on heartbeat', async ({ page, request }) => {
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
 
-    // Wait for heartbeat (10s on desktop, but we'll wait shorter and check)
-    // Note: In real test we'd mock time, but here we wait for actual heartbeat
+    // Wait for heartbeat (10s on desktop)
     await page.waitForTimeout(11000);
 
-    const response = await request.get('/api/test/events/ping');
-    const events = await response.json();
+    const response = await request.get('/api/test/events');
+    const events: CapturedPayload[] = await response.json();
 
-    expect(events.length).toBeGreaterThanOrEqual(1);
-    expect(events[0].payload.name).toBe('ping');
-  });
+    // Should have multiple payloads (initial + heartbeat)
+    expect(events.length).toBeGreaterThanOrEqual(2);
 
-  test('tracks custom events via track()', async ({ page, request }) => {
-    await page.goto('/test-page.html');
-    await page.waitForFunction(() => window.SDK_INITIALIZED);
-    await page.evaluate(() => window.SDK_READY);
-
-    // Track custom event
-    await page.click('#btn-track');
-    await page.waitForTimeout(500);
-
-    const response = await request.get('/api/test/events/button_click');
-    const events = await response.json();
-
-    expect(events.length).toBe(1);
-    // trackEvent sends name='ping' with event_name for custom event name
-    expect(events[0].payload.name).toBe('ping');
-    expect(events[0].payload.event_name).toBe('button_click');
+    // All payloads should have same session_id
+    const sessionIds = new Set(events.map((e) => e.payload.session_id));
+    expect(sessionIds.size).toBe(1);
   });
 
   test('tracks goals via trackGoal()', async ({ page, request }) => {
@@ -112,18 +112,46 @@ test.describe('Session Lifecycle', () => {
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
 
-    // Track goal
+    // Track goal using the button
     await page.click('#btn-goal');
     await page.waitForTimeout(500);
 
-    const response = await request.get('/api/test/events/goal');
-    const events = await response.json();
+    const response = await request.get('/api/test/events');
+    const events: CapturedPayload[] = await response.json();
 
-    expect(events.length).toBe(1);
-    expect(events[0].payload.name).toBe('goal');
-    expect(events[0].payload.goal_name).toBe('signup');
-    // Value is sent as string in the payload
-    expect(events[0].payload.goal_value).toBe('99.99');
+    // Find payload with the goal
+    const payloadWithGoal = events.find((e) => hasGoal(e.payload, 'signup'));
+    expect(payloadWithGoal).toBeTruthy();
+
+    // Check goal details
+    const goals = getGoals(payloadWithGoal!.payload);
+    expect(goals.length).toBeGreaterThanOrEqual(1);
+
+    const signupGoal = goals.find((g) => g.name === 'signup');
+    expect(signupGoal).toBeTruthy();
+    expect(signupGoal?.value).toBe(99.99);
+  });
+
+  test('tracks custom goals via trackGoal()', async ({ page, request }) => {
+    await page.goto('/test-page.html');
+    await page.waitForFunction(() => window.SDK_INITIALIZED);
+    await page.evaluate(() => window.SDK_READY);
+
+    // Track custom goal using the button (button_click)
+    await page.click('#btn-track');
+    await page.waitForTimeout(500);
+
+    const response = await request.get('/api/test/events');
+    const events: CapturedPayload[] = await response.json();
+
+    // Find payload with the goal
+    const payloadWithGoal = events.find((e) => hasGoal(e.payload, 'button_click'));
+    expect(payloadWithGoal).toBeTruthy();
+
+    const goals = getGoals(payloadWithGoal!.payload);
+    const buttonGoal = goals.find((g) => g.name === 'button_click');
+    expect(buttonGoal).toBeTruthy();
+    expect(buttonGoal?.properties?.button).toBe('custom');
   });
 
   test('sets custom dimensions', async ({ page }) => {
@@ -139,12 +167,12 @@ test.describe('Session Lifecycle', () => {
     expect(dimension).toBe('test_value');
   });
 
-  test('SPA navigation triggers new screen_view', async ({ page, request }) => {
+  test('SPA navigation adds to actions array', async ({ page, request }) => {
     await page.goto('/spa-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
 
-    // Initial screen_view
+    // Wait for initial payload
     await page.waitForTimeout(500);
 
     // Navigate to products
@@ -155,11 +183,19 @@ test.describe('Session Lifecycle', () => {
     await page.click('text=About');
     await page.waitForTimeout(500);
 
-    const response = await request.get('/api/test/events/screen_view');
-    const events = await response.json();
+    const response = await request.get('/api/test/events');
+    const events: CapturedPayload[] = await response.json();
 
-    // Should have multiple screen_view events for each navigation
-    expect(events.length).toBeGreaterThanOrEqual(2);
+    // Get the latest payload
+    const latestPayload = events[events.length - 1].payload;
+
+    // Should have pageview actions for navigated pages
+    // Note: current_page won't be in actions until user leaves that page
+    expect(latestPayload.actions.length).toBeGreaterThanOrEqual(1);
+
+    // Check we have pageview actions
+    const pageviews = latestPayload.actions.filter((a) => a.type === 'pageview');
+    expect(pageviews.length).toBeGreaterThanOrEqual(1);
   });
 
   test('session resumes within timeout window', async ({ page, context }) => {
@@ -182,20 +218,18 @@ test.describe('Session Lifecycle', () => {
     // Session should be resumed (same ID)
     expect(sessionId2).toBe(sessionId1);
   });
-});
 
-// TypeScript declarations for window
-declare global {
-  interface Window {
-    SDK_READY: Promise<void>;
-    Staminads: {
-      getSessionId: () => string;
-      getVisitorId: () => string;
-      track: (name: string, data?: Record<string, unknown>) => void;
-      goal: (name: string, value?: number, currency?: string) => void;
-      setDimension: (index: number, value: string) => void;
-      getDimension: (index: number) => string | null;
-    };
-  }
-  const Staminads: Window['Staminads'];
-}
+  test('payload includes sdk_version', async ({ page, request }) => {
+    await page.goto('/test-page.html');
+    await page.waitForFunction(() => window.SDK_INITIALIZED);
+    await page.evaluate(() => window.SDK_READY);
+
+    await page.waitForTimeout(500);
+
+    const response = await request.get('/api/test/events');
+    const events: CapturedPayload[] = await response.json();
+
+    expect(events.length).toBeGreaterThanOrEqual(1);
+    expect(events[0].payload.sdk_version).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+});

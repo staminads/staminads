@@ -3,6 +3,8 @@
  *
  * Serves the SDK bundle and test fixtures, captures events sent by the SDK,
  * and provides test endpoints for retrieving/resetting captured data.
+ *
+ * Updated for V3 SessionPayload format with actions[] array.
  */
 
 import express from 'express';
@@ -14,14 +16,56 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// Store captured events
-interface CapturedEvent {
-  payload: unknown;
+// V3 SessionPayload types
+interface PageviewAction {
+  type: 'pageview';
+  path: string;
+  page_number: number;
+  duration: number;
+  scroll: number;
+  entered_at: number;
+  exited_at: number;
+}
+
+interface GoalAction {
+  type: 'goal';
+  name: string;
+  path: string;
+  page_number: number;
+  timestamp: number;
+  value?: number;
+  properties?: Record<string, string>;
+}
+
+type Action = PageviewAction | GoalAction;
+
+interface CurrentPage {
+  path: string;
+  page_number: number;
+  entered_at: number;
+  scroll: number;
+}
+
+interface SessionPayload {
+  workspace_id: string;
+  session_id: string;
+  actions: Action[];
+  current_page?: CurrentPage;
+  checkpoint?: number;
+  attributes?: Record<string, unknown>;
+  created_at: number;
+  updated_at: number;
+  sdk_version: string;
+}
+
+// Store captured session payloads
+interface CapturedPayload {
+  payload: SessionPayload;
   _received_at: number;
   _raw_body: string;
 }
 
-let events: CapturedEvent[] = [];
+let events: CapturedPayload[] = [];
 let responseDelay = 0;
 let shouldFail = false;
 let failCount = 0;
@@ -39,7 +83,7 @@ app.use('/dist', express.static(path.join(__dirname, '../../../dist')));
 // Serve test fixtures
 app.use('/', express.static(path.join(__dirname, '../fixtures')));
 
-// Capture events from SDK (SDK sends to /api/track)
+// Capture session payloads from SDK (SDK sends to /api/track)
 app.post('/api/track', async (req, res) => {
   // Apply configured delay
   if (responseDelay > 0) {
@@ -54,19 +98,20 @@ app.post('/api/track', async (req, res) => {
   }
 
   // Parse body - could be JSON object or JSON string
-  let payload: unknown;
+  let payload: SessionPayload;
   let rawBody: string;
 
   if (typeof req.body === 'string') {
     rawBody = req.body;
     try {
-      payload = JSON.parse(req.body);
+      payload = JSON.parse(req.body) as SessionPayload;
     } catch {
-      payload = req.body;
+      res.status(400).json({ error: 'Invalid JSON' });
+      return;
     }
   } else {
     rawBody = JSON.stringify(req.body);
-    payload = req.body;
+    payload = req.body as SessionPayload;
   }
 
   events.push({
@@ -75,7 +120,9 @@ app.post('/api/track', async (req, res) => {
     _raw_body: rawBody,
   });
 
-  res.json({ ok: true });
+  // Return checkpoint (number of actions received) for SDK acknowledgment
+  const checkpoint = payload.actions?.length ?? 0;
+  res.json({ ok: true, checkpoint });
 });
 
 // Get captured events for test assertions
@@ -83,21 +130,71 @@ app.get('/api/test/events', (_req, res) => {
   res.json(events);
 });
 
-// Get events filtered by name
-// Supports: event type (name), custom event name (event_name), goal action (goal_name)
-app.get('/api/test/events/:name', (req, res) => {
-  const { name } = req.params;
+// Get payloads filtered by action type or goal name
+// V3: Searches actions[] array for matching type or goal name
+app.get('/api/test/events/:type', (req, res) => {
+  const { type } = req.params;
   const filtered = events.filter((e) => {
-    const p = e.payload as Record<string, unknown>;
-    // Match by event type (screen_view, ping, goal)
-    if (p.name === name) return true;
-    // Match by custom event name (for trackEvent/track calls)
-    if (p.event_name === name) return true;
-    // Match by goal action
-    if (p.goal_name === name) return true;
+    const p = e.payload;
+    if (!p.actions) return false;
+
+    // Match by action type (pageview, goal)
+    if (p.actions.some((a: Action) => a.type === type)) return true;
+
+    // Match by goal name (for trackGoal calls)
+    if (p.actions.some((a: Action) => a.type === 'goal' && (a as GoalAction).name === type)) return true;
+
     return false;
   });
   res.json(filtered);
+});
+
+// Get all goals
+app.get('/api/test/goals', (_req, res) => {
+  const goals: { payload: SessionPayload; goal: GoalAction; _received_at: number }[] = [];
+  for (const e of events) {
+    if (!e.payload.actions) continue;
+    for (const action of e.payload.actions) {
+      if (action.type === 'goal') {
+        goals.push({
+          payload: e.payload,
+          goal: action as GoalAction,
+          _received_at: e._received_at,
+        });
+      }
+    }
+  }
+  res.json(goals);
+});
+
+// Get all pageviews
+app.get('/api/test/pageviews', (_req, res) => {
+  const pageviews: { payload: SessionPayload; pageview: PageviewAction; _received_at: number }[] = [];
+  for (const e of events) {
+    if (!e.payload.actions) continue;
+    for (const action of e.payload.actions) {
+      if (action.type === 'pageview') {
+        pageviews.push({
+          payload: e.payload,
+          pageview: action as PageviewAction,
+          _received_at: e._received_at,
+        });
+      }
+    }
+  }
+  res.json(pageviews);
+});
+
+// Get latest payload for a session
+app.get('/api/test/session/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  const sessionPayloads = events.filter((e) => e.payload.session_id === sessionId);
+  if (sessionPayloads.length === 0) {
+    res.status(404).json({ error: 'Session not found' });
+    return;
+  }
+  // Return the most recent payload
+  res.json(sessionPayloads[sessionPayloads.length - 1]);
 });
 
 // Clear events between tests

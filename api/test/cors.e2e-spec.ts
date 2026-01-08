@@ -84,20 +84,6 @@ describe('CORS Configuration', () => {
       );
       expect(response.headers['access-control-allow-credentials']).toBe('true');
     });
-
-    it('allows any origin for /api/track.batch', async () => {
-      const randomOrigin = 'https://another-customer.io';
-
-      const response = await request(app.getHttpServer())
-        .options('/api/track.batch')
-        .set('Origin', randomOrigin)
-        .set('Access-Control-Request-Method', 'POST');
-
-      expect(response.headers['access-control-allow-origin']).toBe(
-        randomOrigin,
-      );
-      expect(response.headers['access-control-allow-credentials']).toBe('true');
-    });
   });
 
   describe('Console endpoints (restricted)', () => {

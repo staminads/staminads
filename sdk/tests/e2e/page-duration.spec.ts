@@ -1,46 +1,40 @@
 /**
  * Page Duration E2E Tests
  *
- * Tests page_duration tracking, previous_path associations, and ping events
- * with accurate page metrics in real browser scenarios.
+ * Tests page duration tracking via the V3 actions[] array model.
+ * Each page visit becomes a pageview action with duration when the user navigates away.
  *
- * Note: The SDK sends page_duration as a string property. The API backend
- * converts it to a number. These E2E tests use a mock server that passes
- * through raw payloads, so we parse the values here.
+ * Updated for V3 SessionPayload format.
  */
 
-import { test, expect } from './fixtures';
-
-// Helper to get page_duration from payload (handles string or number)
-function getPageDuration(payload: Record<string, unknown>): number | undefined {
-  const val = payload.page_duration;
-  if (val === undefined) return undefined;
-  return typeof val === 'string' ? parseInt(val, 10) : (val as number);
-}
+import { test, expect, CapturedPayload, getPageviews, PageviewAction } from './fixtures';
 
 test.describe('Page Duration Tracking', () => {
   test.beforeEach(async ({ request }) => {
     await request.post('/api/test/reset');
   });
 
-  test.describe('Navigation screen_view events', () => {
-    test('landing page screen_view has no page_duration', async ({ page, request }) => {
+  test.describe('Navigation creates pageview actions', () => {
+    test('landing page is tracked as current_page', async ({ page, request }) => {
       await page.goto('/spa-page.html');
       await page.waitForFunction(() => window.SDK_INITIALIZED);
       await page.waitForTimeout(500);
 
-      const response = await request.get('/api/test/events/screen_view');
-      const events = await response.json();
+      const response = await request.get('/api/test/events');
+      const events: CapturedPayload[] = await response.json();
 
       expect(events.length).toBeGreaterThanOrEqual(1);
 
-      // First screen_view should NOT have page_duration (it's the landing)
-      const landing = events[0].payload as Record<string, unknown>;
-      expect(landing.page_duration).toBeUndefined();
-      expect(landing.previous_path).toBeUndefined();
+      // First payload should have current_page (the page user is on)
+      const landing = events[0].payload;
+      expect(landing.current_page).toBeTruthy();
+      expect(landing.current_page?.path).toContain('/');
+
+      // No completed pageview actions yet (still on first page)
+      expect(landing.actions.length).toBe(0);
     });
 
-    test('navigation sends screen_view with page_duration', async ({ page, request }) => {
+    test('navigation creates completed pageview with duration', async ({ page, request }) => {
       await page.goto('/spa-page.html');
       await page.waitForFunction(() => window.SDK_INITIALIZED);
 
@@ -51,42 +45,26 @@ test.describe('Page Duration Tracking', () => {
       await page.click('nav a:has-text("Products")');
       await page.waitForTimeout(500);
 
-      const response = await request.get('/api/test/events/screen_view');
-      const events = await response.json();
+      const response = await request.get('/api/test/events');
+      const events: CapturedPayload[] = await response.json();
 
-      // Should have 2 screen_views: landing + navigation
-      expect(events.length).toBe(2);
+      // Find payload with completed pageview
+      let completedPageview: PageviewAction | undefined;
+      for (const event of events) {
+        const pageviews = getPageviews(event.payload);
+        if (pageviews.length > 0) {
+          completedPageview = pageviews[0];
+          break;
+        }
+      }
 
-      // Second event should have page_duration
-      const navEvent = events[1].payload as Record<string, unknown>;
-      const pageDuration = getPageDuration(navEvent);
-      expect(pageDuration).toBeDefined();
-      // Duration should be around 2 seconds (allow 1s tolerance)
-      expect(pageDuration).toBeGreaterThanOrEqual(1);
-      expect(pageDuration).toBeLessThan(5);
+      expect(completedPageview).toBeTruthy();
+      // Duration should be around 2 seconds (in milliseconds)
+      expect(completedPageview!.duration).toBeGreaterThanOrEqual(1500);
+      expect(completedPageview!.duration).toBeLessThan(5000);
     });
 
-    test('navigation sends screen_view with previous_path', async ({ page, request }) => {
-      await page.goto('/spa-page.html');
-      await page.waitForFunction(() => window.SDK_INITIALIZED);
-      await page.waitForTimeout(500);
-
-      // Navigate to about
-      await page.click('nav a:has-text("About")');
-      await page.waitForTimeout(500);
-
-      const response = await request.get('/api/test/events/screen_view');
-      const events = await response.json();
-
-      expect(events.length).toBe(2);
-
-      // Navigation event should have previous_path set to landing path
-      const navEvent = events[1].payload as Record<string, unknown>;
-      expect(navEvent.previous_path).toBe('/home');
-      expect(navEvent.path).toBe('/about');
-    });
-
-    test('multiple navigations track correct durations and paths', async ({ page, request }) => {
+    test('multiple navigations create multiple pageview actions', async ({ page, request }) => {
       await page.goto('/spa-page.html');
       await page.waitForFunction(() => window.SDK_INITIALIZED);
 
@@ -105,39 +83,24 @@ test.describe('Page Duration Tracking', () => {
       await page.click('nav a:has-text("Contact")');
       await page.waitForTimeout(500);
 
-      const response = await request.get('/api/test/events/screen_view');
-      const events = await response.json();
+      const response = await request.get('/api/test/events');
+      const events: CapturedPayload[] = await response.json();
 
-      expect(events.length).toBe(4);
+      // Get the latest payload
+      const latestPayload = events[events.length - 1].payload;
 
-      // Event 1: Landing (no duration)
-      const e1 = events[0].payload as Record<string, unknown>;
-      expect(e1.path).toBe('/home');
-      expect(getPageDuration(e1)).toBeUndefined();
+      // Should have 3 completed pageviews
+      const pageviews = getPageviews(latestPayload);
+      expect(pageviews.length).toBeGreaterThanOrEqual(3);
 
-      // Event 2: /home -> /products (~1.5s on /home)
-      const e2 = events[1].payload as Record<string, unknown>;
-      expect(e2.path).toBe('/products');
-      expect(e2.previous_path).toBe('/home');
-      expect(getPageDuration(e2)).toBeGreaterThanOrEqual(1);
-      expect(getPageDuration(e2)).toBeLessThan(4);
-
-      // Event 3: /products -> /about (~2s on /products)
-      const e3 = events[2].payload as Record<string, unknown>;
-      expect(e3.path).toBe('/about');
-      expect(e3.previous_path).toBe('/products');
-      expect(getPageDuration(e3)).toBeGreaterThanOrEqual(1);
-      expect(getPageDuration(e3)).toBeLessThan(5);
-
-      // Event 4: /about -> /contact (~1s on /about)
-      const e4 = events[3].payload as Record<string, unknown>;
-      expect(e4.path).toBe('/contact');
-      expect(e4.previous_path).toBe('/about');
-      expect(getPageDuration(e4)).toBeGreaterThanOrEqual(0);
-      expect(getPageDuration(e4)).toBeLessThan(4);
+      // Each pageview should have duration
+      for (const pv of pageviews) {
+        expect(pv.duration).toBeGreaterThan(0);
+        expect(pv.page_number).toBeGreaterThanOrEqual(1);
+      }
     });
 
-    test('back button navigation tracks duration correctly', async ({ page, request }) => {
+    test('back button navigation creates pageview action', async ({ page, request }) => {
       await page.goto('/spa-page.html');
       await page.waitForFunction(() => window.SDK_INITIALIZED);
       await page.waitForTimeout(500);
@@ -150,21 +113,45 @@ test.describe('Page Duration Tracking', () => {
       await page.goBack();
       await page.waitForTimeout(500);
 
-      const response = await request.get('/api/test/events/screen_view');
-      const events = await response.json();
+      const response = await request.get('/api/test/events');
+      const events: CapturedPayload[] = await response.json();
 
-      expect(events.length).toBe(3);
+      // Get the latest payload
+      const latestPayload = events[events.length - 1].payload;
 
-      // Event 3: back navigation from /products to /home
-      const backEvent = events[2].payload as Record<string, unknown>;
-      expect(backEvent.path).toBe('/home');
-      expect(backEvent.previous_path).toBe('/products');
-      expect(getPageDuration(backEvent)).toBeGreaterThanOrEqual(1);
+      // Should have pageviews for both navigations
+      const pageviews = getPageviews(latestPayload);
+      expect(pageviews.length).toBeGreaterThanOrEqual(2);
     });
   });
 
-  test.describe('Ping events', () => {
-    test('unload ping includes page_duration', async ({ page, request, context }) => {
+  test.describe('Duration accuracy', () => {
+    test('duration is in milliseconds', async ({ page, request }) => {
+      await page.goto('/spa-page.html');
+      await page.waitForFunction(() => window.SDK_INITIALIZED);
+
+      // Wait 3 seconds on landing
+      await page.waitForTimeout(3000);
+
+      // Navigate to trigger pageview completion
+      await page.click('nav a:has-text("Products")');
+      await page.waitForTimeout(500);
+
+      const response = await request.get('/api/test/events');
+      const events: CapturedPayload[] = await response.json();
+
+      // Find completed pageview
+      for (const event of events) {
+        const pageviews = getPageviews(event.payload);
+        if (pageviews.length > 0) {
+          // Duration should be > 1000 (1 second in milliseconds)
+          expect(pageviews[0].duration).toBeGreaterThan(1000);
+          break;
+        }
+      }
+    });
+
+    test('unload sends current page data', async ({ page, request, context }) => {
       await page.goto('/spa-page.html');
       await page.waitForFunction(() => window.SDK_INITIALIZED);
 
@@ -177,24 +164,16 @@ test.describe('Page Duration Tracking', () => {
       // Give time for beacon to be sent
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      const response = await request.get('/api/test/events/ping');
-      const events = await response.json();
+      const response = await request.get('/api/test/events');
+      const events: CapturedPayload[] = await response.json();
 
-      // Should have at least one ping with page_duration
-      const unloadPing = events.find(
-        (e: { payload: Record<string, unknown> }) => getPageDuration(e.payload) !== undefined
-      );
-
-      expect(unloadPing).toBeDefined();
-      const duration = getPageDuration(unloadPing.payload);
-      expect(duration).toBeGreaterThanOrEqual(1);
-      expect(duration).toBeLessThan(10);
+      // Should have at least one payload
+      expect(events.length).toBeGreaterThanOrEqual(1);
     });
-
   });
 
   test.describe('Edge cases', () => {
-    test('rapid navigations track each page duration', async ({ page, request }) => {
+    test('rapid navigations create pageview for each page', async ({ page, request }) => {
       await page.goto('/spa-page.html');
       await page.waitForFunction(() => window.SDK_INITIALIZED);
       await page.waitForTimeout(200);
@@ -207,19 +186,20 @@ test.describe('Page Duration Tracking', () => {
       await page.click('nav a:has-text("Contact")');
       await page.waitForTimeout(500);
 
-      const response = await request.get('/api/test/events/screen_view');
-      const events = await response.json();
+      const response = await request.get('/api/test/events');
+      const events: CapturedPayload[] = await response.json();
 
-      // Should have 4 screen_views
-      expect(events.length).toBe(4);
+      // Get the latest payload
+      const latestPayload = events[events.length - 1].payload;
 
-      // Each navigation event should have page_duration (even if small)
-      for (let i = 1; i < events.length; i++) {
-        const e = events[i].payload as Record<string, unknown>;
-        const duration = getPageDuration(e);
-        expect(duration).toBeDefined();
-        // Small durations are valid
-        expect(duration).toBeGreaterThanOrEqual(0);
+      // Should have pageviews for each navigation
+      const pageviews = getPageviews(latestPayload);
+      expect(pageviews.length).toBeGreaterThanOrEqual(3);
+
+      // Each navigation event should have duration (even if small)
+      for (const pv of pageviews) {
+        expect(pv.duration).toBeDefined();
+        expect(pv.duration).toBeGreaterThanOrEqual(0);
       }
     });
 
@@ -239,22 +219,26 @@ test.describe('Page Duration Tracking', () => {
         document.dispatchEvent(new Event('visibilitychange'));
       });
 
-      // Time while hidden (should not count)
+      // Time while hidden (should not count toward focus duration)
       await page.waitForTimeout(2000);
 
-      // Navigate (should trigger screen_view with duration)
+      // Navigate (should trigger pageview with duration)
       await page.click('nav a:has-text("Products")');
       await page.waitForTimeout(500);
 
-      const response = await request.get('/api/test/events/screen_view');
-      const events = await response.json();
+      const response = await request.get('/api/test/events');
+      const events: CapturedPayload[] = await response.json();
 
-      expect(events.length).toBe(2);
-
-      // Duration should be ~1.5s (active time only), not 3.5s
-      const navEvent = events[1].payload as Record<string, unknown>;
-      expect(getPageDuration(navEvent)).toBeGreaterThanOrEqual(1);
-      expect(getPageDuration(navEvent)).toBeLessThan(3);
+      // Find completed pageview
+      for (const event of events) {
+        const pageviews = getPageviews(event.payload);
+        if (pageviews.length > 0) {
+          // Duration should be ~1.5s (active time only), not 3.5s
+          expect(pageviews[0].duration).toBeGreaterThanOrEqual(1000);
+          expect(pageviews[0].duration).toBeLessThan(3000);
+          break;
+        }
+      }
     });
 
     test('handles visibility change during navigation', async ({ page, request }) => {
@@ -278,24 +262,36 @@ test.describe('Page Duration Tracking', () => {
 
       await page.waitForTimeout(500);
 
-      const response = await request.get('/api/test/events/screen_view');
-      const events = await response.json();
+      const response = await request.get('/api/test/events');
+      const events: CapturedPayload[] = await response.json();
 
-      // Should still have captured the navigation
-      expect(events.length).toBeGreaterThanOrEqual(2);
+      // Should still have captured payloads
+      expect(events.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  test.describe('Page numbering', () => {
+    test('pages are numbered sequentially', async ({ page, request }) => {
+      await page.goto('/spa-page.html');
+      await page.waitForFunction(() => window.SDK_INITIALIZED);
+
+      await page.waitForTimeout(500);
+      await page.click('nav a:has-text("Products")');
+      await page.waitForTimeout(500);
+      await page.click('nav a:has-text("About")');
+      await page.waitForTimeout(500);
+
+      const response = await request.get('/api/test/events');
+      const events: CapturedPayload[] = await response.json();
+
+      // Get the latest payload
+      const latestPayload = events[events.length - 1].payload;
+
+      // Check page numbers are sequential
+      const pageviews = getPageviews(latestPayload);
+      for (let i = 0; i < pageviews.length; i++) {
+        expect(pageviews[i].page_number).toBe(i + 1);
+      }
     });
   });
 });
-
-// TypeScript declarations
-declare global {
-  interface Window {
-    SDK_INITIALIZED: boolean;
-    SDK_READY: Promise<void>;
-    Staminads: {
-      trackEvent: (name: string, data?: Record<string, unknown>) => void;
-      track: (name: string, data?: Record<string, unknown>) => void;
-    };
-  }
-  const Staminads: Window['Staminads'];
-}

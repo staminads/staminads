@@ -1054,7 +1054,7 @@ interface GoalData {
 
 ## 9. Payload Format (Backend Compatible)
 
-The SDK sends events to `POST /api/track` or `POST /api/track.batch`.
+The SDK sends session payloads to `POST /api/track`.
 
 ### 9.1 Event Payload (TrackEventDto)
 
@@ -1131,16 +1131,7 @@ interface TrackEventPayload {
 | `scroll` | Scroll milestone | max_scroll |
 | `goal` | trackGoal() call | properties.action, properties.value |
 
-### 9.3 Batch Endpoint
-
-```typescript
-// POST /api/track.batch
-interface BatchPayload {
-  events: TrackEventPayload[];  // All must have same workspace_id
-}
-```
-
-### 9.4 Goal via Properties
+### 9.3 Goal via Properties
 
 ```typescript
 // Goals are tracked as events with name='goal'

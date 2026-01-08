@@ -447,6 +447,15 @@ function generateSessionEvents(
     | 'page_duration'
     | 'previous_path'
     | 'max_scroll'
+    // V3 per-event fields (set when creating each event)
+    | 'entered_at'
+    | 'exited_at'
+    | 'goal_timestamp'
+    | 'page_number'
+    | 'dedup_token'
+    | '_version'
+    | 'goal_name'
+    | 'goal_value'
   > = {
     session_id: sessionId,
     workspace_id: workspaceId,
@@ -502,6 +511,7 @@ function generateSessionEvents(
   // Event 1: screen_view (landing page)
   // Session start timestamp (SDK session creation time)
   const sessionCreatedAt = toClickHouseDateTime(sessionStart);
+  const version = Date.now();
 
   // SDK sends cumulative focus duration with each event
   // duration variable = total session duration in seconds
@@ -516,6 +526,15 @@ function generateSessionEvents(
     page_duration: 0, // v3: no previous page yet
     previous_path: '', // v3: no previous path for landing
     max_scroll: 0,
+    // V3 required fields
+    page_number: 1,
+    dedup_token: `${sessionId}_pv_1`,
+    _version: version,
+    goal_name: '',
+    goal_value: 0,
+    entered_at: toClickHouseDateTime(sessionStart),
+    exited_at: toClickHouseDateTime(sessionStart),
+    goal_timestamp: '',
   });
 
   // Event 2: scroll (50% chance, happens after some time)
@@ -533,6 +552,15 @@ function generateSessionEvents(
       page_duration: 0, // v3: scroll events don't carry page duration
       previous_path: '', // v3: scroll events don't carry previous path
       max_scroll: generateMaxScroll(duration),
+      // V3 required fields
+      page_number: 1,
+      dedup_token: `${sessionId}_scroll_1`,
+      _version: version,
+      goal_name: '',
+      goal_value: 0,
+      entered_at: '',
+      exited_at: '',
+      goal_timestamp: '',
     });
   }
 
@@ -542,6 +570,9 @@ function generateSessionEvents(
     const secondPageTime = new Date(sessionStart.getTime() + duration * 500); // 50% into session
     const elapsedSeconds = Math.round(duration * 0.5);
     const firstPageDuration = Math.round(duration * 0.5); // Time spent on first page
+    const firstPageExitTime = new Date(
+      sessionStart.getTime() + firstPageDuration * 1000,
+    );
     events.push({
       ...baseProps,
       received_at: toClickHouseDateTime(secondPageTime),
@@ -553,6 +584,15 @@ function generateSessionEvents(
       page_duration: firstPageDuration, // v3: time spent on previous page
       previous_path: page.path, // v3: previous page was landing page
       max_scroll: generateMaxScroll(duration / 2),
+      // V3 required fields
+      page_number: 2,
+      dedup_token: `${sessionId}_pv_2`,
+      _version: version,
+      goal_name: '',
+      goal_value: 0,
+      entered_at: toClickHouseDateTime(firstPageExitTime),
+      exited_at: toClickHouseDateTime(secondPageTime),
+      goal_timestamp: '',
     });
   }
 
@@ -570,6 +610,15 @@ function generateSessionEvents(
       page_duration: 0, // v3: scroll events don't carry page duration
       previous_path: '', // v3: scroll events don't carry previous path
       max_scroll: generateMaxScroll(duration),
+      // V3 required fields
+      page_number: events.filter((e) => e.name === 'screen_view').length,
+      dedup_token: `${sessionId}_scroll_final`,
+      _version: version,
+      goal_name: '',
+      goal_value: 0,
+      entered_at: '',
+      exited_at: '',
+      goal_timestamp: '',
     });
   }
 

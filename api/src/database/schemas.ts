@@ -241,6 +241,11 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
       dedup_token String DEFAULT '',
       sdk_version String DEFAULT '',
       properties Map(String, String) DEFAULT map(),
+      -- SDK timestamps (pageview)
+      entered_at DateTime64(3),
+      exited_at DateTime64(3),
+      -- SDK timestamp (goal)
+      goal_timestamp DateTime64(3),
       INDEX idx_name name TYPE bloom_filter(0.01) GRANULARITY 1,
       INDEX idx_browser_type browser_type TYPE set(10) GRANULARITY 1
     ) ENGINE = MergeTree()
@@ -442,8 +447,9 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
       e.workspace_id,
       e.path,
       e.landing_page as full_url,
-      subtractSeconds(e.updated_at, intDiv(e.page_duration, 1000)) as entered_at,
-      e.updated_at as exited_at,
+      -- Use actual SDK timestamps instead of calculated approximations
+      e.entered_at as entered_at,
+      e.exited_at as exited_at,
       e.page_duration as duration,
       e.max_scroll,
       e.page_number,

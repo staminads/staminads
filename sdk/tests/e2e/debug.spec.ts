@@ -1,3 +1,9 @@
+/**
+ * Debug E2E Tests
+ *
+ * Debug/diagnostics tests for bot detection and SDK initialization.
+ */
+
 import { test, expect } from './fixtures';
 
 test('debug bot detection', async ({ page }) => {
@@ -57,5 +63,30 @@ test('debug bot detection', async ({ page }) => {
   // Print captured logs
   console.log('Console logs:', logs);
 
-  expect(true).toBe(true);
+  // Stealth mode should have bypassed bot detection
+  expect(initialized).toBe(true);
+});
+
+test('SDK exposes debug method', async ({ page }) => {
+  await page.goto('/test-page.html');
+  await page.waitForFunction(() => window.SDK_INITIALIZED);
+  await page.evaluate(() => window.SDK_READY);
+
+  // Check debug() method returns info
+  const debugInfo = await page.evaluate(() => Staminads.debug());
+
+  expect(debugInfo).toBeTruthy();
+  expect(typeof debugInfo).toBe('object');
+});
+
+test('SDK config is accessible', async ({ page }) => {
+  await page.goto('/test-page.html');
+  await page.waitForFunction(() => window.SDK_INITIALIZED);
+  await page.evaluate(() => window.SDK_READY);
+
+  // Check getConfig() method
+  const config = await page.evaluate(() => Staminads.getConfig());
+
+  expect(config).toBeTruthy();
+  expect(config?.workspace_id).toBe('test_workspace');
 });

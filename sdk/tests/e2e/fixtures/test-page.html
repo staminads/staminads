@@ -89,28 +89,28 @@
       document.getElementById('status').textContent = 'SDK Status: Error - ' + err.message;
     });
 
-    function trackCustomEvent() {
-      Staminads.trackEvent('button_click', { button: 'custom' });
+    async function trackCustomEvent() {
+      await Staminads.trackGoal({ action: 'button_click', properties: { button: 'custom' } });
       updateStatus('Tracked: button_click');
     }
 
-    function trackGoal() {
-      Staminads.trackGoal({ action: 'signup', value: 99.99, currency: 'USD' });
+    async function trackGoal() {
+      await Staminads.trackGoal({ action: 'signup', value: 99.99, currency: 'USD' });
       updateStatus('Tracked: goal (signup, $99.99)');
     }
 
-    function setDimension() {
-      Staminads.setDimension(1, 'test_value_' + Date.now());
+    async function setDimension() {
+      await Staminads.setDimension(1, 'test_value_' + Date.now());
       updateStatus('Set dimension 1');
     }
 
-    function showSessionId() {
-      const sessionId = Staminads.getSessionId();
+    async function showSessionId() {
+      const sessionId = await Staminads.getSessionId();
       updateStatus('Session ID: ' + sessionId);
     }
 
-    function showVisitorId() {
-      const visitorId = Staminads.getVisitorId();
+    async function showVisitorId() {
+      const visitorId = await Staminads.getVisitorId();
       updateStatus('Visitor ID: ' + visitorId);
     }
 

@@ -83,9 +83,16 @@ export interface TrackingEvent {
   properties?: Record<string, string>;
 
   // V3 Session Payload fields
-  dedup_token?: string; // Deterministic token for deduplication
-  page_number?: number; // Page sequence within session
-  _version?: number; // Server timestamp for conflict resolution
-  goal_name?: string; // Goal identifier
-  goal_value?: number; // Goal value (e.g., purchase amount)
+  dedup_token: string; // Deterministic token for deduplication
+  page_number: number; // Page sequence within session
+  _version: number; // Server timestamp for conflict resolution
+  goal_name: string; // Goal identifier (empty for pageviews)
+  goal_value: number; // Goal value (0 for pageviews)
+
+  // Pageview timestamps (from SDK)
+  entered_at: string; // When user entered the page (ClickHouse DateTime)
+  exited_at: string; // When user exited the page (ClickHouse DateTime)
+
+  // Goal timestamp (from SDK)
+  goal_timestamp: string; // When goal was triggered (ClickHouse DateTime)
 }

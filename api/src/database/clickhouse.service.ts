@@ -239,30 +239,4 @@ export class ClickHouseService implements OnModuleInit, OnModuleDestroy {
       query_params: params,
     });
   }
-
-  // ============================================
-  // Legacy methods for backward compatibility
-  // These will be removed after migration
-  // ============================================
-
-  /**
-   * @deprecated Use querySystem or queryWorkspace instead
-   */
-  async query<T>(sql: string, params?: Record<string, unknown>): Promise<T[]> {
-    return this.querySystem<T>(sql, params);
-  }
-
-  /**
-   * @deprecated Use insertSystem or insertWorkspace instead
-   */
-  async insert<T>(table: string, values: T[]): Promise<void> {
-    return this.insertSystem<T>(table, values);
-  }
-
-  /**
-   * @deprecated Use commandSystem or commandWorkspace instead
-   */
-  async command(sql: string): Promise<void> {
-    return this.commandSystem(sql);
-  }
 }
