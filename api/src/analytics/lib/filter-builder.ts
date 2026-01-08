@@ -1,5 +1,6 @@
 import { FilterDto } from '../dto/analytics-query.dto';
 import { DIMENSIONS } from '../constants/dimensions';
+import { AnalyticsTable } from '../constants/tables';
 
 export interface FilterResult {
   sql: string;
@@ -9,6 +10,7 @@ export interface FilterResult {
 export function buildFilters(
   filters: FilterDto[],
   paramPrefix = 'f',
+  table: AnalyticsTable = 'sessions',
 ): FilterResult {
   if (!filters || filters.length === 0) {
     return { sql: '', params: {} };
@@ -22,6 +24,11 @@ export function buildFilters(
     const dimension = DIMENSIONS[filter.dimension];
     if (!dimension) {
       throw new Error(`Unknown dimension: ${filter.dimension}`);
+    }
+    if (!dimension.tables.includes(table)) {
+      throw new Error(
+        `Dimension '${filter.dimension}' is not available for table '${table}'`,
+      );
     }
 
     const col = dimension.column;

@@ -15,6 +15,7 @@ import {
 } from './lib/date-utils';
 import { METRICS, MetricContext } from './constants/metrics';
 import { DIMENSIONS } from './constants/dimensions';
+import { AnalyticsTable } from './constants/tables';
 import { Workspace } from '../workspaces/entities/workspace.entity';
 import { isoToClickHouseDateTime } from '../common/utils/datetime.util';
 
@@ -101,10 +102,18 @@ export class AnalyticsService {
     workspace: Workspace,
     tz: string,
   ): Promise<AnalyticsResponse> {
+    // Get table (default to sessions)
+    const table: AnalyticsTable = dto.table || 'sessions';
+
     // Validate metrics
     for (const metric of dto.metrics) {
       if (!METRICS[metric]) {
         throw new BadRequestException(`Unknown metric: ${metric}`);
+      }
+      if (!METRICS[metric].tables.includes(table)) {
+        throw new BadRequestException(
+          `Metric '${metric}' is not available for table '${table}'`,
+        );
       }
     }
 
@@ -112,6 +121,11 @@ export class AnalyticsService {
     for (const dimension of dto.dimensions || []) {
       if (!DIMENSIONS[dimension]) {
         throw new BadRequestException(`Unknown dimension: ${dimension}`);
+      }
+      if (!DIMENSIONS[dimension].tables.includes(table)) {
+        throw new BadRequestException(
+          `Dimension '${dimension}' is not available for table '${table}'`,
+        );
       }
     }
 
@@ -309,12 +323,16 @@ export class AnalyticsService {
     };
   }
 
-  getAvailableMetrics() {
-    return Object.values(METRICS);
+  getAvailableMetrics(table?: AnalyticsTable) {
+    const all = Object.values(METRICS);
+    return table ? all.filter((m) => m.tables.includes(table)) : all;
   }
 
-  getAvailableDimensions() {
-    return DIMENSIONS;
+  getAvailableDimensions(table?: AnalyticsTable) {
+    if (!table) return DIMENSIONS;
+    return Object.fromEntries(
+      Object.entries(DIMENSIONS).filter(([, d]) => d.tables.includes(table)),
+    );
   }
 
   async extremes(dto: ExtremesQueryDto): Promise<ExtremesResponse> {
@@ -322,15 +340,28 @@ export class AnalyticsService {
     const workspace = await this.workspacesService.get(dto.workspace_id);
     const tz = dto.timezone || workspace.timezone || 'UTC';
 
+    // Get table (default to sessions)
+    const table: AnalyticsTable = dto.table || 'sessions';
+
     // Validate metric
     if (!METRICS[dto.metric]) {
       throw new BadRequestException(`Unknown metric: ${dto.metric}`);
+    }
+    if (!METRICS[dto.metric].tables.includes(table)) {
+      throw new BadRequestException(
+        `Metric '${dto.metric}' is not available for table '${table}'`,
+      );
     }
 
     // Validate dimensions
     for (const dim of dto.groupBy) {
       if (!DIMENSIONS[dim]) {
         throw new BadRequestException(`Unknown dimension: ${dim}`);
+      }
+      if (!DIMENSIONS[dim].tables.includes(table)) {
+        throw new BadRequestException(
+          `Dimension '${dim}' is not available for table '${table}'`,
+        );
       }
     }
 
@@ -417,6 +448,7 @@ export class AnalyticsService {
   ): string {
     const parts = [
       dto.workspace_id,
+      dto.table || 'sessions',
       dto.metrics.sort().join(','),
       (dto.dimensions || []).sort().join(','),
       dates.start,

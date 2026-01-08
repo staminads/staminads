@@ -303,6 +303,167 @@ describe('buildAnalyticsQuery', () => {
     });
     expect(sql).not.toContain('HAVING');
   });
+
+  describe('table parameter', () => {
+    it('defaults to sessions table', () => {
+      const { sql } = buildAnalyticsQuery(baseQuery);
+      expect(sql).toContain('FROM sessions FINAL');
+    });
+
+    it('queries sessions table explicitly', () => {
+      const { sql } = buildAnalyticsQuery({
+        ...baseQuery,
+        table: 'sessions',
+      });
+      expect(sql).toContain('FROM sessions FINAL');
+      expect(sql).toContain('created_at >= toDateTime64');
+    });
+
+    it('queries pages table without FINAL modifier', () => {
+      const { sql } = buildAnalyticsQuery({
+        ...baseQuery,
+        table: 'pages',
+        metrics: ['page_count'],
+      });
+      expect(sql).toContain('FROM pages');
+      expect(sql).not.toContain('FINAL');
+      expect(sql).toContain('entered_at >= toDateTime64');
+    });
+
+    it('uses entered_at for pages table date filtering', () => {
+      const { sql } = buildAnalyticsQuery({
+        ...baseQuery,
+        table: 'pages',
+        metrics: ['page_count'],
+      });
+      expect(sql).toContain(
+        'entered_at >= toDateTime64({date_start:String}, 3)',
+      );
+      expect(sql).toContain('entered_at <= toDateTime64({date_end:String}, 3)');
+    });
+
+    it('uses created_at for sessions table date filtering', () => {
+      const { sql } = buildAnalyticsQuery({
+        ...baseQuery,
+        table: 'sessions',
+      });
+      expect(sql).toContain(
+        'created_at >= toDateTime64({date_start:String}, 3)',
+      );
+      expect(sql).toContain('created_at <= toDateTime64({date_end:String}, 3)');
+    });
+
+    it('applies granularity with correct date column for pages', () => {
+      const { sql } = buildAnalyticsQuery({
+        ...baseQuery,
+        table: 'pages',
+        metrics: ['page_count'],
+        dateRange: {
+          start: '2025-12-01',
+          end: '2025-12-28',
+          granularity: 'day',
+        },
+      });
+      expect(sql).toContain('toDate(entered_at) as date_day');
+    });
+
+    it('applies timezone to granularity for pages table', () => {
+      const { sql } = buildAnalyticsQuery(
+        {
+          ...baseQuery,
+          table: 'pages',
+          metrics: ['page_count'],
+          dateRange: {
+            start: '2025-12-01',
+            end: '2025-12-28',
+            granularity: 'day',
+          },
+        },
+        'America/New_York',
+      );
+      expect(sql).toContain(
+        "toDate(entered_at, 'America/New_York') as date_day",
+      );
+    });
+
+    it('throws for sessions metric on pages table', () => {
+      expect(() =>
+        buildAnalyticsQuery({
+          ...baseQuery,
+          table: 'pages',
+          metrics: ['sessions'],
+        }),
+      ).toThrow("Metric 'sessions' is not available for table 'pages'");
+    });
+
+    it('throws for page_count metric on sessions table', () => {
+      expect(() =>
+        buildAnalyticsQuery({
+          ...baseQuery,
+          table: 'sessions',
+          metrics: ['page_count'],
+        }),
+      ).toThrow("Metric 'page_count' is not available for table 'sessions'");
+    });
+
+    it('throws for sessions dimension on pages table', () => {
+      expect(() =>
+        buildAnalyticsQuery({
+          ...baseQuery,
+          table: 'pages',
+          metrics: ['page_count'],
+          dimensions: ['utm_source'],
+        }),
+      ).toThrow("Dimension 'utm_source' is not available for table 'pages'");
+    });
+
+    it('throws for pages dimension on sessions table', () => {
+      expect(() =>
+        buildAnalyticsQuery({
+          ...baseQuery,
+          table: 'sessions',
+          metrics: ['sessions'],
+          dimensions: ['page_path'],
+        }),
+      ).toThrow("Dimension 'page_path' is not available for table 'sessions'");
+    });
+
+    it('builds query with page-specific metrics', () => {
+      const { sql } = buildAnalyticsQuery({
+        ...baseQuery,
+        table: 'pages',
+        metrics: ['page_count', 'page_duration', 'page_scroll'],
+      });
+      expect(sql).toContain('count() as page_count');
+      expect(sql).toContain('round(median(duration), 1) as page_duration');
+      expect(sql).toContain('round(median(max_scroll), 1) as page_scroll');
+    });
+
+    it('builds query with page-specific dimensions', () => {
+      const { sql } = buildAnalyticsQuery({
+        ...baseQuery,
+        table: 'pages',
+        metrics: ['page_count'],
+        dimensions: ['page_path', 'is_landing_page'],
+      });
+      expect(sql).toContain('path');
+      expect(sql).toContain('is_landing');
+      expect(sql).toMatch(/GROUP BY.*path.*is_landing/s);
+    });
+
+    it('applies filters with correct table validation', () => {
+      const { sql, params } = buildAnalyticsQuery({
+        ...baseQuery,
+        table: 'pages',
+        metrics: ['page_count'],
+        filters: [
+          { dimension: 'page_path', operator: 'equals', values: ['/products'] },
+        ],
+      });
+      expect(sql).toContain('path = {f0:String}');
+      expect(params.f0).toBe('/products');
+    });
+  });
 });
 
 describe('buildExtremesQuery', () => {
@@ -412,5 +573,89 @@ describe('buildExtremesQuery', () => {
         groupBy: ['unknown_dimension'],
       }),
     ).toThrow('Unknown dimension: unknown_dimension');
+  });
+
+  describe('table parameter', () => {
+    it('defaults to sessions table', () => {
+      const { sql } = buildExtremesQuery(baseExtremesQuery);
+      expect(sql).toContain('FROM sessions FINAL');
+    });
+
+    it('queries pages table without FINAL modifier', () => {
+      const { sql } = buildExtremesQuery({
+        ...baseExtremesQuery,
+        table: 'pages',
+        metric: 'page_duration',
+        groupBy: ['page_path'],
+      });
+      expect(sql).toContain('FROM pages');
+      expect(sql).not.toContain('FINAL');
+    });
+
+    it('uses entered_at for pages table date filtering', () => {
+      const { sql } = buildExtremesQuery({
+        ...baseExtremesQuery,
+        table: 'pages',
+        metric: 'page_duration',
+        groupBy: ['page_path'],
+      });
+      expect(sql).toContain(
+        'entered_at >= toDateTime64({date_start:String}, 3)',
+      );
+      expect(sql).toContain('entered_at <= toDateTime64({date_end:String}, 3)');
+    });
+
+    it('throws for sessions metric on pages table', () => {
+      expect(() =>
+        buildExtremesQuery({
+          ...baseExtremesQuery,
+          table: 'pages',
+          metric: 'sessions',
+          groupBy: ['page_path'],
+        }),
+      ).toThrow("Metric 'sessions' is not available for table 'pages'");
+    });
+
+    it('throws for page_duration metric on sessions table', () => {
+      expect(() =>
+        buildExtremesQuery({
+          ...baseExtremesQuery,
+          table: 'sessions',
+          metric: 'page_duration',
+        }),
+      ).toThrow("Metric 'page_duration' is not available for table 'sessions'");
+    });
+
+    it('throws for sessions dimension on pages table', () => {
+      expect(() =>
+        buildExtremesQuery({
+          ...baseExtremesQuery,
+          table: 'pages',
+          metric: 'page_duration',
+          groupBy: ['utm_source'],
+        }),
+      ).toThrow("Dimension 'utm_source' is not available for table 'pages'");
+    });
+
+    it('throws for pages dimension on sessions table', () => {
+      expect(() =>
+        buildExtremesQuery({
+          ...baseExtremesQuery,
+          table: 'sessions',
+          groupBy: ['page_path'],
+        }),
+      ).toThrow("Dimension 'page_path' is not available for table 'sessions'");
+    });
+
+    it('builds extremes query with page-specific metrics', () => {
+      const { sql } = buildExtremesQuery({
+        ...baseExtremesQuery,
+        table: 'pages',
+        metric: 'page_duration',
+        groupBy: ['page_path'],
+      });
+      expect(sql).toContain('round(median(duration), 1) as value');
+      expect(sql).toContain('GROUP BY path');
+    });
   });
 });

@@ -7,6 +7,7 @@ import {
   Min,
   ArrayMinSize,
   Validate,
+  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
@@ -14,6 +15,8 @@ import {
   FilterDto,
   DateRangeValidator,
 } from './analytics-query.dto';
+import type { AnalyticsTable } from '../constants/tables';
+import { ANALYTICS_TABLES } from '../constants/tables';
 
 export class ExtremesQueryDto {
   @IsString()
@@ -46,6 +49,10 @@ export class ExtremesQueryDto {
   @IsNumber()
   @Min(1)
   havingMinSessions?: number;
+
+  @IsOptional()
+  @IsIn(ANALYTICS_TABLES)
+  table?: AnalyticsTable;
 }
 
 export interface ExtremesResponse {

@@ -444,6 +444,8 @@ function generateSessionEvents(
     | 'name'
     | 'path'
     | 'duration'
+    | 'page_duration'
+    | 'previous_path'
     | 'max_scroll'
   > = {
     session_id: sessionId,
@@ -511,6 +513,8 @@ function generateSessionEvents(
     name: 'screen_view',
     path: page.path,
     duration: 0, // First event has 0 duration
+    page_duration: 0, // v3: no previous page yet
+    previous_path: '', // v3: no previous path for landing
     max_scroll: 0,
   });
 
@@ -526,6 +530,8 @@ function generateSessionEvents(
       name: 'scroll',
       path: page.path,
       duration: elapsedSeconds, // Cumulative duration at this point
+      page_duration: 0, // v3: scroll events don't carry page duration
+      previous_path: '', // v3: scroll events don't carry previous path
       max_scroll: generateMaxScroll(duration),
     });
   }
@@ -535,6 +541,7 @@ function generateSessionEvents(
     const secondPage = selectPage(launchPeriod);
     const secondPageTime = new Date(sessionStart.getTime() + duration * 500); // 50% into session
     const elapsedSeconds = Math.round(duration * 0.5);
+    const firstPageDuration = Math.round(duration * 0.5); // Time spent on first page
     events.push({
       ...baseProps,
       received_at: toClickHouseDateTime(secondPageTime),
@@ -543,6 +550,8 @@ function generateSessionEvents(
       name: 'screen_view',
       path: secondPage.path,
       duration: elapsedSeconds, // Cumulative duration at this point
+      page_duration: firstPageDuration, // v3: time spent on previous page
+      previous_path: page.path, // v3: previous page was landing page
       max_scroll: generateMaxScroll(duration / 2),
     });
   }
@@ -558,6 +567,8 @@ function generateSessionEvents(
       name: 'scroll',
       path: events[events.length - 1].path, // Same as last page
       duration: duration, // Final cumulative duration (full session)
+      page_duration: 0, // v3: scroll events don't carry page duration
+      previous_path: '', // v3: scroll events don't carry previous path
       max_scroll: generateMaxScroll(duration),
     });
   }

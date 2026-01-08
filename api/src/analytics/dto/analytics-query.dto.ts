@@ -14,6 +14,8 @@ import {
   Validate,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import type { AnalyticsTable } from '../constants/tables';
+import { ANALYTICS_TABLES } from '../constants/tables';
 
 export const FILTER_OPERATORS = [
   'equals',
@@ -169,4 +171,8 @@ export class AnalyticsQueryDto {
   @IsNumber()
   @Min(1)
   havingMinSessions?: number;
+
+  @IsOptional()
+  @IsIn(ANALYTICS_TABLES)
+  table?: AnalyticsTable;
 }

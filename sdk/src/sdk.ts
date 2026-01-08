@@ -83,6 +83,7 @@ export class StaminadsSDK {
   private isInitialized = false;
   private initPromise: Promise<void> | null = null;
   private flushed = false;
+  private previousPath: string = '';  // Track previous path for page duration calculation (v3)
 
   /**
    * Initialize the SDK (called by index.ts from global config or manual init)
@@ -193,6 +194,9 @@ export class StaminadsSDK {
     const now = Date.now();
     this.heartbeatState.pageStartTime = now;
     this.heartbeatState.activeStartTime = now;
+
+    // Initialize previous path for page duration tracking (v3)
+    this.previousPath = window.location.pathname;
 
     // Start heartbeat
     this.startHeartbeat();
@@ -337,7 +341,12 @@ export class StaminadsSDK {
     if (this.flushed) return;
     this.flushed = true;
     this.updateSession();
-    this.sendEvent('ping');
+
+    // Include final page duration in unload ping (v3)
+    const pageActiveMs = this.getPageActiveMs();
+    this.sendEvent('ping', {
+      page_duration: String(Math.round(pageActiveMs / 1000)),
+    });
   }
 
   /**
@@ -355,11 +364,18 @@ export class StaminadsSDK {
       console.log('[Staminads] Navigation:', url);
     }
 
+    // Capture previous page data BEFORE reset (v3)
+    const previousPageDuration = Math.round(this.getPageActiveMs() / 1000);
+    const previousPath = this.previousPath;
+
     // Reset scroll tracking for new page
     this.scrollTracker?.reset();
 
-    // Always reset page active time on navigation
+    // Reset page timer AFTER capturing duration
     this.resetPageActiveTime();
+
+    // Update previous path to current (for next navigation)
+    this.previousPath = window.location.pathname;
 
     // Optionally reset session heartbeat timer
     if (this.config?.resetHeartbeatOnNavigation) {
@@ -367,8 +383,12 @@ export class StaminadsSDK {
       this.startHeartbeat();
     }
 
-    // Send screen_view for new page
-    this.sendEvent('screen_view');
+    // Send screen_view with previous page path and duration (v3)
+    // previous_path identifies which page the duration belongs to
+    this.sendEvent('screen_view', {
+      page_duration: String(previousPageDuration),
+      previous_path: previousPath,
+    });
   }
 
   /**
@@ -762,8 +782,14 @@ export class StaminadsSDK {
       // Custom dimensions
       ...this.sessionManager.getDimensionsPayload(),
 
-      // Spread properties at top level for easier access
-      ...properties,
+      // Spread properties at top level for easier access (excluding page_duration/previous_path which are handled specially)
+      ...(properties ? Object.fromEntries(
+        Object.entries(properties).filter(([k]) => k !== 'page_duration' && k !== 'previous_path')
+      ) : {}),
+
+      // Page duration tracking (v3) - must be after spread to ensure proper type conversion
+      page_duration: properties?.page_duration ? parseInt(properties.page_duration, 10) : undefined,
+      previous_path: properties?.previous_path || undefined,
     };
 
     // Remove undefined values

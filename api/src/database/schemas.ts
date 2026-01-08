@@ -188,6 +188,8 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
       name LowCardinality(String),
       path String,
       duration UInt64 DEFAULT 0,
+      page_duration UInt32 DEFAULT 0,
+      previous_path String DEFAULT '',
       referrer String DEFAULT '',
       referrer_domain String DEFAULT '',
       referrer_path String DEFAULT '',
@@ -249,6 +251,8 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
       created_at DateTime64(3),
       updated_at DateTime64(3),
       duration UInt32 DEFAULT 0,
+      pageview_count UInt16 DEFAULT 1,
+      median_page_duration UInt32 DEFAULT 0,
       year UInt16,
       month UInt8,
       day UInt8,
@@ -319,6 +323,8 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
       any(e.created_at) as created_at,
       max(e.updated_at) as updated_at,
       max(e.duration) as duration,
+      countIf(e.name = 'screen_view') as pageview_count,
+      toUInt32(if(isNaN(medianIf(e.page_duration, e.page_duration > 0)), 0, round(medianIf(e.page_duration, e.page_duration > 0)))) as median_page_duration,
 
       -- Derive time dimensions from SDK created_at
       any(toYear(e.created_at)) as year,
@@ -378,5 +384,65 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
       any(e.sdk_version) as sdk_version
     FROM {database}.events e
     GROUP BY e.session_id, e.workspace_id
+  `,
+
+  pages: `
+    CREATE TABLE IF NOT EXISTS {database}.pages (
+      -- Identity
+      id UUID DEFAULT generateUUIDv4(),
+      session_id String,
+      workspace_id String,
+
+      -- Page info
+      path String,
+      full_url String DEFAULT '',
+
+      -- Timestamps
+      entered_at DateTime64(3),
+      exited_at DateTime64(3),
+
+      -- Engagement
+      duration UInt32 DEFAULT 0,
+      max_scroll UInt8 DEFAULT 0,
+
+      -- Sequence
+      page_number UInt8 DEFAULT 1,
+      is_landing Bool DEFAULT false,
+      is_exit Bool DEFAULT false,
+
+      -- Entry type
+      entry_type LowCardinality(String) DEFAULT 'navigation',
+
+      -- Technical
+      received_at DateTime64(3) DEFAULT now64(3)
+    ) ENGINE = MergeTree()
+    PARTITION BY toYYYYMMDD(received_at)
+    ORDER BY (session_id, entered_at)
+    TTL toDateTime(received_at) + INTERVAL 7 DAY
+  `,
+
+  pages_mv: `
+    CREATE MATERIALIZED VIEW IF NOT EXISTS {database}.pages_mv
+    TO {database}.pages AS
+    SELECT
+      generateUUIDv4() as id,
+      e.session_id,
+      e.workspace_id,
+      -- For navigation: previous_path is the page being left (has duration)
+      -- For unload ping: path is the current page being left (has duration)
+      if(e.name = 'screen_view' AND e.previous_path != '', e.previous_path, e.path) as path,
+      e.landing_page as full_url,
+      e.updated_at as entered_at,
+      e.updated_at as exited_at,
+      e.page_duration as duration,
+      e.max_scroll,
+      1 as page_number,
+      if(e.name = 'screen_view' AND e.previous_path != '', e.previous_path, e.path) = e.landing_path as is_landing,
+      e.name = 'ping' as is_exit,
+      if(if(e.name = 'screen_view' AND e.previous_path != '', e.previous_path, e.path) = e.landing_path, 'landing', 'navigation') as entry_type,
+      now64(3) as received_at
+    FROM {database}.events e
+    WHERE (e.name = 'screen_view' AND e.previous_path != '' AND e.page_duration > 0)
+       OR (e.name = 'ping' AND e.page_duration > 0)
   `,
 };

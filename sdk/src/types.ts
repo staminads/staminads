@@ -165,6 +165,8 @@ export interface TrackEventPayload {
   // Engagement
   duration?: number;
   max_scroll?: number;
+  page_duration?: number;  // Time spent on page in seconds (v3)
+  previous_path?: string;  // Path of page being left (v3) - used with page_duration
 
   // SDK
   sdk_version?: string;

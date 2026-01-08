@@ -171,4 +171,96 @@ describe('buildFilters', () => {
       ]),
     ).toThrow('Unknown dimension: unknown_dim');
   });
+
+  describe('table parameter', () => {
+    it('defaults to sessions table', () => {
+      const result = buildFilters([
+        { dimension: 'device', operator: 'equals', values: ['mobile'] },
+      ]);
+      expect(result.sql).toBe('device = {f0:String}');
+    });
+
+    it('accepts sessions table explicitly', () => {
+      const result = buildFilters(
+        [{ dimension: 'utm_source', operator: 'equals', values: ['google'] }],
+        'f',
+        'sessions',
+      );
+      expect(result.sql).toBe('utm_source = {f0:String}');
+    });
+
+    it('accepts pages table for page dimensions', () => {
+      const result = buildFilters(
+        [{ dimension: 'page_path', operator: 'equals', values: ['/products'] }],
+        'f',
+        'pages',
+      );
+      expect(result.sql).toBe('path = {f0:String}');
+      expect(result.params.f0).toBe('/products');
+    });
+
+    it('throws for sessions dimension on pages table', () => {
+      expect(() =>
+        buildFilters(
+          [{ dimension: 'utm_source', operator: 'equals', values: ['google'] }],
+          'f',
+          'pages',
+        ),
+      ).toThrow("Dimension 'utm_source' is not available for table 'pages'");
+    });
+
+    it('throws for pages dimension on sessions table', () => {
+      expect(() =>
+        buildFilters(
+          [{ dimension: 'page_path', operator: 'equals', values: ['/'] }],
+          'f',
+          'sessions',
+        ),
+      ).toThrow("Dimension 'page_path' is not available for table 'sessions'");
+    });
+
+    it('validates multiple filters against table', () => {
+      expect(() =>
+        buildFilters(
+          [
+            { dimension: 'page_path', operator: 'equals', values: ['/'] },
+            { dimension: 'utm_source', operator: 'equals', values: ['google'] },
+          ],
+          'f',
+          'pages',
+        ),
+      ).toThrow("Dimension 'utm_source' is not available for table 'pages'");
+    });
+
+    it('handles page_path in filter correctly', () => {
+      const result = buildFilters(
+        [
+          {
+            dimension: 'page_path',
+            operator: 'in',
+            values: ['/', '/products'],
+          },
+        ],
+        'f',
+        'pages',
+      );
+      expect(result.sql).toBe('path IN {f0:Array(String)}');
+      expect(result.params.f0).toEqual(['/', '/products']);
+    });
+
+    it('handles is_landing_page boolean filter', () => {
+      const result = buildFilters(
+        [
+          {
+            dimension: 'is_landing_page',
+            operator: 'equals',
+            values: ['true'],
+          },
+        ],
+        'f',
+        'pages',
+      );
+      expect(result.sql).toBe('is_landing = {f0:String}');
+    });
+  });
 });

@@ -2,6 +2,7 @@ import { AnalyticsQueryDto } from '../dto/analytics-query.dto';
 import { ExtremesQueryDto } from '../dto/extremes-query.dto';
 import { METRICS, getMetricSql, MetricContext } from '../constants/metrics';
 import { DIMENSIONS } from '../constants/dimensions';
+import { TABLE_CONFIGS, AnalyticsTable } from '../constants/tables';
 import { buildFilters } from './filter-builder';
 
 export interface BuiltQuery {
@@ -9,35 +10,36 @@ export interface BuiltQuery {
   params: Record<string, unknown>;
 }
 
-// Granularity SQL generators - accept optional timezone for correct user-local grouping
+// Granularity SQL generators - accept date column and optional timezone for correct user-local grouping
 const GRANULARITY_SQL: Record<
   string,
-  { expr: (tz?: string) => string; column: string }
+  { expr: (dateCol: string, tz?: string) => string; column: string }
 > = {
   hour: {
-    expr: (tz) =>
-      tz ? `toStartOfHour(created_at, '${tz}')` : 'toStartOfHour(created_at)',
+    expr: (dateCol, tz) =>
+      tz ? `toStartOfHour(${dateCol}, '${tz}')` : `toStartOfHour(${dateCol})`,
     column: 'date_hour',
   },
   day: {
-    expr: (tz) => (tz ? `toDate(created_at, '${tz}')` : 'toDate(created_at)'),
+    expr: (dateCol, tz) =>
+      tz ? `toDate(${dateCol}, '${tz}')` : `toDate(${dateCol})`,
     column: 'date_day',
   },
   week: {
-    expr: (tz) =>
+    expr: (dateCol, tz) =>
       tz
-        ? `toStartOfWeek(created_at, 1, '${tz}')`
-        : 'toStartOfWeek(created_at, 1)',
+        ? `toStartOfWeek(${dateCol}, 1, '${tz}')`
+        : `toStartOfWeek(${dateCol}, 1)`,
     column: 'date_week',
   },
   month: {
-    expr: (tz) =>
-      tz ? `toStartOfMonth(created_at, '${tz}')` : 'toStartOfMonth(created_at)',
+    expr: (dateCol, tz) =>
+      tz ? `toStartOfMonth(${dateCol}, '${tz}')` : `toStartOfMonth(${dateCol})`,
     column: 'date_month',
   },
   year: {
-    expr: (tz) =>
-      tz ? `toStartOfYear(created_at, '${tz}')` : 'toStartOfYear(created_at)',
+    expr: (dateCol, tz) =>
+      tz ? `toStartOfYear(${dateCol}, '${tz}')` : `toStartOfYear(${dateCol})`,
     column: 'date_year',
   },
 };
@@ -47,6 +49,10 @@ export function buildAnalyticsQuery(
   timezone?: string,
   metricContext?: MetricContext,
 ): BuiltQuery {
+  // Get table configuration (default to sessions for backward compatibility)
+  const table: AnalyticsTable = query.table || 'sessions';
+  const tableConfig = TABLE_CONFIGS[table];
+
   // Validate and build metrics SQL
   // Default context for metrics that require it (e.g., bounce_rate)
   const defaultContext: MetricContext = { bounce_threshold: 10 };
@@ -54,6 +60,9 @@ export function buildAnalyticsQuery(
   const metricsSql = query.metrics.map((m) => {
     const metric = METRICS[m];
     if (!metric) throw new Error(`Unknown metric: ${m}`);
+    if (!metric.tables.includes(table)) {
+      throw new Error(`Metric '${m}' is not available for table '${table}'`);
+    }
     const sql = getMetricSql(metric, ctx);
     return `${sql} as ${m}`;
   });
@@ -62,6 +71,9 @@ export function buildAnalyticsQuery(
   const dimensionCols = (query.dimensions || []).map((d) => {
     const dim = DIMENSIONS[d];
     if (!dim) throw new Error(`Unknown dimension: ${d}`);
+    if (!dim.tables.includes(table)) {
+      throw new Error(`Dimension '${d}' is not available for table '${table}'`);
+    }
     return dim.column;
   });
 
@@ -73,13 +85,15 @@ export function buildAnalyticsQuery(
     const g = GRANULARITY_SQL[granularity];
     // Apply timezone to granularity grouping (not filtering) for non-UTC users
     const tz = timezone && timezone !== 'UTC' ? timezone : undefined;
-    granularitySelect = `${g.expr(tz)} as ${g.column}`;
+    granularitySelect = `${g.expr(tableConfig.dateColumn, tz)} as ${g.column}`;
     granularityColumn = g.column;
   }
 
   // Build filters
   const { sql: filterSql, params: filterParams } = buildFilters(
     query.filters || [],
+    'f',
+    table,
   );
 
   // Build GROUP BY (granularity first, then dimensions)
@@ -133,18 +147,22 @@ export function buildAnalyticsQuery(
   const limitClause = `LIMIT ${Math.min(query.limit || 1000, 10000)}`;
 
   // Note: workspace_id filter removed since each workspace has its own database
+  const dateCol = tableConfig.dateColumn;
   const whereConditions = [
-    'created_at >= toDateTime64({date_start:String}, 3)',
-    'created_at <= toDateTime64({date_end:String}, 3)',
+    `${dateCol} >= toDateTime64({date_start:String}, 3)`,
+    `${dateCol} <= toDateTime64({date_end:String}, 3)`,
   ];
   if (filterSql) {
     whereConditions.push(filterSql);
   }
 
+  // Build FROM clause with optional FINAL modifier (ReplacingMergeTree tables need FINAL)
+  const fromClause = `FROM ${table}${tableConfig.finalModifier ? ' FINAL' : ''}`;
+
   const sql = `
 SELECT
   ${selectClause}
-FROM sessions FINAL
+${fromClause}
 WHERE ${whereConditions.join('\n  AND ')}
 ${groupByClause}
 ${havingClause}
@@ -165,8 +183,17 @@ export function buildExtremesQuery(
   query: ExtremesQueryDto & { dateRange: { start?: string; end?: string } },
   metricContext?: MetricContext,
 ): BuiltQuery {
+  // Get table configuration (default to sessions for backward compatibility)
+  const table: AnalyticsTable = query.table || 'sessions';
+  const tableConfig = TABLE_CONFIGS[table];
+
   const metric = METRICS[query.metric];
   if (!metric) throw new Error(`Unknown metric: ${query.metric}`);
+  if (!metric.tables.includes(table)) {
+    throw new Error(
+      `Metric '${query.metric}' is not available for table '${table}'`,
+    );
+  }
   // Default context for metrics that require it (e.g., bounce_rate)
   const defaultContext: MetricContext = { bounce_threshold: 10 };
   const ctx = metricContext ?? defaultContext;
@@ -176,18 +203,24 @@ export function buildExtremesQuery(
   const groupByCols = query.groupBy.map((d) => {
     const dim = DIMENSIONS[d];
     if (!dim) throw new Error(`Unknown dimension: ${d}`);
+    if (!dim.tables.includes(table)) {
+      throw new Error(`Dimension '${d}' is not available for table '${table}'`);
+    }
     return dim.column;
   });
 
   // Build filters
   const { sql: filterSql, params: filterParams } = buildFilters(
     query.filters || [],
+    'f',
+    table,
   );
 
   // WHERE conditions
+  const dateCol = tableConfig.dateColumn;
   const whereConditions = [
-    'created_at >= toDateTime64({date_start:String}, 3)',
-    'created_at <= toDateTime64({date_end:String}, 3)',
+    `${dateCol} >= toDateTime64({date_start:String}, 3)`,
+    `${dateCol} <= toDateTime64({date_end:String}, 3)`,
   ];
   if (filterSql) {
     whereConditions.push(filterSql);
@@ -201,6 +234,9 @@ export function buildExtremesQuery(
   // Build dimension select list for returning winning values
   const dimensionSelectList = groupByCols.join(', ');
 
+  // Build FROM clause with optional FINAL modifier
+  const fromClause = `${table}${tableConfig.finalModifier ? ' FINAL' : ''}`;
+
   // Two-stage query: find extremes AND the dimension values that achieved them
   // Use subqueries instead of CTEs to avoid ClickHouse database prefix issues
   const sql = `
@@ -212,7 +248,7 @@ FROM (
   SELECT min(value) as min, max(value) as max
   FROM (
     SELECT ${metricSql} as value
-    FROM sessions FINAL
+    FROM ${fromClause}
     WHERE ${whereConditions.join('\n      AND ')}
     GROUP BY ${dimensionSelectList}
     ${havingClause}
@@ -220,7 +256,7 @@ FROM (
 ) sub
 LEFT JOIN (
   SELECT ${dimensionSelectList}, ${metricSql} as value
-  FROM sessions FINAL
+  FROM ${fromClause}
   WHERE ${whereConditions.join('\n    AND ')}
   GROUP BY ${dimensionSelectList}
   ${havingClause}

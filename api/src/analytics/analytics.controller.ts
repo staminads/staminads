@@ -3,13 +3,16 @@ import {
   Post,
   Get,
   Body,
+  Query,
   HttpCode,
   UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiSecurity, ApiTags, ApiQuery } from '@nestjs/swagger';
 import { AnalyticsService } from './analytics.service';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
 import { ExtremesQueryDto, ExtremesResponse } from './dto/extremes-query.dto';
+import type { AnalyticsTable } from './constants/tables';
+import { ANALYTICS_TABLES } from './constants/tables';
 import { WorkspaceAuthGuard } from '../common/guards/workspace.guard';
 import { SkipRateLimit } from '../common/decorators/throttle.decorator';
 
@@ -40,13 +43,31 @@ export class AnalyticsController {
 
   @Get('analytics.metrics')
   @ApiOperation({ summary: 'Get available metrics' })
-  getMetrics() {
-    return this.analyticsService.getAvailableMetrics();
+  @ApiQuery({
+    name: 'table',
+    required: false,
+    enum: ANALYTICS_TABLES,
+    description: 'Filter metrics by table (sessions or pages)',
+  })
+  getMetrics(@Query('table') table?: AnalyticsTable) {
+    return this.analyticsService.getAvailableMetrics(table);
   }
 
   @Get('analytics.dimensions')
   @ApiOperation({ summary: 'Get available dimensions' })
-  getDimensions() {
-    return this.analyticsService.getAvailableDimensions();
+  @ApiQuery({
+    name: 'table',
+    required: false,
+    enum: ANALYTICS_TABLES,
+    description: 'Filter dimensions by table (sessions or pages)',
+  })
+  getDimensions(@Query('table') table?: AnalyticsTable) {
+    return this.analyticsService.getAvailableDimensions(table);
+  }
+
+  @Get('analytics.tables')
+  @ApiOperation({ summary: 'Get available analytics tables' })
+  getTables() {
+    return ANALYTICS_TABLES;
   }
 }

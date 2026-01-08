@@ -143,6 +143,16 @@ export class TrackEventDto {
   @Max(100)
   max_scroll?: number;
 
+  // Page duration tracking (v3)
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  page_duration?: number;
+
+  @IsOptional()
+  @IsString()
+  previous_path?: string;
+
   // SDK
   @IsOptional()
   @IsString()

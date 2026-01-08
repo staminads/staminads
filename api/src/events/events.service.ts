@@ -161,6 +161,8 @@ export class EventsService {
       name: dto.name,
       path: dto.path,
       duration: dto.duration ?? 0,
+      page_duration: dto.page_duration ?? 0,
+      previous_path: dto.previous_path ?? '',
 
       // Traffic source
       referrer: dto.referrer ?? '',

@@ -9,6 +9,8 @@ export interface TrackingEvent {
   name: string;
   path: string;
   duration: number;
+  page_duration: number;
+  previous_path: string;
 
   // Traffic source
   referrer: string;

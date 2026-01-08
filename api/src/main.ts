@@ -3,9 +3,19 @@ import { CorsOptionsDelegate } from '@nestjs/common/interfaces/external/cors-opt
 import { NestFactory } from '@nestjs/core';
 import { Request } from 'express';
 import { AppModule } from './app.module';
+import { MigrationsRunner } from './migrations/migrations.service';
 import { APP_VERSION } from './version';
 
 async function bootstrap() {
+  // Run migrations BEFORE NestJS bootstrap
+  const migrations = new MigrationsRunner();
+  const needsRestart = await migrations.run();
+
+  if (needsRestart) {
+    console.log('[Migrations] Restarting server...');
+    process.exit(0);
+  }
+
   const app = await NestFactory.create(AppModule);
 
   // Parse allowed origins from env (empty array = allow all)

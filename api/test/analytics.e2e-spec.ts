@@ -47,7 +47,7 @@ describe('Analytics E2E', () => {
     // Create test workspace in system database
     workspaceId = testWorkspaceId;
     await truncateSystemTables(systemClient, ['workspaces'], 0);
-    await truncateWorkspaceTables(workspaceClient, ['sessions'], 0);
+    await truncateWorkspaceTables(workspaceClient, ['sessions', 'pages'], 0);
 
     await createTestWorkspace(systemClient, workspaceId, {
       name: 'Analytics Test Workspace',
@@ -118,6 +118,40 @@ describe('Analytics E2E', () => {
     await workspaceClient.insert({
       table: 'sessions',
       values: sessions,
+      format: 'JSONEachRow',
+    });
+
+    // Seed test pages in workspace database
+    const pages = [];
+    const pagePaths = ['/', '/products', '/about', '/contact', '/blog'];
+    for (let i = 0; i < 50; i++) {
+      const date = new Date(baseDate);
+      date.setDate(date.getDate() + Math.floor(i / 5));
+      const path = pagePaths[i % pagePaths.length];
+
+      pages.push({
+        id: `00000000-0000-0000-0000-00000000000${i.toString().padStart(2, '0')}`,
+        session_id: `session-${Math.floor(i / 2)}`,
+        workspace_id: workspaceId,
+        path: path,
+        full_url: `https://test.com${path}`,
+        entered_at: toClickHouseDateTime(date),
+        exited_at: toClickHouseDateTime(
+          new Date(date.getTime() + (30 + i * 2) * 1000),
+        ),
+        duration: 30 + i * 2,
+        max_scroll: 20 + (i % 80),
+        page_number: (i % 3) + 1,
+        is_landing: i % 5 === 0,
+        is_exit: i % 5 === 4,
+        entry_type: i % 5 === 0 ? 'landing' : 'navigation',
+        received_at: toClickHouseDateTime(date),
+      });
+    }
+
+    await workspaceClient.insert({
+      table: 'pages',
+      values: pages,
       format: 'JSONEachRow',
     });
 
@@ -787,6 +821,343 @@ describe('Analytics E2E', () => {
 
       expect(response1.body.data).toEqual(response2.body.data);
       expect(response1.body.meta.granularity).toBe('day');
+    });
+  });
+
+  describe('Pages Table Analytics', () => {
+    describe('POST /api/analytics.query with table=pages', () => {
+      it('returns page count from pages table', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'pages',
+            metrics: ['page_count'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(response.body.data).toHaveLength(1);
+        expect(Number(response.body.data[0].page_count)).toBe(50);
+      });
+
+      it('returns page metrics grouped by page_path', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'pages',
+            metrics: ['page_count', 'page_duration'],
+            dimensions: ['page_path'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(response.body.data.length).toBe(5); // 5 different paths
+        expect(response.body.data[0]).toHaveProperty('path');
+        expect(response.body.data[0]).toHaveProperty('page_count');
+        expect(response.body.data[0]).toHaveProperty('page_duration');
+
+        // Each path should have 10 pages (50 total / 5 paths)
+        const paths = response.body.data.map((d: { path: string }) => d.path);
+        expect(paths).toContain('/');
+        expect(paths).toContain('/products');
+        expect(paths).toContain('/about');
+      });
+
+      it('returns median duration per page', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'pages',
+            metrics: ['page_duration', 'page_scroll'],
+            dimensions: ['page_path'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        // Verify we get median values (not averages)
+        expect(response.body.data[0]).toHaveProperty('page_duration');
+        expect(response.body.data[0]).toHaveProperty('page_scroll');
+        expect(typeof response.body.data[0].page_duration).toBe('number');
+      });
+
+      it('filters pages by page_path', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'pages',
+            metrics: ['page_count'],
+            filters: [
+              {
+                dimension: 'page_path',
+                operator: 'equals',
+                values: ['/products'],
+              },
+            ],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(Number(response.body.data[0].page_count)).toBe(10);
+      });
+
+      it('filters pages by is_landing_page', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'pages',
+            metrics: ['page_count'],
+            filters: [
+              {
+                dimension: 'is_landing_page',
+                operator: 'equals',
+                values: [true],
+              },
+            ],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(Number(response.body.data[0].page_count)).toBe(10); // 50 pages, every 5th is landing
+      });
+
+      it('returns landing and exit page counts', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'pages',
+            metrics: ['landing_page_count', 'exit_page_count', 'exit_rate'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(Number(response.body.data[0].landing_page_count)).toBe(10);
+        expect(Number(response.body.data[0].exit_page_count)).toBe(10);
+        expect(Number(response.body.data[0].exit_rate)).toBe(20); // 10/50 * 100 = 20%
+      });
+
+      it('returns time series with granularity for pages', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'pages',
+            metrics: ['page_count'],
+            dateRange: {
+              start: '2025-12-01',
+              end: '2025-12-10',
+              granularity: 'day',
+            },
+          })
+          .expect(200);
+
+        expect(response.body.data.length).toBe(10);
+        expect(response.body.data[0]).toHaveProperty('date_day');
+      });
+
+      it('validates sessions metric not available on pages table', async () => {
+        await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'pages',
+            metrics: ['sessions'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(400);
+      });
+
+      it('validates sessions dimension not available on pages table', async () => {
+        await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'pages',
+            metrics: ['page_count'],
+            dimensions: ['utm_source'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(400);
+      });
+
+      it('validates page_count metric not available on sessions table', async () => {
+        await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'sessions',
+            metrics: ['page_count'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(400);
+      });
+
+      it('validates page_path dimension not available on sessions table', async () => {
+        await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'sessions',
+            metrics: ['sessions'],
+            dimensions: ['page_path'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(400);
+      });
+
+      it('returns SQL without FINAL for pages table', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'pages',
+            metrics: ['page_count'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(response.body.query.sql).toContain('FROM pages');
+        expect(response.body.query.sql).not.toContain('FINAL');
+      });
+    });
+
+    describe('POST /api/analytics.extremes with table=pages', () => {
+      it('returns min and max page duration by path', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.extremes')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'pages',
+            metric: 'page_duration',
+            groupBy: ['page_path'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(response.body).toHaveProperty('min');
+        expect(response.body).toHaveProperty('max');
+        expect(response.body.meta.metric).toBe('page_duration');
+      });
+
+      it('validates sessions metric not available on pages table for extremes', async () => {
+        await request(ctx.app.getHttpServer())
+          .post('/api/analytics.extremes')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'pages',
+            metric: 'sessions',
+            groupBy: ['page_path'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(400);
+      });
+    });
+
+    describe('GET /api/analytics.metrics with table filter', () => {
+      it('returns all metrics without table filter', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .get('/api/analytics.metrics')
+          .set('Authorization', `Bearer ${authToken}`)
+          .expect(200);
+
+        const metricNames = response.body.map((m: { name: string }) => m.name);
+        expect(metricNames).toContain('sessions');
+        expect(metricNames).toContain('page_count');
+      });
+
+      it('returns only sessions metrics with table=sessions', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .get('/api/analytics.metrics?table=sessions')
+          .set('Authorization', `Bearer ${authToken}`)
+          .expect(200);
+
+        const metricNames = response.body.map((m: { name: string }) => m.name);
+        expect(metricNames).toContain('sessions');
+        expect(metricNames).toContain('avg_duration');
+        expect(metricNames).not.toContain('page_count');
+        expect(metricNames).not.toContain('page_duration');
+      });
+
+      it('returns only pages metrics with table=pages', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .get('/api/analytics.metrics?table=pages')
+          .set('Authorization', `Bearer ${authToken}`)
+          .expect(200);
+
+        const metricNames = response.body.map((m: { name: string }) => m.name);
+        expect(metricNames).toContain('page_count');
+        expect(metricNames).toContain('page_duration');
+        expect(metricNames).not.toContain('sessions');
+        expect(metricNames).not.toContain('bounce_rate');
+      });
+    });
+
+    describe('GET /api/analytics.dimensions with table filter', () => {
+      it('returns all dimensions without table filter', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .get('/api/analytics.dimensions')
+          .set('Authorization', `Bearer ${authToken}`)
+          .expect(200);
+
+        expect(response.body.utm_source).toBeDefined();
+        expect(response.body.page_path).toBeDefined();
+      });
+
+      it('returns only sessions dimensions with table=sessions', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .get('/api/analytics.dimensions?table=sessions')
+          .set('Authorization', `Bearer ${authToken}`)
+          .expect(200);
+
+        expect(response.body.utm_source).toBeDefined();
+        expect(response.body.device).toBeDefined();
+        expect(response.body.page_path).toBeUndefined();
+        expect(response.body.is_landing_page).toBeUndefined();
+      });
+
+      it('returns only pages dimensions with table=pages', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .get('/api/analytics.dimensions?table=pages')
+          .set('Authorization', `Bearer ${authToken}`)
+          .expect(200);
+
+        expect(response.body.page_path).toBeDefined();
+        expect(response.body.is_landing_page).toBeDefined();
+        expect(response.body.is_exit_page).toBeDefined();
+        expect(response.body.utm_source).toBeUndefined();
+        expect(response.body.device).toBeUndefined();
+      });
+    });
+
+    describe('GET /api/analytics.tables', () => {
+      it('returns available tables', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .get('/api/analytics.tables')
+          .set('Authorization', `Bearer ${authToken}`)
+          .expect(200);
+
+        expect(response.body).toContain('sessions');
+        expect(response.body).toContain('pages');
+      });
     });
   });
 });
