@@ -432,7 +432,7 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
       -- For unload ping: path is the current page being left (has duration)
       if(e.name = 'screen_view' AND e.previous_path != '', e.previous_path, e.path) as path,
       e.landing_page as full_url,
-      e.updated_at as entered_at,
+      subtractSeconds(e.updated_at, e.page_duration) as entered_at,
       e.updated_at as exited_at,
       e.page_duration as duration,
       e.max_scroll,

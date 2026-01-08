@@ -162,24 +162,22 @@ For a 3-page session:
 
 ---
 
-### LOW: Issue #5 - Pages Table Has Imprecise Timestamps
+### ✅ RESOLVED: Issue #5 - Pages Table Timestamps Now Accurate
 
-**Location**: `api/src/database/schemas.ts:435-436`
+**Location**: `api/src/database/schemas.ts:435`
 
-**Problem**: Both `entered_at` and `exited_at` are set to the same value:
+**Previous Problem**: Both `entered_at` and `exited_at` were set to the same value (`e.updated_at`).
+
+**Resolution**: Fixed by calculating `entered_at` using ClickHouse's `subtractSeconds` function:
 
 ```sql
-e.updated_at as entered_at,
+subtractSeconds(e.updated_at, e.page_duration) as entered_at,
 e.updated_at as exited_at,
 ```
 
-**Semantic Issue**:
-- For navigation events, `updated_at` is when the user **left** the page (exited)
-- The actual `entered_at` should be `exited_at - duration`
-
-**Impact**: Cannot calculate accurate page enter times; makes the `pages` table less useful for timeline analysis.
-
-**Note**: Could be fixed with: `e.updated_at - INTERVAL e.page_duration SECOND as entered_at`
+**Result**: The `pages` table now has accurate timestamps:
+- `exited_at` = when the user left the page
+- `entered_at` = `exited_at - page_duration` (when the user entered)
 
 ---
 
@@ -284,10 +282,13 @@ Current implementation uses `sendBeacon` which has good browser support. Further
 - Periodic persistence of accumulated page duration
 - Multiple beacon strategies (sendBeacon → fetch keepalive fallback)
 
-### OPTIONAL: Priority 4 - Fix Pages Table Design
+### ✅ RESOLVED: Priority 4 - Pages Table entered_at
 
-Low-priority improvements:
-- Calculate proper `entered_at`: `e.updated_at - INTERVAL e.page_duration SECOND`
+Fixed `entered_at` calculation using `subtractSeconds(e.updated_at, e.page_duration)`.
+
+### OPTIONAL: Priority 5 - Fix page_number
+
+Low-priority improvement:
 - Compute actual `page_number` (requires complex window functions in MV)
 
 ---
@@ -324,7 +325,6 @@ Low-priority improvements:
 3. ✅ **Analytics API**: Both sessions and pages tables queryable with appropriate metrics/dimensions
 
 **Remaining design debt** (low priority):
-- Pages table timestamps are both set to exit time (entered_at should be calculated)
 - page_number is always 1 (complex to fix in MV)
 - Bounce sessions may lose duration data if unload fails (inherent web limitation)
 
