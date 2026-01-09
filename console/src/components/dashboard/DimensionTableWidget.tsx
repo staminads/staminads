@@ -204,6 +204,8 @@ export function DimensionTableWidget({
           onCountryClick={(countryCode) => {
             onRowClick?.({ dimension_value: countryCode }, activeTabKey)
           }}
+          valueMetric={columns[0]?.key ?? 'sessions'}
+          valueLabel={columns[0]?.label?.toLowerCase() ?? 'sessions'}
         />
       ) : loading && data.length === 0 ? (
         <div className="flex items-center justify-center py-12">
@@ -283,7 +285,7 @@ export function DimensionTableWidget({
                   const prevValue = row[`prev_${col.key}`] as number | undefined
                   const change = showComparison ? getChange(value, prevValue) : null
                   const formattedValue = col.format === 'currency'
-                    ? formatCurrency(value, col.currency)
+                    ? (value === 0 ? '-' : formatCurrency(value, col.currency))
                     : formatValue(value, col.format)
 
                   return (
@@ -522,7 +524,7 @@ function DimensionRow({
         const prevValue = row[`prev_${col.key}`] as number | undefined
         const change = showComparison ? getChange(value, prevValue) : null
         const formattedValue = col.format === 'currency'
-          ? formatCurrency(value, col.currency)
+          ? (value === 0 ? '-' : formatCurrency(value, col.currency))
           : formatValue(value, col.format)
 
         // Sticky positioning: last column at right-0, second-to-last at right-[7rem]

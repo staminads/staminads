@@ -379,7 +379,7 @@ describe('V3 Session Payload E2E', () => {
       // Wait for MV to process
       await waitForRowCount(
         workspaceClient,
-        `SELECT count() FROM pages WHERE session_id = '${sessionId}'`,
+        `SELECT count() as count FROM pages WHERE session_id = '${sessionId}'`,
         2,
       );
 
@@ -495,7 +495,7 @@ describe('V3 Session Payload E2E', () => {
 
       await waitForRowCount(
         workspaceClient,
-        `SELECT count() FROM pages WHERE session_id = '${sessionId}'`,
+        `SELECT count() as count FROM pages WHERE session_id = '${sessionId}'`,
         1, // Only 1 page (from pageview), not 3
       );
 
@@ -534,7 +534,7 @@ describe('V3 Session Payload E2E', () => {
 
       await waitForRowCount(
         workspaceClient,
-        `SELECT count() FROM sessions FINAL WHERE id = '${sessionId}'`,
+        `SELECT count() as count FROM sessions FINAL WHERE id = '${sessionId}'`,
         1,
       );
 
@@ -574,7 +574,7 @@ describe('V3 Session Payload E2E', () => {
 
       await waitForRowCount(
         workspaceClient,
-        `SELECT count() FROM sessions FINAL WHERE id = '${sessionId}'`,
+        `SELECT count() as count FROM sessions FINAL WHERE id = '${sessionId}'`,
         1,
       );
 

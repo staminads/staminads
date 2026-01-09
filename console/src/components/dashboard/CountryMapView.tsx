@@ -24,14 +24,24 @@ interface CountryMapViewProps {
   data: DimensionData[]
   loading: boolean
   onCountryClick?: (countryCode: string) => void
+  /** Metric key to use for values (default: 'sessions') */
+  valueMetric?: string
+  /** Label for tooltip (default: 'sessions') */
+  valueLabel?: string
 }
 
-export function CountryMapView({ data, loading, onCountryClick }: CountryMapViewProps) {
-  // Find max sessions for color scaling
-  const maxSessions = useMemo(() => {
+export function CountryMapView({
+  data,
+  loading,
+  onCountryClick,
+  valueMetric = 'sessions',
+  valueLabel = 'sessions',
+}: CountryMapViewProps) {
+  // Find max value for color scaling
+  const maxValue = useMemo(() => {
     if (data.length === 0) return 1
-    return Math.max(...data.map((d) => (d.sessions as number) || 0))
-  }, [data])
+    return Math.max(...data.map((d) => (d[valueMetric] as number) || 0))
+  }, [data, valueMetric])
 
   // Transform data for ECharts - convert ISO2 to GeoJSON country name for matching
   const mapData = useMemo(() => {
@@ -44,11 +54,11 @@ export function CountryMapView({ data, loading, onCountryClick }: CountryMapView
 
         return {
           name: geoName,
-          value: (d.sessions as number) || 0,
+          value: (d[valueMetric] as number) || 0,
         }
       })
       .filter((item): item is NonNullable<typeof item> => item !== null)
-  }, [data])
+  }, [data, valueMetric])
 
   const option = useMemo(
     () => ({
@@ -60,7 +70,7 @@ export function CountryMapView({ data, loading, onCountryClick }: CountryMapView
           if (value === undefined || value === null || Number.isNaN(value)) {
             return displayName
           }
-          return `${displayName}: ${formatValue(value, 'number')} sessions`
+          return `${displayName}: ${formatValue(value, 'number')} ${valueLabel}`
         },
       },
       geo: {
@@ -87,7 +97,7 @@ export function CountryMapView({ data, loading, onCountryClick }: CountryMapView
       },
       visualMap: {
         min: 0,
-        max: maxSessions,
+        max: maxValue,
         show: false,
         inRange: {
           color: [
@@ -108,7 +118,7 @@ export function CountryMapView({ data, loading, onCountryClick }: CountryMapView
         },
       ],
     }),
-    [mapData, maxSessions]
+    [mapData, maxValue, valueLabel]
   )
 
   // Handle click events on the map

@@ -441,24 +441,24 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
     TO {database}.pages AS
     SELECT
       generateUUIDv4() as id,
-      concat(e.session_id, '_', toString(e.page_number - 1)) as page_id,
+      concat(e.session_id, '_', toString(e.page_number)) as page_id,
       e.session_id,
       e.workspace_id,
-      e.previous_path as path,
+      e.path as path,
       e.landing_page as full_url,
-      -- Use actual SDK timestamps instead of calculated approximations
+      -- Use actual SDK timestamps
       e.entered_at as entered_at,
       e.exited_at as exited_at,
       e.page_duration as duration,
       e.max_scroll,
-      toUInt16(e.page_number - 1) as page_number,
-      e.previous_path = e.landing_path as is_landing,
+      e.page_number,
+      e.page_number = 1 as is_landing,
       0 as is_exit,
-      if(e.previous_path = e.landing_path, 'landing', 'navigation') as entry_type,
+      if(e.page_number = 1, 'landing', 'navigation') as entry_type,
       now64(3) as received_at,
       e._version
     FROM {database}.events e
-    WHERE e.name = 'screen_view' AND e.page_duration > 0
+    WHERE e.name = 'screen_view'
   `,
 
   goals: `

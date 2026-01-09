@@ -20,4 +20,4 @@ A source of traffic can be any dimensions or combination of dimensions such as:
 
 ## Roadmap
 
-- detect old sdk usage if new sdk version is available
+- make an e2e test to make sure a session with many pages correctly records the duration spent on every page in the final table

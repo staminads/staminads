@@ -26,7 +26,7 @@ export interface CreateWorkspaceOptions {
 export interface CreateApiKeyOptions {
   name?: string;
   description?: string;
-  scopes?: string[];
+  role?: 'admin' | 'editor' | 'viewer';
   userId?: string;
   expiresAt?: Date | null;
 }
@@ -111,7 +111,7 @@ export async function createTestApiKey(
         workspace_id: workspaceId,
         name: options.name || 'Test API Key',
         description: options.description || '',
-        scopes: JSON.stringify(options.scopes || ['events.track']),
+        role: options.role || 'editor',
         status: 'active',
         expires_at: options.expiresAt
           ? toClickHouseDateTime(options.expiresAt)

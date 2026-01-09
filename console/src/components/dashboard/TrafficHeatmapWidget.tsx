@@ -6,12 +6,12 @@ import { formatValue } from '../../lib/chart-utils'
 
 type TabKey = 'sessions' | 'median_duration'
 
-interface Tab {
+export interface HeatmapTab {
   key: TabKey
   label: string
 }
 
-const TABS: Tab[] = [
+const DEFAULT_TABS: HeatmapTab[] = [
   { key: 'sessions', label: 'Sessions' },
   { key: 'median_duration', label: 'TimeScore' },
 ]
@@ -36,6 +36,8 @@ interface TrafficHeatmapWidgetProps {
   timescoreReference?: number
   emptyText?: string
   onCellClick?: (dayOfWeek: number, hour: number) => void
+  /** Custom tab configuration. Defaults to Sessions and TimeScore tabs. */
+  tabs?: HeatmapTab[]
 }
 
 // Get heat map color based on value relative to reference (same logic as CountriesMapWidget)
@@ -98,8 +100,9 @@ export function TrafficHeatmapWidget({
   timescoreReference = 60,
   emptyText = 'No data available',
   onCellClick,
+  tabs = DEFAULT_TABS,
 }: TrafficHeatmapWidgetProps) {
-  const [activeTab, setActiveTab] = useState<TabKey>('sessions')
+  const [activeTab, setActiveTab] = useState<TabKey>(tabs[0]?.key ?? 'sessions')
 
   // Transform data for ECharts
   const heatmapData = useMemo(
@@ -132,7 +135,8 @@ export function TrafficHeatmapWidget({
           const hourLabel = HOURS[hourIndex]
           const format = isTimescore ? 'duration' : 'number'
           const formatted = formatValue(value, format as 'number' | 'duration')
-          return `<div style="font-weight: 500">${dayName} ${hourLabel}</div><div>${isTimescore ? 'TimeScore' : 'Sessions'}: ${formatted}</div>`
+          const activeTabLabel = tabs.find(t => t.key === activeTab)?.label ?? activeTab
+          return `<div style="font-weight: 500">${dayName} ${hourLabel}</div><div>${activeTabLabel}: ${formatted}</div>`
         },
       },
       grid: {
@@ -198,7 +202,7 @@ export function TrafficHeatmapWidget({
         },
       ],
     }
-  }, [heatmapData, maxValue, activeTab, timescoreReference])
+  }, [heatmapData, maxValue, activeTab, timescoreReference, tabs])
 
   // Handle heatmap cell click
   const handleChartClick = useCallback(
@@ -226,22 +230,24 @@ export function TrafficHeatmapWidget({
         <h3 className="text-base font-semibold text-gray-900">{title}</h3>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-4 px-4 border-b border-gray-200">
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`pb-2 text-xs transition-colors border-b-2 -mb-px cursor-pointer ${
-              activeTab === tab.key
-                ? 'text-gray-900 border-[var(--primary)]'
-                : 'text-gray-500 border-transparent hover:text-gray-700'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {/* Tabs (only show if multiple tabs) */}
+      {tabs.length > 1 && (
+        <div className="flex gap-4 px-4 border-b border-gray-200">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`pb-2 text-xs transition-colors border-b-2 -mb-px cursor-pointer ${
+                activeTab === tab.key
+                  ? 'text-gray-900 border-[var(--primary)]'
+                  : 'text-gray-500 border-transparent hover:text-gray-700'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Heatmap */}
       {loading && data.length === 0 ? (

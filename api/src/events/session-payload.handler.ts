@@ -65,7 +65,9 @@ export class SessionPayloadHandler {
     }
 
     // 3. Filter actions by checkpoint
-    const startIndex = (payload.checkpoint ?? -1) + 1;
+    // checkpoint = number of actions already processed
+    // e.g., checkpoint=2 means indices 0,1 are done, start at index 2
+    const startIndex = payload.checkpoint ?? 0;
     const actionsToProcess = payload.actions.slice(startIndex);
 
     if (actionsToProcess.length === 0) {
@@ -101,8 +103,8 @@ export class SessionPayloadHandler {
     const events: TrackingEvent[] = [];
     let previousPath = '';
 
-    // Build previous_path chain from ALL actions (not just those being processed)
-    for (let i = 0; i < startIndex && i < payload.actions.length; i++) {
+    // Build previous_path chain from already-processed actions
+    for (let i = 0; i < startIndex; i++) {
       const action = payload.actions[i];
       if (isPageviewAction(action)) {
         previousPath = action.path;
@@ -285,8 +287,8 @@ export class SessionPayloadHandler {
       return this.deserializeGoal(action, baseEvent, sessionId, skewMs);
     }
 
-    // Exhaustive check - should never reach here
-    throw new Error(
+    // Unknown action type
+    throw new BadRequestException(
       `Unknown action type: ${(action as { type: string }).type}`,
     );
   }

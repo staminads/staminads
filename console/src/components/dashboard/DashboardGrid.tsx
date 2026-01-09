@@ -292,14 +292,14 @@ export function DashboardGrid({
       dimensionLabel: 'Goal',
       dimension: 'goal_name',
       table: 'goals',
-      metrics: ['goals', 'goal_value'],
+      metrics: ['goals', 'sum_goal_value'],
       order: { goals: 'desc' }
     }
   ]
 
   const goalsColumns: ColumnConfig[] = [
     { key: 'goals', label: 'Count', format: 'number' },
-    { key: 'goal_value', label: 'Value', format: 'currency', currency: workspaceCurrency }
+    { key: 'sum_goal_value', label: 'Value', format: 'currency', currency: workspaceCurrency }
   ]
 
   // Mapping from tab key to dimension for click-to-filter

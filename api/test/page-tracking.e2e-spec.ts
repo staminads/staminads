@@ -353,12 +353,12 @@ describe('Page Duration Tracking E2E', () => {
   });
 
   describe('Pages Materialized View', () => {
-    it('creates page rows from pageview actions with duration > 0', async () => {
+    it('creates page rows from all pageview actions', async () => {
       const sessionId = 'session-pages-mv';
 
       const payload = createSessionPayload(testWorkspaceId, sessionId, {
         actions: [
-          { type: 'pageview', path: '/home', page_number: 1, duration: 0 },
+          { type: 'pageview', path: '/home', page_number: 1, duration: 10 },
           {
             type: 'pageview',
             path: '/about',
@@ -380,32 +380,38 @@ describe('Page Duration Tracking E2E', () => {
       await waitForRowCount(
         workspaceClient,
         `SELECT count() as count FROM pages WHERE session_id = {session_id:String}`,
-        1,
+        2,
         { session_id: sessionId },
         { timeoutMs: 5000 },
       );
 
       const result = await workspaceClient.query({
-        query: `SELECT path, duration FROM pages
-                WHERE session_id = {session_id:String}`,
+        query: `SELECT path, page_number, duration FROM pages
+                WHERE session_id = {session_id:String}
+                ORDER BY page_number`,
         query_params: { session_id: sessionId },
         format: 'JSONEachRow',
       });
-      const pages = await result.json<{ path: string; duration: number }[]>();
+      const pages = await result.json<
+        { path: string; page_number: number; duration: number }[]
+      >();
 
-      // Only events with duration > 0 create page rows
-      expect(pages).toHaveLength(1);
-      // The page row uses previous_path (the page being left)
+      // Each pageview creates a page row with matching path and duration
+      expect(pages).toHaveLength(2);
       expect(pages[0].path).toBe('/home');
-      expect(pages[0].duration).toBe(25);
+      expect(pages[0].page_number).toBe(1);
+      expect(pages[0].duration).toBe(10);
+      expect(pages[1].path).toBe('/about');
+      expect(pages[1].page_number).toBe(2);
+      expect(pages[1].duration).toBe(25);
     });
 
-    it('does not create row for landing pageview (no duration)', async () => {
-      const sessionId = 'session-no-page-landing';
+    it('creates page row for landing pageview', async () => {
+      const sessionId = 'session-landing-page';
 
       const payload = createSessionPayload(testWorkspaceId, sessionId, {
         actions: [
-          { type: 'pageview', path: '/landing', page_number: 1, duration: 0 },
+          { type: 'pageview', path: '/landing', page_number: 1, duration: 5 },
         ],
         attributes: { landing_page: 'https://test.com/landing' },
       });
@@ -417,18 +423,28 @@ describe('Page Duration Tracking E2E', () => {
         .expect(200);
 
       await eventBuffer.flushAll();
-      await waitForClickHouse();
+      await waitForRowCount(
+        workspaceClient,
+        `SELECT count() as count FROM pages WHERE session_id = {session_id:String}`,
+        1,
+        { session_id: sessionId },
+        { timeoutMs: 5000 },
+      );
 
       const result = await workspaceClient.query({
-        query: `SELECT count() as cnt FROM pages
+        query: `SELECT path, page_number, duration FROM pages
                 WHERE session_id = {session_id:String}`,
         query_params: { session_id: sessionId },
         format: 'JSONEachRow',
       });
-      const counts = await result.json<{ cnt: string }[]>();
+      const pages = await result.json<
+        { path: string; page_number: number; duration: number }[]
+      >();
 
-      // No page should be created for initial landing (no duration data yet)
-      expect(parseInt(counts[0].cnt, 10)).toBe(0);
+      expect(pages).toHaveLength(1);
+      expect(pages[0].path).toBe('/landing');
+      expect(pages[0].page_number).toBe(1);
+      expect(pages[0].duration).toBe(5);
     });
   });
 
@@ -436,12 +452,12 @@ describe('Page Duration Tracking E2E', () => {
     it('simulates multi-page session and verifies all data', async () => {
       const sessionId = 'session-full-flow';
 
-      // Simulate a multi-page session
+      // Simulate a multi-page session with duration on each page
       const payload = createSessionPayload(testWorkspaceId, sessionId, {
         actions: [
-          // Event 1: Landing on /home
-          { type: 'pageview', path: '/home', page_number: 1, duration: 0 },
-          // Event 2: Navigate to /about (30s on /home)
+          // Event 1: Pageview on /home (10s duration)
+          { type: 'pageview', path: '/home', page_number: 1, duration: 10 },
+          // Event 2: Pageview on /about (30s duration)
           {
             type: 'pageview',
             path: '/about',
@@ -449,7 +465,7 @@ describe('Page Duration Tracking E2E', () => {
             duration: 30,
             scroll: 50,
           },
-          // Event 3: Final pageview with duration (20s on /about)
+          // Event 3: Pageview on /contact (20s duration)
           {
             type: 'pageview',
             path: '/contact',
@@ -487,7 +503,7 @@ describe('Page Duration Tracking E2E', () => {
       await waitForRowCount(
         workspaceClient,
         `SELECT count() as count FROM pages WHERE session_id = {session_id:String}`,
-        2,
+        3,
         { session_id: sessionId },
         { timeoutMs: 5000 },
       );
@@ -512,19 +528,19 @@ describe('Page Duration Tracking E2E', () => {
 
       expect(events).toHaveLength(3);
 
-      // Event 1: Landing (no duration)
+      // Event 1: Landing page
       expect(events[0].name).toBe('screen_view');
       expect(events[0].path).toBe('/home');
-      expect(events[0].page_duration).toBe(0);
+      expect(events[0].page_duration).toBe(10);
       expect(events[0].previous_path).toBe('');
 
-      // Event 2: Navigation (has duration and previous_path)
+      // Event 2: Second page (has previous_path)
       expect(events[1].name).toBe('screen_view');
       expect(events[1].path).toBe('/about');
       expect(events[1].page_duration).toBe(30);
       expect(events[1].previous_path).toBe('/home');
 
-      // Event 3: Another navigation
+      // Event 3: Third page
       expect(events[2].name).toBe('screen_view');
       expect(events[2].path).toBe('/contact');
       expect(events[2].page_duration).toBe(20);
@@ -547,11 +563,11 @@ describe('Page Duration Tracking E2E', () => {
 
       expect(sessions).toHaveLength(1);
       expect(sessions[0].pageview_count).toBe(3);
-      expect(sessions[0].median_page_duration).toBe(25); // median([30, 20]) = 25
+      expect(sessions[0].median_page_duration).toBe(20); // median([10, 30, 20]) = 20
 
-      // Verify pages table
+      // Verify pages table - each pageview creates a page entry
       const pagesResult = await workspaceClient.query({
-        query: `SELECT path, duration
+        query: `SELECT path, page_number, duration
                 FROM pages
                 WHERE session_id = {session_id:String}
                 ORDER BY page_number`,
@@ -561,19 +577,27 @@ describe('Page Duration Tracking E2E', () => {
       const pages = await pagesResult.json<
         {
           path: string;
+          page_number: number;
           duration: number;
         }[]
       >();
 
-      expect(pages).toHaveLength(2);
+      expect(pages).toHaveLength(3);
 
-      // Page 1: /home (from navigation event to /about)
+      // Page 1: /home with its own duration
       expect(pages[0].path).toBe('/home');
-      expect(pages[0].duration).toBe(30);
+      expect(pages[0].page_number).toBe(1);
+      expect(pages[0].duration).toBe(10);
 
-      // Page 2: /about (from navigation event to /contact)
+      // Page 2: /about with its own duration
       expect(pages[1].path).toBe('/about');
-      expect(pages[1].duration).toBe(20);
+      expect(pages[1].page_number).toBe(2);
+      expect(pages[1].duration).toBe(30);
+
+      // Page 3: /contact with its own duration
+      expect(pages[2].path).toBe('/contact');
+      expect(pages[2].page_number).toBe(3);
+      expect(pages[2].duration).toBe(20);
     });
   });
 });

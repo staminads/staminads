@@ -128,8 +128,8 @@ export const METRICS: Record<string, MetricDefinition> = {
     description: 'Total goals triggered',
     tables: ['goals'],
   },
-  goal_value: {
-    name: 'goal_value',
+  sum_goal_value: {
+    name: 'sum_goal_value',
     sql: 'sum(goal_value)',
     description: 'Total goal value',
     tables: ['goals'],
@@ -138,6 +138,12 @@ export const METRICS: Record<string, MetricDefinition> = {
     name: 'avg_goal_value',
     sql: 'round(avg(goal_value), 2)',
     description: 'Average goal value',
+    tables: ['goals'],
+  },
+  median_goal_value: {
+    name: 'median_goal_value',
+    sql: 'round(median(goal_value), 2)',
+    description: 'Median goal value',
     tables: ['goals'],
   },
   unique_sessions_with_goals: {

@@ -1,8 +1,17 @@
-import { Body, Controller, Headers, HttpCode, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Headers,
+  HttpCode,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ClientIp } from '../common/decorators/client-ip.decorator';
-import { Public } from '../common/decorators/public.decorator';
+import { ApiKeyRoute } from '../common/decorators/api-key-route.decorator';
 import { SkipRateLimit } from '../common/decorators/throttle.decorator';
+import { WorkspaceAuthGuard } from '../common/guards/workspace.guard';
 import { SessionPayloadDto } from './dto/session-payload.dto';
 import { SessionPayloadHandler } from './session-payload.handler';
 
@@ -14,7 +23,8 @@ export class EventsController {
 
   @Post('track')
   @HttpCode(200)
-  @Public()
+  @ApiKeyRoute()
+  @UseGuards(AuthGuard('api-key'), WorkspaceAuthGuard)
   @ApiOperation({
     summary: 'Track session with cumulative actions array',
     description:

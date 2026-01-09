@@ -1,53 +1,38 @@
 import { useState, useMemo } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery, useQuery } from '@tanstack/react-query'
-import { Table, Button, Empty } from 'antd'
-import { EyeOutlined } from '@ant-design/icons'
-import { ChevronUp, ChevronDown } from 'lucide-react'
+import { Empty, Skeleton } from 'antd'
+import dayjs from 'dayjs'
 import { workspaceQueryOptions } from '../../../../lib/queries'
 import { api } from '../../../../lib/api'
 import { DateRangePicker } from '../../../../components/dashboard/DateRangePicker'
 import { ComparisonPicker } from '../../../../components/dashboard/ComparisonPicker'
-import { BreakdownModal } from '../../../../components/explore/BreakdownModal'
-import { GoalsBreakdownDrawer } from '../../../../components/goals/GoalsBreakdownDrawer'
-import { formatNumber, formatCurrency } from '../../../../lib/chart-utils'
-import type { DatePreset, DateRange } from '../../../../types/analytics'
-import type { ComparisonMode } from '../../../../types/dashboard'
+import { GoalDashboardDrawer } from '../../../../components/goals/GoalDashboardDrawer'
+import { GoalCard } from '../../../../components/goals/GoalCard'
+import { determineGranularity } from '../../../../lib/chart-utils'
+import { determineGranularityForRange, computeDateRange } from '../../../../lib/date-utils'
+import type { DatePreset, DateRange, Granularity } from '../../../../types/analytics'
+import type { ComparisonMode, ChartDataPoint } from '../../../../types/dashboard'
 
 export const Route = createFileRoute('/_authenticated/workspaces/$workspaceId/goals')({
   component: Goals,
 })
 
-interface GoalRow {
-  goal_name: string
-  goals: number
-  goal_value: number
-  goals_prev?: number
-  goal_value_prev?: number
-  goals_change?: number
-  goal_value_change?: number
+interface GoalMetricData {
+  current: number
+  previous?: number
+  change?: number
+  chartData: ChartDataPoint[]
+  chartDataPrev: ChartDataPoint[]
 }
 
-function ChangeIndicator({ value }: { value?: number }) {
-  if (value === undefined || isNaN(value)) return null
-
-  const isPositive = value > 0
-  const isNegative = value < 0
-
-  return (
-    <span
-      className={`text-xs flex items-center justify-end w-12 ml-1 ${
-        isPositive ? 'text-green-600' : isNegative ? 'text-orange-500' : 'text-gray-500'
-      }`}
-    >
-      {isPositive ? (
-        <ChevronUp size={12} className="mr-0.5" />
-      ) : isNegative ? (
-        <ChevronDown size={12} className="mr-0.5" />
-      ) : null}
-      {Math.abs(value).toFixed(0)}%
-    </span>
-  )
+interface GoalRow {
+  goal_name: string
+  metrics: {
+    goals: GoalMetricData
+    sum_goal_value: GoalMetricData
+    median_goal_value: GoalMetricData
+  }
 }
 
 function Goals() {
@@ -60,11 +45,9 @@ function Goals() {
   const [customStart, setCustomStart] = useState<string | undefined>()
   const [customEnd, setCustomEnd] = useState<string | undefined>()
 
-  // Breakdown modal/drawer state
+  // Drawer state
   const [selectedGoal, setSelectedGoal] = useState<string | null>(null)
-  const [isModalOpen, setIsModalOpen] = useState(false)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
-  const [breakdownDimensions, setBreakdownDimensions] = useState<string[]>([])
 
   const showComparison = comparison !== 'none'
 
@@ -74,14 +57,46 @@ function Goals() {
       : { preset: period as DatePreset }
   }, [period, customStart, customEnd])
 
-  // Query goals list with comparison
-  const { data: goalsResponse, isLoading } = useQuery({
-    queryKey: ['goals', 'list', workspaceId, dateRange, showComparison],
+  // Determine granularity based on date range
+  const granularity = useMemo<Granularity>(() => {
+    if ('preset' in dateRange && dateRange.preset) {
+      return determineGranularity(dateRange.preset as DatePreset)
+    }
+    if ('start' in dateRange && 'end' in dateRange && dateRange.start && dateRange.end) {
+      const computed = computeDateRange('custom', workspace.timezone, { start: dateRange.start, end: dateRange.end })
+      return determineGranularityForRange(computed.start, computed.end)
+    }
+    return 'day'
+  }, [dateRange, workspace.timezone])
+
+  // Filter annotations by date range
+  const filteredAnnotations = useMemo(() => {
+    const annotations = workspace.settings.annotations || []
+    if (annotations.length === 0) return []
+
+    const resolvedRange = computeDateRange(
+      period as DatePreset,
+      workspace.timezone,
+      period === 'custom' && customStart && customEnd
+        ? { start: customStart, end: customEnd }
+        : undefined
+    )
+
+    return annotations.filter(annotation => {
+      const annotationDate = dayjs(annotation.date)
+      return !annotationDate.isBefore(resolvedRange.start, 'day')
+          && !annotationDate.isAfter(resolvedRange.end, 'day')
+    })
+  }, [workspace.settings.annotations, period, workspace.timezone, customStart, customEnd])
+
+  // Query goals summary with comparison
+  const { data: goalsResponse, isLoading: summaryLoading } = useQuery({
+    queryKey: ['goals', 'summary', workspaceId, dateRange, showComparison],
     queryFn: () =>
       api.analytics.query({
         workspace_id: workspaceId,
         table: 'goals',
-        metrics: ['goals', 'goal_value'],
+        metrics: ['goals', 'sum_goal_value', 'median_goal_value'],
         dimensions: ['goal_name'],
         dateRange,
         ...(showComparison && { compareDateRange: dateRange }),
@@ -92,62 +107,158 @@ function Goals() {
     staleTime: 60_000,
   })
 
+  // Query time-series data for charts
+  const { data: timeSeriesResponse, isLoading: timeSeriesLoading } = useQuery({
+    queryKey: ['goals', 'timeseries', workspaceId, dateRange, showComparison, granularity],
+    queryFn: () =>
+      api.analytics.query({
+        workspace_id: workspaceId,
+        table: 'goals',
+        metrics: ['goals', 'sum_goal_value', 'median_goal_value'],
+        dimensions: ['goal_name'],
+        dateRange: { ...dateRange, granularity },
+        ...(showComparison && { compareDateRange: { ...dateRange, granularity } }),
+        timezone: workspace.timezone,
+      }),
+    staleTime: 60_000,
+  })
+
+  const isLoading = summaryLoading || timeSeriesLoading
+
+  // Get date column based on granularity
+  const getDateColumn = (g: Granularity): string => {
+    const columns: Record<Granularity, string> = {
+      hour: 'date_hour',
+      day: 'date_day',
+      week: 'date_week',
+      month: 'date_month',
+      year: 'date_year',
+    }
+    return columns[g]
+  }
+
   // Process goal data and calculate changes
   const goalsData: GoalRow[] = useMemo(() => {
-    // Handle comparison data structure
-    let currentData: Record<string, unknown>[] = []
-    let previousData: Record<string, unknown>[] = []
+    // Handle summary data structure
+    let summaryCurrentData: Record<string, unknown>[] = []
+    let summaryPreviousData: Record<string, unknown>[] = []
 
     if (showComparison && goalsResponse?.data && typeof goalsResponse.data === 'object' && 'current' in goalsResponse.data) {
       const compData = goalsResponse.data as { current: Record<string, unknown>[]; previous: Record<string, unknown>[] }
-      currentData = compData.current || []
-      previousData = compData.previous || []
+      summaryCurrentData = compData.current || []
+      summaryPreviousData = compData.previous || []
     } else {
-      currentData = (goalsResponse?.data as Record<string, unknown>[] | undefined) || []
+      summaryCurrentData = (goalsResponse?.data as Record<string, unknown>[] | undefined) || []
     }
 
-    // Create a map of previous values by goal_name
-    const prevMap = new Map<string, { goals: number; goal_value: number }>()
-    for (const row of previousData) {
-      prevMap.set(row.goal_name as string, {
+    // Handle time-series data structure
+    let tsCurrentData: Record<string, unknown>[] = []
+    let tsPreviousData: Record<string, unknown>[] = []
+
+    if (showComparison && timeSeriesResponse?.data && typeof timeSeriesResponse.data === 'object' && 'current' in timeSeriesResponse.data) {
+      const compData = timeSeriesResponse.data as { current: Record<string, unknown>[]; previous: Record<string, unknown>[] }
+      tsCurrentData = compData.current || []
+      tsPreviousData = compData.previous || []
+    } else {
+      tsCurrentData = (timeSeriesResponse?.data as Record<string, unknown>[] | undefined) || []
+    }
+
+    // Create maps for previous summary values by goal_name
+    const summaryPrevMap = new Map<string, { goals: number; sum_goal_value: number; median_goal_value: number }>()
+    for (const row of summaryPreviousData) {
+      summaryPrevMap.set(row.goal_name as string, {
         goals: row.goals as number,
-        goal_value: row.goal_value as number,
+        sum_goal_value: row.sum_goal_value as number,
+        median_goal_value: row.median_goal_value as number,
       })
     }
 
-    return currentData.map((row) => {
-      const goalName = row.goal_name as string
-      const goals = row.goals as number
-      const goalValue = row.goal_value as number
-      const prev = prevMap.get(goalName)
+    // Group time-series data by goal_name
+    const dateColumn = getDateColumn(granularity)
+    const tsCurrentByGoal = new Map<string, ChartDataPoint[]>()
+    const tsPreviousByGoal = new Map<string, ChartDataPoint[]>()
 
-      // Calculate percentage change
-      const goalsChange = prev && prev.goals > 0 ? ((goals - prev.goals) / prev.goals) * 100 : undefined
-      const goalValueChange = prev && prev.goal_value > 0 ? ((goalValue - prev.goal_value) / prev.goal_value) * 100 : undefined
+    for (const row of tsCurrentData) {
+      const goalName = row.goal_name as string
+      if (!tsCurrentByGoal.has(goalName)) {
+        tsCurrentByGoal.set(goalName, [])
+      }
+      tsCurrentByGoal.get(goalName)!.push({
+        timestamp: row[dateColumn] as string,
+        value: row.goals as number,
+        // Store all metrics in a single pass
+        sum_goal_value: row.sum_goal_value as number,
+        median_goal_value: row.median_goal_value as number,
+      } as ChartDataPoint & { sum_goal_value: number; median_goal_value: number })
+    }
+
+    for (const row of tsPreviousData) {
+      const goalName = row.goal_name as string
+      if (!tsPreviousByGoal.has(goalName)) {
+        tsPreviousByGoal.set(goalName, [])
+      }
+      tsPreviousByGoal.get(goalName)!.push({
+        timestamp: row[dateColumn] as string,
+        value: row.goals as number,
+        sum_goal_value: row.sum_goal_value as number,
+        median_goal_value: row.median_goal_value as number,
+      } as ChartDataPoint & { sum_goal_value: number; median_goal_value: number })
+    }
+
+    // Build final data structure
+    return summaryCurrentData.map((row) => {
+      const goalName = row.goal_name as string
+      const prev = summaryPrevMap.get(goalName)
+
+      const currentChartData = tsCurrentByGoal.get(goalName) || []
+      const previousChartData = tsPreviousByGoal.get(goalName) || []
+
+      // Helper to calculate change
+      const calcChange = (current: number, previous?: number) =>
+        previous && previous > 0 ? ((current - previous) / previous) * 100 : undefined
+
+      // Helper to extract metric-specific chart data
+      const extractChartData = (
+        data: (ChartDataPoint & { sum_goal_value?: number; median_goal_value?: number })[],
+        metric: 'goals' | 'sum_goal_value' | 'median_goal_value'
+      ): ChartDataPoint[] =>
+        data.map((d) => ({
+          timestamp: d.timestamp,
+          value: metric === 'goals' ? d.value : (d[metric] ?? 0),
+        }))
 
       return {
         goal_name: goalName,
-        goals,
-        goal_value: goalValue,
-        goals_prev: prev?.goals,
-        goal_value_prev: prev?.goal_value,
-        goals_change: goalsChange,
-        goal_value_change: goalValueChange,
+        metrics: {
+          goals: {
+            current: row.goals as number,
+            previous: prev?.goals,
+            change: calcChange(row.goals as number, prev?.goals),
+            chartData: extractChartData(currentChartData, 'goals'),
+            chartDataPrev: extractChartData(previousChartData, 'goals'),
+          },
+          sum_goal_value: {
+            current: row.sum_goal_value as number,
+            previous: prev?.sum_goal_value,
+            change: calcChange(row.sum_goal_value as number, prev?.sum_goal_value),
+            chartData: extractChartData(currentChartData, 'sum_goal_value'),
+            chartDataPrev: extractChartData(previousChartData, 'sum_goal_value'),
+          },
+          median_goal_value: {
+            current: row.median_goal_value as number,
+            previous: prev?.median_goal_value,
+            change: calcChange(row.median_goal_value as number, prev?.median_goal_value),
+            chartData: extractChartData(currentChartData, 'median_goal_value'),
+            chartDataPrev: extractChartData(previousChartData, 'median_goal_value'),
+          },
+        },
       }
     })
-  }, [goalsResponse?.data, showComparison])
+  }, [goalsResponse, timeSeriesResponse, showComparison, granularity])
 
-  // Handle view click - open dimension selector modal
+  // Handle view click - open dashboard drawer
   const handleView = (goalName: string) => {
     setSelectedGoal(goalName)
-    setBreakdownDimensions(['channel_group', 'device']) // Default dimensions
-    setIsModalOpen(true)
-  }
-
-  // Handle dimension selection confirmed
-  const handleDimensionsConfirm = (dims: string[]) => {
-    setBreakdownDimensions(dims)
-    setIsModalOpen(false)
     setIsDrawerOpen(true)
   }
 
@@ -160,63 +271,6 @@ function Goals() {
     setCustomStart(start)
     setCustomEnd(end)
   }
-
-  const columns = [
-    {
-      title: 'Goal',
-      dataIndex: 'goal_name',
-      key: 'goal_name',
-      render: (name: string) => <span className="font-medium">{name}</span>,
-    },
-    {
-      title: 'Count',
-      dataIndex: 'goals',
-      key: 'goals',
-      width: 140,
-      align: 'right' as const,
-      sorter: (a: GoalRow, b: GoalRow) => a.goals - b.goals,
-      render: (v: number, row: GoalRow) => (
-        <div className="flex items-center justify-end">
-          <span>{formatNumber(v)}</span>
-          {showComparison && <ChangeIndicator value={row.goals_change} />}
-        </div>
-      ),
-    },
-    {
-      title: 'Value',
-      dataIndex: 'goal_value',
-      key: 'goal_value',
-      width: 160,
-      align: 'right' as const,
-      sorter: (a: GoalRow, b: GoalRow) => a.goal_value - b.goal_value,
-      render: (v: number, row: GoalRow) => (
-        <div className="flex items-center justify-end">
-          {v > 0 ? (
-            <>
-              <span>{formatCurrency(v, workspace.currency)}</span>
-              {showComparison && <ChangeIndicator value={row.goal_value_change} />}
-            </>
-          ) : (
-            <span className="text-gray-400">--</span>
-          )}
-        </div>
-      ),
-    },
-    {
-      title: '',
-      key: 'actions',
-      width: 50,
-      render: (_: unknown, row: GoalRow) => (
-        <Button
-          type="text"
-          size="small"
-          icon={<EyeOutlined className="opacity-70" />}
-          onClick={() => handleView(row.goal_name)}
-          title="View breakdown"
-        />
-      ),
-    },
-  ]
 
   return (
     <div className="p-6">
@@ -235,37 +289,39 @@ function Goals() {
         </div>
       </div>
 
-      {goalsData.length === 0 && !isLoading ? (
+      {isLoading && goalsData.length === 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} active paragraph={{ rows: 4 }} />
+          ))}
+        </div>
+      ) : goalsData.length === 0 ? (
         <Empty
           description="No goals tracked yet"
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           className="py-12"
         />
       ) : (
-        <Table
-          dataSource={goalsData}
-          columns={columns}
-          rowKey="goal_name"
-          pagination={false}
-          loading={isLoading}
-          size="middle"
-        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {goalsData.map((goal) => (
+            <GoalCard
+              key={goal.goal_name}
+              goalName={goal.goal_name}
+              metrics={goal.metrics}
+              showComparison={showComparison}
+              currency={workspace.currency}
+              annotations={filteredAnnotations}
+              granularity={granularity}
+              timezone={workspace.timezone}
+              onViewDashboard={() => handleView(goal.goal_name)}
+            />
+          ))}
+        </div>
       )}
 
-      {/* Dimension Selector Modal */}
-      <BreakdownModal
-        open={isModalOpen}
-        onCancel={() => setIsModalOpen(false)}
-        onSubmit={handleDimensionsConfirm}
-        initialDimensions={breakdownDimensions}
-        customDimensionLabels={workspace.settings.custom_dimensions}
-        title="Select dimensions to analyze"
-        submitText="View Breakdown"
-      />
-
-      {/* Breakdown Drawer */}
+      {/* Goal Dashboard Drawer */}
       {selectedGoal && (
-        <GoalsBreakdownDrawer
+        <GoalDashboardDrawer
           open={isDrawerOpen}
           onClose={() => {
             setIsDrawerOpen(false)
@@ -273,11 +329,11 @@ function Goals() {
           }}
           workspaceId={workspaceId}
           goalName={selectedGoal}
-          breakdownDimensions={breakdownDimensions}
           dateRange={dateRange}
+          showComparison={showComparison}
           timezone={workspace.timezone}
           currency={workspace.currency}
-          customDimensionLabels={workspace.settings.custom_dimensions}
+          annotations={filteredAnnotations}
         />
       )}
     </div>
