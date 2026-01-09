@@ -1289,23 +1289,23 @@ describe('Analytics E2E', () => {
         expect(Number(response.body.data[0].goals)).toBe(30);
       });
 
-      it('returns goal_value sum from goals table', async () => {
+      it('returns sum_goal_value from goals table', async () => {
         const response = await request(ctx.app.getHttpServer())
           .post('/api/analytics.query')
           .set('Authorization', `Bearer ${authToken}`)
           .send({
             workspace_id: workspaceId,
             table: 'goals',
-            metrics: ['goals', 'goal_value'],
+            metrics: ['goals', 'sum_goal_value'],
             dateRange: { start: '2025-12-01', end: '2025-12-31' },
           })
           .expect(200);
 
         expect(response.body.data[0]).toHaveProperty('goals');
-        expect(response.body.data[0]).toHaveProperty('goal_value');
+        expect(response.body.data[0]).toHaveProperty('sum_goal_value');
         // 10 purchase goals with values: 99.99 + [2,5,8,11,14,17,20,23,26,29]
         // = 10 * 99.99 + (2+5+8+11+14+17+20+23+26+29) = 999.9 + 155 = 1154.9
-        expect(Number(response.body.data[0].goal_value)).toBeGreaterThan(1000);
+        expect(Number(response.body.data[0].sum_goal_value)).toBeGreaterThan(1000);
       });
 
       it('returns goals grouped by goal_name', async () => {
@@ -1315,7 +1315,7 @@ describe('Analytics E2E', () => {
           .send({
             workspace_id: workspaceId,
             table: 'goals',
-            metrics: ['goals', 'goal_value'],
+            metrics: ['goals', 'sum_goal_value'],
             dimensions: ['goal_name'],
             dateRange: { start: '2025-12-01', end: '2025-12-31' },
           })
@@ -1324,7 +1324,7 @@ describe('Analytics E2E', () => {
         expect(response.body.data.length).toBe(3); // 3 goal types
         expect(response.body.data[0]).toHaveProperty('goal_name');
         expect(response.body.data[0]).toHaveProperty('goals');
-        expect(response.body.data[0]).toHaveProperty('goal_value');
+        expect(response.body.data[0]).toHaveProperty('sum_goal_value');
 
         const goalNames = response.body.data.map(
           (d: { goal_name: string }) => d.goal_name,
@@ -1341,7 +1341,7 @@ describe('Analytics E2E', () => {
           .send({
             workspace_id: workspaceId,
             table: 'goals',
-            metrics: ['goals', 'goal_value'],
+            metrics: ['goals', 'sum_goal_value'],
             dimensions: ['channel'],
             dateRange: { start: '2025-12-01', end: '2025-12-31' },
           })
@@ -1386,7 +1386,7 @@ describe('Analytics E2E', () => {
           .send({
             workspace_id: workspaceId,
             table: 'goals',
-            metrics: ['goals', 'goal_value'],
+            metrics: ['goals', 'sum_goal_value'],
             filters: [
               {
                 dimension: 'goal_name',
@@ -1399,7 +1399,7 @@ describe('Analytics E2E', () => {
           .expect(200);
 
         expect(Number(response.body.data[0].goals)).toBe(10); // 10 purchase goals
-        expect(Number(response.body.data[0].goal_value)).toBeGreaterThan(0);
+        expect(Number(response.body.data[0].sum_goal_value)).toBeGreaterThan(0);
       });
 
       it('filters goals by device', async () => {
@@ -1473,7 +1473,7 @@ describe('Analytics E2E', () => {
           .send({
             workspace_id: workspaceId,
             table: 'goals',
-            metrics: ['goals', 'goal_value'],
+            metrics: ['goals', 'sum_goal_value'],
             dateRange: {
               start: '2025-12-01',
               end: '2025-12-10',
@@ -1543,14 +1543,14 @@ describe('Analytics E2E', () => {
     });
 
     describe('POST /api/analytics.extremes with table=goals', () => {
-      it('returns min and max goal_value by goal_name', async () => {
+      it('returns min and max sum_goal_value by goal_name', async () => {
         const response = await request(ctx.app.getHttpServer())
           .post('/api/analytics.extremes')
           .set('Authorization', `Bearer ${authToken}`)
           .send({
             workspace_id: workspaceId,
             table: 'goals',
-            metric: 'goal_value',
+            metric: 'sum_goal_value',
             groupBy: ['goal_name'],
             dateRange: { start: '2025-12-01', end: '2025-12-31' },
           })
@@ -1558,7 +1558,7 @@ describe('Analytics E2E', () => {
 
         expect(response.body).toHaveProperty('min');
         expect(response.body).toHaveProperty('max');
-        expect(response.body.meta.metric).toBe('goal_value');
+        expect(response.body.meta.metric).toBe('sum_goal_value');
         // Only purchase goals have value > 0
         expect(Number(response.body.max)).toBeGreaterThan(0);
       });
@@ -1591,7 +1591,7 @@ describe('Analytics E2E', () => {
 
         const metricNames = response.body.map((m: { name: string }) => m.name);
         expect(metricNames).toContain('goals');
-        expect(metricNames).toContain('goal_value');
+        expect(metricNames).toContain('sum_goal_value');
         expect(metricNames).toContain('avg_goal_value');
         expect(metricNames).toContain('unique_sessions_with_goals');
         expect(metricNames).not.toContain('sessions');
