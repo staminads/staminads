@@ -126,11 +126,14 @@ describe('Analytics E2E', () => {
     });
 
     // Seed test pages in workspace database
+    // Use recent dates to avoid 7-day TTL on pages table
+    const pagesBaseDate = new Date();
+    pagesBaseDate.setDate(pagesBaseDate.getDate() - 3); // 3 days ago to stay within TTL
     const pages = [];
     const pagePaths = ['/', '/products', '/about', '/contact', '/blog'];
     for (let i = 0; i < 50; i++) {
-      const date = new Date(baseDate);
-      date.setDate(date.getDate() + Math.floor(i / 5));
+      const date = new Date(pagesBaseDate);
+      date.setHours(date.getHours() + Math.floor(i / 5)); // Spread pages over hours instead of days
       const path = pagePaths[i % pagePaths.length];
 
       pages.push({
@@ -145,7 +148,7 @@ describe('Analytics E2E', () => {
         ),
         duration: 30 + i * 2,
         max_scroll: 20 + (i % 80),
-        page_number: (i % 3) + 1,
+        page_number: (i % 2) + 1, // 1 or 2 per session (session_id cycles every 2)
         is_landing: i % 5 === 0,
         is_exit: i % 5 === 4,
         entry_type: i % 5 === 0 ? 'landing' : 'navigation',
@@ -157,6 +160,11 @@ describe('Analytics E2E', () => {
       table: 'pages',
       values: pages,
       format: 'JSONEachRow',
+    });
+
+    // Force merge for ReplacingMergeTree to ensure FINAL works correctly in tests
+    await workspaceClient.command({
+      query: 'OPTIMIZE TABLE pages FINAL',
     });
 
     // Seed test goals in workspace database
@@ -893,6 +901,19 @@ describe('Analytics E2E', () => {
   });
 
   describe('Pages Table Analytics', () => {
+    // Pages table has 7-day TTL, so we use dynamic date ranges
+    const getPagesDateRange = () => {
+      const today = new Date();
+      const start = new Date(today);
+      start.setDate(start.getDate() - 7);
+      const end = new Date(today);
+      end.setDate(end.getDate() + 1);
+      return {
+        start: start.toISOString().split('T')[0],
+        end: end.toISOString().split('T')[0],
+      };
+    };
+
     describe('POST /api/analytics.query with table=pages', () => {
       it('returns page count from pages table', async () => {
         const response = await request(ctx.app.getHttpServer())
@@ -902,7 +923,7 @@ describe('Analytics E2E', () => {
             workspace_id: workspaceId,
             table: 'pages',
             metrics: ['page_count'],
-            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+            dateRange: getPagesDateRange(),
           })
           .expect(200);
 
@@ -919,7 +940,7 @@ describe('Analytics E2E', () => {
             table: 'pages',
             metrics: ['page_count', 'page_duration'],
             dimensions: ['page_path'],
-            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+            dateRange: getPagesDateRange(),
           })
           .expect(200);
 
@@ -944,7 +965,7 @@ describe('Analytics E2E', () => {
             table: 'pages',
             metrics: ['page_duration', 'page_scroll'],
             dimensions: ['page_path'],
-            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+            dateRange: getPagesDateRange(),
           })
           .expect(200);
 
@@ -969,7 +990,7 @@ describe('Analytics E2E', () => {
                 values: ['/products'],
               },
             ],
-            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+            dateRange: getPagesDateRange(),
           })
           .expect(200);
 
@@ -991,7 +1012,7 @@ describe('Analytics E2E', () => {
                 values: [true],
               },
             ],
-            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+            dateRange: getPagesDateRange(),
           })
           .expect(200);
 
@@ -1006,7 +1027,7 @@ describe('Analytics E2E', () => {
             workspace_id: workspaceId,
             table: 'pages',
             metrics: ['landing_page_count', 'exit_page_count', 'exit_rate'],
-            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+            dateRange: getPagesDateRange(),
           })
           .expect(200);
 
@@ -1016,6 +1037,7 @@ describe('Analytics E2E', () => {
       });
 
       it('returns time series with granularity for pages', async () => {
+        const dateRange = getPagesDateRange();
         const response = await request(ctx.app.getHttpServer())
           .post('/api/analytics.query')
           .set('Authorization', `Bearer ${authToken}`)
@@ -1024,14 +1046,14 @@ describe('Analytics E2E', () => {
             table: 'pages',
             metrics: ['page_count'],
             dateRange: {
-              start: '2025-12-01',
-              end: '2025-12-10',
+              ...dateRange,
               granularity: 'day',
             },
           })
           .expect(200);
 
-        expect(response.body.data.length).toBe(10);
+        // Verify we get time series data with date_day property
+        expect(response.body.data.length).toBeGreaterThan(0);
         expect(response.body.data[0]).toHaveProperty('date_day');
       });
 
@@ -1043,7 +1065,7 @@ describe('Analytics E2E', () => {
             workspace_id: workspaceId,
             table: 'pages',
             metrics: ['sessions'],
-            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+            dateRange: getPagesDateRange(),
           })
           .expect(400);
       });
@@ -1057,7 +1079,7 @@ describe('Analytics E2E', () => {
             table: 'pages',
             metrics: ['page_count'],
             dimensions: ['utm_source'],
-            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+            dateRange: getPagesDateRange(),
           })
           .expect(400);
       });
@@ -1089,7 +1111,7 @@ describe('Analytics E2E', () => {
           .expect(400);
       });
 
-      it('returns SQL without FINAL for pages table', async () => {
+      it('returns SQL with FINAL for pages table', async () => {
         const response = await request(ctx.app.getHttpServer())
           .post('/api/analytics.query')
           .set('Authorization', `Bearer ${authToken}`)
@@ -1097,12 +1119,11 @@ describe('Analytics E2E', () => {
             workspace_id: workspaceId,
             table: 'pages',
             metrics: ['page_count'],
-            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+            dateRange: getPagesDateRange(),
           })
           .expect(200);
 
-        expect(response.body.query.sql).toContain('FROM pages');
-        expect(response.body.query.sql).not.toContain('FINAL');
+        expect(response.body.query.sql).toContain('FROM pages FINAL');
       });
     });
 
@@ -1116,7 +1137,7 @@ describe('Analytics E2E', () => {
             table: 'pages',
             metric: 'page_duration',
             groupBy: ['page_path'],
-            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+            dateRange: getPagesDateRange(),
           })
           .expect(200);
 
@@ -1134,7 +1155,7 @@ describe('Analytics E2E', () => {
             table: 'pages',
             metric: 'sessions',
             groupBy: ['page_path'],
-            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+            dateRange: getPagesDateRange(),
           })
           .expect(400);
       });

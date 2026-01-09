@@ -21,3 +21,4 @@ A source of traffic can be any dimensions or combination of dimensions such as:
 ## Roadmap
 
 - detect old sdk usage if new sdk version is available
+- what tables are affected by TTL?

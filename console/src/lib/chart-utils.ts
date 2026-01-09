@@ -126,6 +126,28 @@ export function formatNumber(value: number): string {
 }
 
 /**
+ * Format currency value with compact notation for large values
+ * Uses narrow symbol (e.g., "$" instead of "USD")
+ */
+export function formatCurrency(value: number, currency: string = 'USD'): string {
+  const formatter = new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency,
+    currencyDisplay: 'narrowSymbol',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: value >= 1000 ? 0 : 2,
+  })
+
+  if (value >= 1_000_000) {
+    return formatter.format(value / 1_000_000).replace(/[\d,.]+/, `${(value / 1_000_000).toFixed(1)}M`)
+  }
+  if (value >= 10_000) {
+    return formatter.format(value / 1_000).replace(/[\d,.]+/, `${(value / 1_000).toFixed(1)}K`)
+  }
+  return formatter.format(value)
+}
+
+/**
  * Format X-axis label based on granularity
  * Uses dayjs for reliable parsing of "YYYY-MM-DD HH:00:00" format
  */

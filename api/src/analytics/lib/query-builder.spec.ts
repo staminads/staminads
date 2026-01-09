@@ -319,14 +319,13 @@ describe('buildAnalyticsQuery', () => {
       expect(sql).toContain('created_at >= toDateTime64');
     });
 
-    it('queries pages table without FINAL modifier', () => {
+    it('queries pages table with FINAL modifier', () => {
       const { sql } = buildAnalyticsQuery({
         ...baseQuery,
         table: 'pages',
         metrics: ['page_count'],
       });
-      expect(sql).toContain('FROM pages');
-      expect(sql).not.toContain('FINAL');
+      expect(sql).toContain('FROM pages FINAL');
       expect(sql).toContain('entered_at >= toDateTime64');
     });
 
@@ -581,15 +580,14 @@ describe('buildExtremesQuery', () => {
       expect(sql).toContain('FROM sessions FINAL');
     });
 
-    it('queries pages table without FINAL modifier', () => {
+    it('queries pages table with FINAL modifier', () => {
       const { sql } = buildExtremesQuery({
         ...baseExtremesQuery,
         table: 'pages',
         metric: 'page_duration',
         groupBy: ['page_path'],
       });
-      expect(sql).toContain('FROM pages');
-      expect(sql).not.toContain('FINAL');
+      expect(sql).toContain('FROM pages FINAL');
     });
 
     it('uses entered_at for pages table date filtering', () => {

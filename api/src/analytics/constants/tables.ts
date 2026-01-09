@@ -16,7 +16,7 @@ export const TABLE_CONFIGS: Record<AnalyticsTable, TableConfig> = {
   pages: {
     name: 'pages',
     dateColumn: 'entered_at',
-    finalModifier: false, // MergeTree doesn't need FINAL
+    finalModifier: true, // ReplacingMergeTree needs FINAL
   },
   goals: {
     name: 'goals',

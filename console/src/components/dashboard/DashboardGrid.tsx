@@ -12,6 +12,7 @@ import { MetricChart } from './MetricChart'
 import { GranularitySelector } from './GranularitySelector'
 import { DimensionTableWidget } from './DimensionTableWidget'
 import { TrafficHeatmapWidget, type HeatmapDataPoint } from './TrafficHeatmapWidget'
+import { GoalsWidget } from './GoalsWidget'
 import {
   METRICS,
   extractDashboardData,
@@ -25,6 +26,7 @@ import type { Annotation } from '../../types/workspace'
 interface DashboardGridProps {
   workspaceId: string
   workspaceTimezone: string
+  workspaceCurrency: string
   timescoreReference: number
   comparison: ComparisonMode
   customStart?: string
@@ -37,6 +39,7 @@ interface DashboardGridProps {
 export function DashboardGrid({
   workspaceId,
   workspaceTimezone,
+  workspaceCurrency,
   timescoreReference,
   comparison,
   customStart,
@@ -447,6 +450,10 @@ export function DashboardGrid({
             iconPrefix={getDeviceIcon}
             onRowClick={handleRowClick}
           />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          <GoalsWidget currency={workspaceCurrency} />
         </div>
       </div>
     </DashboardProvider>
