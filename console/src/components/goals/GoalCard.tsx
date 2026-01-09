@@ -256,9 +256,13 @@ export function GoalCard({
         {METRIC_CONFIG.map((config, index) => {
           const data = metrics[config.key]
           const isSelected = selectedMetric === config.key
-          const isLast = index === METRIC_CONFIG.length - 1
           const changePercent = data.change ?? 0
           const isPositive = changePercent >= 0
+
+          // Border logic for 2x2 mobile / 1x4 desktop
+          // Mobile: items 0,2 have right border; Desktop: items 0,1,2 have right border
+          const isRightEdgeMobile = index % 2 === 1 // items 1, 3
+          const isRightEdgeDesktop = index === 3
 
           // Format value based on type
           const formatValue = () => {
@@ -277,7 +281,8 @@ export function GoalCard({
               onClick={() => setSelectedMetric(config.key)}
               className={`
                 cursor-pointer p-2 transition-colors text-center
-                ${!isLast ? 'border-r border-gray-100' : ''}
+                ${!isRightEdgeMobile ? 'border-r border-gray-100' : ''}
+                ${!isRightEdgeDesktop ? 'sm:border-r sm:border-gray-100' : 'sm:border-r-0'}
                 ${isSelected ? 'border-b-2 border-b-[var(--primary)] bg-gray-50/50' : 'border-b border-b-gray-100 hover:bg-gray-50'}
               `}
             >
