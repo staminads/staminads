@@ -190,6 +190,12 @@ export class WorkspacesService {
       updatedSettings = {
         ...workspace.settings,
         ...dto.settings,
+        // Explicitly preserve fields that have dedicated management endpoints
+        // These should only be modified through their own APIs (filters.*, etc.)
+        filters: dto.settings.filters ?? workspace.settings.filters,
+        integrations:
+          dto.settings.integrations ?? workspace.settings.integrations,
+        annotations: dto.settings.annotations ?? workspace.settings.annotations,
       };
     }
 

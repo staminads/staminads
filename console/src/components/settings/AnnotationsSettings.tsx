@@ -99,7 +99,7 @@ export function AnnotationsSettings({ workspace }: AnnotationsSettingsProps) {
     const updatedAnnotations = annotations.filter((a) => a.id !== id)
     updateMutation.mutate({
       id: workspace.id,
-      settings: { annotations: updatedAnnotations },
+      settings: { ...workspace.settings, annotations: updatedAnnotations },
     })
   }
 
@@ -127,7 +127,7 @@ export function AnnotationsSettings({ workspace }: AnnotationsSettingsProps) {
 
       updateMutation.mutate({
         id: workspace.id,
-        settings: { annotations: updatedAnnotations },
+        settings: { ...workspace.settings, annotations: updatedAnnotations },
       })
     })
   }

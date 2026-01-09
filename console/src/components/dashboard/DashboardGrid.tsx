@@ -12,13 +12,13 @@ import { MetricChart } from './MetricChart'
 import { GranularitySelector } from './GranularitySelector'
 import { DimensionTableWidget } from './DimensionTableWidget'
 import { TrafficHeatmapWidget, type HeatmapDataPoint } from './TrafficHeatmapWidget'
-import { GoalsWidget } from './GoalsWidget'
 import {
   METRICS,
   extractDashboardData,
   type MetricKey,
   type ComparisonMode,
-  type DimensionTabConfig
+  type DimensionTabConfig,
+  type ColumnConfig
 } from '../../types/dashboard'
 import type { DatePreset, Granularity, Filter } from '../../types/analytics'
 import type { Annotation } from '../../types/workspace'
@@ -285,6 +285,23 @@ export function DashboardGrid({
     { key: 'os', label: 'OS', dimensionLabel: 'OS', dimension: 'os' }
   ]
 
+  const goalsTabConfig: DimensionTabConfig[] = [
+    {
+      key: 'goals',
+      label: 'Goals',
+      dimensionLabel: 'Goal',
+      dimension: 'goal_name',
+      table: 'goals',
+      metrics: ['goals', 'goal_value'],
+      order: { goals: 'desc' }
+    }
+  ]
+
+  const goalsColumns: ColumnConfig[] = [
+    { key: 'goals', label: 'Count', format: 'number' },
+    { key: 'goal_value', label: 'Value', format: 'currency', currency: workspaceCurrency }
+  ]
+
   // Mapping from tab key to dimension for click-to-filter
   const tabKeyToDimension: Record<string, string> = useMemo(() => ({
     // Pages
@@ -307,6 +324,8 @@ export function DashboardGrid({
     devices: 'device',
     browsers: 'browser',
     os: 'os',
+    // Goals
+    goals: 'goal_name',
   }), [])
 
   // Generic row click handler that adds a filter
@@ -453,7 +472,14 @@ export function DashboardGrid({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-          <GoalsWidget currency={workspaceCurrency} />
+          <DimensionTableWidget
+            title="Goals"
+            infoTooltip="Track goal conversions and their total value"
+            tabs={goalsTabConfig}
+            columns={goalsColumns}
+            emptyText="No goals data"
+            onRowClick={handleRowClick}
+          />
         </div>
       </div>
     </DashboardProvider>

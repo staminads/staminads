@@ -153,6 +153,8 @@ function Settings() {
       timezone: values.timezone,
       currency: values.currency,
       settings: {
+        // Preserve all existing settings, only update form-managed fields
+        ...workspace.settings,
         timescore_reference: values.timescore_reference,
         bounce_threshold: values.bounce_threshold,
         allowed_domains: allowedDomains.length > 0 ? allowedDomains : undefined,
@@ -219,7 +221,7 @@ function Settings() {
 
     updateLabelMutation.mutate({
       id: workspaceId,
-      settings: { custom_dimensions: updatedLabels },
+      settings: { ...workspace.settings, custom_dimensions: updatedLabels },
     })
   }
 

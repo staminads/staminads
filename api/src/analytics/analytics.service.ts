@@ -184,6 +184,7 @@ export class AnalyticsService {
         resolvedDateRange.end,
         dto.metrics,
         dto.dimensions || [],
+        tz,
       );
     }
 
@@ -288,6 +289,7 @@ export class AnalyticsService {
           dto.dateRange.end,
           dto.metrics,
           dto.dimensions || [],
+          tz,
         );
       }
       if (compareDateRange.start && compareDateRange.end) {
@@ -299,6 +301,7 @@ export class AnalyticsService {
           compareDateRange.end,
           dto.metrics,
           dto.dimensions || [],
+          tz,
         );
       }
     }

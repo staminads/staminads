@@ -45,10 +45,15 @@ export function useDimensionQuery(
   }, [ctx.globalFilters, tabConfig.filters])
 
   // Build the analytics query
+  const metrics = useMemo(
+    () => tabConfig.metrics ?? ['sessions', 'median_duration'],
+    [tabConfig.metrics]
+  )
   const query = useMemo<AnalyticsQuery>(
     () => ({
       workspace_id: ctx.workspaceId,
-      metrics: tabConfig.metrics ?? ['sessions', 'median_duration'],
+      table: tabConfig.table,
+      metrics,
       dimensions: [tabConfig.dimension],
       filters: mergedFilters.length > 0 ? mergedFilters : undefined,
       dateRange: ctx.dateRange,
@@ -59,7 +64,7 @@ export function useDimensionQuery(
       limit: limitOverride ?? tabConfig.limit ?? 7,
       timezone: ctx.timezone,
     }),
-    [ctx, tabConfig, mergedFilters, limitOverride, orderOverride]
+    [ctx, tabConfig, mergedFilters, limitOverride, orderOverride, metrics]
   )
 
   const { data: response, isFetching } = useQuery({
@@ -74,8 +79,8 @@ export function useDimensionQuery(
   // Transform API response to standard DimensionData format
   const data = useMemo<DimensionData[]>(() => {
     if (!responseMatchesTab) return []
-    return transformToDimensionData(response, tabConfig.dimensionField ?? tabConfig.dimension)
-  }, [response, responseMatchesTab, tabConfig.dimension, tabConfig.dimensionField])
+    return transformToDimensionData(response, tabConfig.dimensionField ?? tabConfig.dimension, metrics)
+  }, [response, responseMatchesTab, tabConfig.dimension, tabConfig.dimensionField, metrics])
 
   return {
     data,

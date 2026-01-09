@@ -96,7 +96,7 @@ export function IntegrationsSettings({ workspace }: IntegrationsSettingsProps) {
 
     updateMutation.mutate({
       id: workspace.id,
-      settings: { integrations: [...otherIntegrations, updatedIntegration] },
+      settings: { ...workspace.settings, integrations: [...otherIntegrations, updatedIntegration] },
     })
   }
 
@@ -136,7 +136,7 @@ export function IntegrationsSettings({ workspace }: IntegrationsSettingsProps) {
 
     updateMutation.mutate({
       id: workspace.id,
-      settings: { integrations: [...otherIntegrations, updatedIntegration] },
+      settings: { ...workspace.settings, integrations: [...otherIntegrations, updatedIntegration] },
     })
   }
 

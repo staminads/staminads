@@ -30,7 +30,7 @@ export function CountryMapView({ data, loading, onCountryClick }: CountryMapView
   // Find max sessions for color scaling
   const maxSessions = useMemo(() => {
     if (data.length === 0) return 1
-    return Math.max(...data.map((d) => d.sessions))
+    return Math.max(...data.map((d) => (d.sessions as number) || 0))
   }, [data])
 
   // Transform data for ECharts - convert ISO2 to GeoJSON country name for matching
@@ -44,7 +44,7 @@ export function CountryMapView({ data, loading, onCountryClick }: CountryMapView
 
         return {
           name: geoName,
-          value: d.sessions,
+          value: (d.sessions as number) || 0,
         }
       })
       .filter((item): item is NonNullable<typeof item> => item !== null)

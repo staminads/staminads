@@ -1,17 +1,22 @@
 import type { AnalyticsResponse } from '../types/analytics'
 import type { DimensionData } from '../types/dashboard'
 
+/** Default metrics for backward compatibility */
+const DEFAULT_METRICS = ['sessions', 'median_duration']
+
 /**
  * Transforms an analytics API response to the standard DimensionData format.
  * Handles both comparison and non-comparison responses.
  *
  * @param response - The raw analytics API response
  * @param dimensionField - The field name containing the dimension value (e.g., 'device', 'landing_path')
+ * @param metrics - Array of metric field names to extract (defaults to ['sessions', 'median_duration'])
  * @returns Array of DimensionData objects
  */
 export function transformToDimensionData(
   response: AnalyticsResponse | undefined,
-  dimensionField: string
+  dimensionField: string,
+  metrics: string[] = DEFAULT_METRICS
 ): DimensionData[] {
   if (!response?.data) return []
 
@@ -31,21 +36,33 @@ export function transformToDimensionData(
       const dimensionValue = row[dimensionField] as string
       const prevRow = previous?.find((p) => p[dimensionField] === dimensionValue)
 
-      return {
+      const result: DimensionData = {
         dimension_value: dimensionValue ?? '',
-        sessions: (row.sessions as number) ?? 0,
-        median_duration: (row.median_duration as number) ?? 0,
-        prev_sessions: prevRow?.sessions as number | undefined,
-        prev_median_duration: prevRow?.median_duration as number | undefined,
       }
+
+      // Dynamically extract each metric and its previous value
+      for (const metric of metrics) {
+        result[metric] = (row[metric] as number) ?? 0
+        if (prevRow) {
+          result[`prev_${metric}`] = prevRow[metric] as number | undefined
+        }
+      }
+
+      return result
     })
   }
 
   // No comparison - flat array
   const rows = response.data as Record<string, unknown>[]
-  return rows.map((row) => ({
-    dimension_value: (row[dimensionField] as string) ?? '',
-    sessions: (row.sessions as number) ?? 0,
-    median_duration: (row.median_duration as number) ?? 0,
-  }))
+  return rows.map((row) => {
+    const result: DimensionData = {
+      dimension_value: (row[dimensionField] as string) ?? '',
+    }
+
+    for (const metric of metrics) {
+      result[metric] = (row[metric] as number) ?? 0
+    }
+
+    return result
+  })
 }

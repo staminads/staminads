@@ -59,8 +59,11 @@ export interface DateRange {
   granularity?: Granularity
 }
 
+export type AnalyticsTable = 'sessions' | 'pages' | 'goals'
+
 export interface AnalyticsQuery {
   workspace_id: string
+  table?: AnalyticsTable
   metrics: string[]
   dimensions?: string[]
   filters?: Filter[]

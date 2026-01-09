@@ -55,7 +55,11 @@ describe('Backfill Integration', () => {
       ['workspaces', 'backfill_tasks'],
       0,
     );
-    await truncateWorkspaceTables(workspaceClient, ['sessions', 'events'], 0);
+    await truncateWorkspaceTables(
+      workspaceClient,
+      ['sessions', 'events', 'goals'],
+      0,
+    );
     await waitForClickHouse();
 
     // Create test workspace with filters in system database
@@ -776,6 +780,99 @@ describe('Backfill Integration', () => {
       const session3 = rows.find((r) => r.id === 'session-3');
       expect(session3?.channel).toBe('');
       expect(session3?.channel_group).toBe('');
+    });
+
+    it('applies filters correctly to goals after backfill', async () => {
+      // Insert test goal with empty channel values
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      await workspaceClient.insert({
+        table: 'goals',
+        values: [
+          {
+            session_id: 'session-goal-1',
+            workspace_id: testWorkspaceId,
+            goal_name: 'signup',
+            goal_value: 100,
+            goal_timestamp: toClickHouseDateTime(yesterday),
+            path: '/signup',
+            utm_source: 'google',
+            utm_medium: 'cpc',
+            landing_page: 'https://test.com',
+            landing_path: '/landing',
+            is_direct: false,
+            channel: '', // Empty - should be filled by backfill
+            channel_group: '',
+            _version: 1,
+          },
+          {
+            session_id: 'session-goal-2',
+            workspace_id: testWorkspaceId,
+            goal_name: 'purchase',
+            goal_value: 50,
+            goal_timestamp: toClickHouseDateTime(yesterday),
+            path: '/checkout',
+            utm_source: 'facebook',
+            utm_medium: 'social',
+            landing_page: 'https://test.com',
+            landing_path: '/landing',
+            is_direct: false,
+            channel: '',
+            channel_group: '',
+            _version: 1,
+          },
+        ],
+        format: 'JSONEachRow',
+      });
+      await waitForClickHouse();
+
+      // Verify goals exist with empty channel values before backfill
+      const beforeResult = await workspaceClient.query({
+        query: `SELECT goal_name, channel, channel_group FROM goals FINAL ORDER BY goal_name`,
+        format: 'JSONEachRow',
+      });
+      const beforeRows = await beforeResult.json();
+      expect(beforeRows).toHaveLength(2);
+      beforeRows.forEach((row) => {
+        expect(row.channel).toBe('');
+        expect(row.channel_group).toBe('');
+      });
+
+      // Start backfill
+      const response = await request(ctx.app.getHttpServer())
+        .post('/api/filters.backfillStart')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ workspace_id: testWorkspaceId, lookback_days: 2 })
+        .expect(201);
+
+      // Wait for completion
+      await waitForBackfillsToComplete(systemClient);
+
+      // Verify task completed successfully
+      const statusResponse = await request(ctx.app.getHttpServer())
+        .get('/api/filters.backfillStatus')
+        .query({ task_id: response.body.task_id })
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+      expect(statusResponse.body.status).toBe('completed');
+
+      // Verify goals have updated channel values
+      const result = await workspaceClient.query({
+        query: `SELECT goal_name, utm_source, channel, channel_group FROM goals FINAL ORDER BY goal_name`,
+        format: 'JSONEachRow',
+      });
+      const rows = await result.json();
+
+      expect(rows).toHaveLength(2);
+
+      // Goal 1: signup with utm_source=google -> Google / Paid Search
+      const goal1 = rows.find((r) => r.goal_name === 'purchase');
+      expect(goal1?.channel).toBe('Facebook');
+      expect(goal1?.channel_group).toBe('Paid Social');
+
+      // Goal 2: purchase with utm_source=facebook -> Facebook / Paid Social
+      const goal2 = rows.find((r) => r.goal_name === 'signup');
+      expect(goal2?.channel).toBe('Google');
+      expect(goal2?.channel_group).toBe('Paid Search');
     });
   });
 

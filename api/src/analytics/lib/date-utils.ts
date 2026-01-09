@@ -160,6 +160,7 @@ export function fillGaps<T extends Record<string, unknown>>(
   end: string,
   metrics: string[],
   dimensions: string[] = [],
+  tz: string = 'UTC',
 ): T[] {
   // Determine date format and unit based on granularity
   let dateFormat: string;
@@ -192,9 +193,10 @@ export function fillGaps<T extends Record<string, unknown>>(
   }
 
   // Generate all dates in range
+  // Dates are stored in UTC format, convert to workspace timezone for correct day boundaries
   const allDates: string[] = [];
-  let current = dayjs(start);
-  const endDate = dayjs(end);
+  let current = dayjs.utc(start).tz(tz);
+  const endDate = dayjs.utc(end).tz(tz);
   while (current.isBefore(endDate) || current.isSame(endDate, unit)) {
     allDates.push(current.format(dateFormat));
     current = current.add(1, unit);

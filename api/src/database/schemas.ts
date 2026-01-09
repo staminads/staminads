@@ -434,7 +434,6 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
     ) ENGINE = ReplacingMergeTree(_version)
     PARTITION BY toYYYYMMDD(received_at)
     ORDER BY (session_id, page_number)
-    TTL toDateTime(received_at) + INTERVAL 7 DAY
   `,
 
   pages_mv: `

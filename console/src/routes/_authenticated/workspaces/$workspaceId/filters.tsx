@@ -106,13 +106,14 @@ function FiltersPage() {
               options={segmentedOptions}
             />
           )}
-          <Input
-            placeholder="Search..."
-            allowClear
-            prefix={<SearchOutlined className="text-gray-400" />}
-            onChange={(e) => setSearchText(e.target.value)}
-            className="w-full md:w-[250px] md:ml-auto"
-          />
+          <div className="w-full md:w-[300px] md:ml-auto">
+            <Input
+              placeholder="Search..."
+              allowClear
+              prefix={<SearchOutlined className="text-gray-400" />}
+              onChange={(e) => setSearchText(e.target.value)}
+            />
+          </div>
         </div>
       )}
 

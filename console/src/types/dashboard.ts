@@ -1,11 +1,25 @@
 import type { ReactNode } from 'react'
-import type { DatePreset, DateRange, Filter, Granularity, AnalyticsResponse } from './analytics'
+import type { AnalyticsTable, DatePreset, DateRange, Filter, Granularity, AnalyticsResponse } from './analytics'
 
 export type ComparisonMode = 'previous_period' | 'previous_year' | 'none'
 
 // ============================================
 // Dimension Table Widget Types
 // ============================================
+
+/** Column configuration for DimensionTableWidget */
+export interface ColumnConfig {
+  /** Metric field name (e.g., 'sessions', 'goals') */
+  key: string
+  /** Column header label (e.g., 'Sessions', 'Count') */
+  label: string
+  /** Value formatting type */
+  format: 'number' | 'duration' | 'currency'
+  /** Currency code when format is 'currency' (e.g., 'USD') */
+  currency?: string
+  /** Show heat map colored dot (for TimeScore) */
+  heatMap?: boolean
+}
 
 /** Tab configuration for DimensionTableWidget - defines what data to fetch */
 export interface DimensionTabConfig {
@@ -19,6 +33,8 @@ export interface DimensionTabConfig {
   dimension: string
   /** Response field name if different from dimension (e.g., "referrer_domain") */
   dimensionField?: string
+  /** Analytics table to query (default: 'sessions') */
+  table?: AnalyticsTable
   /** Metrics to fetch (default: ['sessions', 'median_duration']) */
   metrics?: string[]
   /** Widget-specific filters (combined with global filters) */
@@ -46,13 +62,11 @@ export interface DashboardContextValue {
   setShowEvoDetails: (value: boolean) => void
 }
 
-/** Standard data shape for all dimension widgets */
+/** Standard data shape for all dimension widgets - supports dynamic metric fields */
 export interface DimensionData {
   dimension_value: string
-  sessions: number
-  median_duration: number
-  prev_sessions?: number
-  prev_median_duration?: number
+  /** Dynamic metric fields (e.g., sessions, goals, goal_value) and their prev_ counterparts */
+  [key: string]: string | number | undefined
 }
 
 /** Props for DimensionTableWidget */
@@ -63,6 +77,8 @@ export interface DimensionTableWidgetProps {
   infoTooltip?: string
   /** Tab configurations (at least one required) */
   tabs: DimensionTabConfig[]
+  /** Column configurations (defaults to sessions columns if not specified) */
+  columns?: ColumnConfig[]
   /** Optional icon renderer for dimension values */
   iconPrefix?: (value: string, tabKey: string) => ReactNode
   /** Optional row click handler */

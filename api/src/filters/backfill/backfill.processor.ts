@@ -38,10 +38,10 @@ function formatEventPartition(date: Date): string {
 }
 
 /**
- * Format date as partition name for sessions table (YYYYMM).
- * Uses UTC to match ClickHouse's toYYYYMM(created_at) partitioning.
+ * Format date as partition name for monthly-partitioned tables (YYYYMM).
+ * Used by sessions (toYYYYMM(created_at)) and goals (toYYYYMM(goal_timestamp)).
  */
-function formatSessionPartition(date: Date): string {
+function formatMonthlyPartition(date: Date): string {
   const year = date.getUTCFullYear();
   const month = String(date.getUTCMonth() + 1).padStart(2, '0');
   return `${year}${month}`;
@@ -50,6 +50,7 @@ function formatSessionPartition(date: Date): string {
 export class FilterBackfillProcessor {
   private cancelled = false;
   private processedSessionPartitions = new Set<string>();
+  private processedGoalPartitions = new Set<string>();
 
   /**
    * Static lock map to prevent concurrent backfills on the same workspace.
@@ -220,8 +221,9 @@ export class FilterBackfillProcessor {
     // Compile filters to SQL once (deterministic, no need to recompile per chunk)
     const compiled = compileFiltersToSQL(filters);
 
-    // Reset session partition tracking for this task
+    // Reset session and goal partition tracking for this task
     this.processedSessionPartitions.clear();
+    this.processedGoalPartitions.clear();
 
     // Calculate date range
     const endDate = new Date();
@@ -366,6 +368,9 @@ export class FilterBackfillProcessor {
       chunkDate,
     );
 
+    // Process goals (no TTL - process all dates like sessions)
+    await this.processGoalsForDate(task, compiled, chunkDate);
+
     // Update progress with actual counts
     await this.backfillService.updateTaskProgress(task, {
       processed_sessions: task.processed_sessions + sessionsProcessed,
@@ -428,7 +433,7 @@ export class FilterBackfillProcessor {
     chunkDate: Date,
   ): Promise<number> {
     // Format partition name (YYYYMM for sessions - monthly partitions)
-    const partition = formatSessionPartition(chunkDate);
+    const partition = formatMonthlyPartition(chunkDate);
 
     // Check if this partition was already processed (sessions use monthly partitions)
     // Multiple dates in the same month would otherwise trigger redundant mutations
@@ -467,6 +472,46 @@ export class FilterBackfillProcessor {
     );
 
     return parseInt(result[0]?.count ?? '0', 10);
+  }
+
+  /**
+   * Process goals for a specific date using SQL-compiled filters.
+   * Goals use ReplacingMergeTree(_version), partitioned by toYYYYMM(goal_timestamp).
+   * Goals use monthly partitions, so we deduplicate to avoid redundant mutations.
+   */
+  private async processGoalsForDate(
+    task: BackfillTask,
+    compiled: CompiledFilters,
+    chunkDate: Date,
+  ): Promise<void> {
+    // Format partition name (YYYYMM for goals - monthly partitions)
+    const partition = formatMonthlyPartition(chunkDate);
+
+    // Check if this partition was already processed (goals use monthly partitions)
+    // Multiple dates in the same month would otherwise trigger redundant mutations
+    if (!this.processedGoalPartitions.has(partition)) {
+      const { setClause } = compiled;
+
+      // Acquire mutation slot (semaphore released immediately after check)
+      await this.acquireMutationSlot();
+
+      // Execute single mutation for entire partition
+      // WHERE 1=1: Process all rows. ELSE ${dimension} in CASE prevents data loss.
+      await this.clickhouse.commandWorkspaceWithParams(
+        task.workspace_id,
+        `ALTER TABLE goals UPDATE
+           ${setClause}
+         IN PARTITION '${partition}'
+         WHERE 1=1`,
+        {},
+      );
+
+      // Wait for mutation to complete
+      await this.waitForMutations(task.workspace_id, 'goals');
+
+      // Mark partition as processed
+      this.processedGoalPartitions.add(partition);
+    }
   }
 
   /**
@@ -529,7 +574,7 @@ export class FilterBackfillProcessor {
    */
   private async waitForMutations(
     workspaceId: string,
-    table: 'events' | 'sessions',
+    table: 'events' | 'sessions' | 'goals',
     timeoutMs = 60000,
   ): Promise<void> {
     const start = Date.now();

@@ -1,30 +1,36 @@
 import { useState, useMemo, useRef, useCallback } from 'react'
 import { Tooltip, Empty, Spin, Drawer, Pagination } from 'antd'
 import { ChevronUp, ChevronDown, ArrowUp, ArrowDown, Info, Maximize2, TrendingUp } from 'lucide-react'
-import { formatValue } from '../../lib/chart-utils'
+import { formatValue, formatCurrency } from '../../lib/chart-utils'
 import { getHeatMapStyle } from '../../lib/explore-utils'
 import { useDimensionQuery } from '../../hooks/useDimensionQuery'
 import { useDashboardContext } from '../../hooks/useDashboardContext'
 import { CountryMapView } from './CountryMapView'
-import type { DimensionTableWidgetProps, DimensionData } from '../../types/dashboard'
+import type { DimensionTableWidgetProps, DimensionData, ColumnConfig } from '../../types/dashboard'
 
-type SortKey = 'sessions' | 'median_duration'
 type SortDirection = 'asc' | 'desc'
 
 const EXPANDED_LIMIT = 200
 const PAGE_SIZE = 20
 
+/** Default columns for backward compatibility (sessions tables) */
+const DEFAULT_COLUMNS: ColumnConfig[] = [
+  { key: 'sessions', label: 'Sessions', format: 'number' },
+  { key: 'median_duration', label: 'TimeScore', format: 'duration', heatMap: true },
+]
+
 export function DimensionTableWidget({
   title,
   infoTooltip,
   tabs,
+  columns = DEFAULT_COLUMNS,
   iconPrefix,
   onRowClick,
   emptyText = 'No data available',
 }: DimensionTableWidgetProps) {
   const { showComparison, timescoreReference, showEvoDetails, setShowEvoDetails } = useDashboardContext()
   const [activeTabKey, setActiveTabKey] = useState(tabs[0].key)
-  const [sortBy, setSortBy] = useState<SortKey>('sessions')
+  const [sortBy, setSortBy] = useState<string>(columns[0].key)
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
@@ -60,20 +66,23 @@ export function DimensionTableWidget({
     }
   )
 
-  // Max median_duration for heat map scaling
-  const maxMedianDuration = useMemo(() => {
-    return data.reduce((max, row) => Math.max(max, row.median_duration || 0), 0)
-  }, [data])
+  // Find column with heatMap enabled and calculate max for scaling
+  const heatMapColumn = columns.find((col) => col.heatMap)
+  const maxHeatMapValue = useMemo(() => {
+    if (!heatMapColumn) return 0
+    return data.reduce((max, row) => Math.max(max, (row[heatMapColumn.key] as number) || 0), 0)
+  }, [data, heatMapColumn])
 
   // Data is already sorted by API, just get max value for bar width
-  const maxValue = data[0]?.[sortBy] ?? 1
+  const maxValue = (data[0]?.[sortBy] as number) ?? 1
 
   // Expanded data calculations for drawer
-  const expandedMaxMedianDuration = useMemo(() => {
-    return expandedData.reduce((max, row) => Math.max(max, row.median_duration || 0), 0)
-  }, [expandedData])
+  const expandedMaxHeatMapValue = useMemo(() => {
+    if (!heatMapColumn) return 0
+    return expandedData.reduce((max, row) => Math.max(max, (row[heatMapColumn.key] as number) || 0), 0)
+  }, [expandedData, heatMapColumn])
 
-  const expandedMaxValue = expandedData[0]?.[sortBy] ?? 1
+  const expandedMaxValue = (expandedData[0]?.[sortBy] as number) ?? 1
 
   // Paginated data for drawer
   const paginatedData = useMemo(() => {
@@ -100,7 +109,7 @@ export function DimensionTableWidget({
 
   const sortDebounceRef = useRef(false)
 
-  const handleHeaderClick = useCallback((key: SortKey) => {
+  const handleHeaderClick = useCallback((key: string) => {
     if (sortDebounceRef.current) return
     sortDebounceRef.current = true
 
@@ -193,7 +202,7 @@ export function DimensionTableWidget({
           data={data}
           loading={loading}
           onCountryClick={(countryCode) => {
-            onRowClick?.({ dimension_value: countryCode, sessions: 0, median_duration: 0 }, activeTabKey)
+            onRowClick?.({ dimension_value: countryCode }, activeTabKey)
           }}
         />
       ) : loading && data.length === 0 ? (
@@ -219,7 +228,7 @@ export function DimensionTableWidget({
               </div>
               {/* Dimension cells */}
               {data.map((row, index) => {
-                const percent = (row[sortBy] / maxValue) * 100
+                const percent = ((row[sortBy] as number) / maxValue) * 100
                 return (
                   <div
                     key={row.dimension_value}
@@ -241,138 +250,89 @@ export function DimensionTableWidget({
             </div>
           </div>
 
-          {/* SESSIONS COLUMN - static, never scrolls */}
-          <div className="w-16 md:w-24 flex-shrink-0 bg-white md:bg-transparent">
-            {/* Sessions header */}
-            <div className="flex items-center justify-end h-[46px] border-b border-gray-200">
-              <button
-                onClick={() => handleHeaderClick('sessions')}
-                className={`text-xs font-medium text-right cursor-pointer hover:text-gray-900 flex items-center justify-end gap-0.5 ${sortBy === 'sessions' ? 'text-gray-900' : 'text-gray-500'}`}
+          {/* METRIC COLUMNS - static, never scroll */}
+          {columns.map((col, colIndex) => {
+            const isFirst = colIndex === 0
+            const hasHeatMap = col.heatMap
+            return (
+              <div
+                key={col.key}
+                className={`${isFirst ? 'w-16 md:w-24' : 'w-28 md:w-36'} flex-shrink-0 bg-white md:bg-transparent`}
               >
-                Sessions
-                {sortBy === 'sessions' ? (
-                  sortDirection === 'desc' ? (
-                    <ArrowDown size={12} className="text-[var(--primary)]" />
-                  ) : (
-                    <ArrowUp size={12} className="text-[var(--primary)]" />
-                  )
-                ) : (
-                  <ArrowDown size={12} className="opacity-0" />
-                )}
-              </button>
-            </div>
-            {/* Sessions cells */}
-            {data.map((row, index) => {
-              const sessionsChange = showComparison ? getChange(row.sessions, row.prev_sessions) : null
-              return (
-                <div
-                  key={row.dimension_value}
-                  className={`${getRowClasses(index)} justify-end`}
-                  {...rowInteractionProps(index, row)}
-                >
-                  {/* Mobile: toggle between value+caret and evo% */}
-                  <span className="md:hidden">
-                    {showEvoDetails && showComparison ? (
-                      <span
-                        className={`text-xs ${sessionsChange !== null ? (sessionsChange >= 0 ? 'text-green-600' : 'text-orange-500') : 'text-gray-400'}`}
-                      >
-                        {sessionsChange !== null ? (
-                          <>
-                            {sessionsChange >= 0 ? <ChevronUp size={14} className="inline" /> : <ChevronDown size={14} className="inline" />}
-                            {Math.abs(sessionsChange).toFixed(0)}%
-                          </>
-                        ) : '—'}
-                      </span>
+                {/* Column header */}
+                <div className={`flex items-center h-[46px] ${isFirst ? 'justify-end' : 'pl-6'} border-b border-gray-200`}>
+                  <button
+                    onClick={() => handleHeaderClick(col.key)}
+                    className={`text-xs font-medium ${isFirst ? 'text-right' : ''} cursor-pointer hover:text-gray-900 flex items-center ${isFirst ? 'justify-end' : ''} gap-0.5 ${sortBy === col.key ? 'text-gray-900' : 'text-gray-500'}`}
+                  >
+                    {col.label}
+                    {sortBy === col.key ? (
+                      sortDirection === 'desc' ? (
+                        <ArrowDown size={12} className="text-[var(--primary)]" />
+                      ) : (
+                        <ArrowUp size={12} className="text-[var(--primary)]" />
+                      )
                     ) : (
-                      <span className="text-xs text-gray-800 inline-flex items-center justify-end gap-0.5">
-                        {formatValue(row.sessions, 'number')}
-                        {showComparison && sessionsChange !== null && (
-                          sessionsChange >= 0 ? <ChevronUp size={14} className="text-green-600" /> : <ChevronDown size={14} className="text-orange-500" />
-                        )}
-                      </span>
+                      <ArrowDown size={12} className="opacity-0" />
                     )}
-                  </span>
-                  {/* Desktop: always show value + full evo% */}
-                  <span className="hidden md:inline-flex items-center justify-end gap-1 text-xs text-gray-800">
-                    {formatValue(row.sessions, 'number')}
-                    {showComparison && sessionsChange !== null && (
-                      <span className={sessionsChange >= 0 ? 'text-green-600' : 'text-orange-500'}>
-                        {sessionsChange >= 0 ? <ChevronUp size={14} className="inline" /> : <ChevronDown size={14} className="inline" />}
-                        {Math.abs(sessionsChange).toFixed(0)}%
-                      </span>
-                    )}
-                  </span>
+                  </button>
                 </div>
-              )
-            })}
-          </div>
+                {/* Column cells */}
+                {data.map((row, index) => {
+                  const value = row[col.key] as number
+                  const prevValue = row[`prev_${col.key}`] as number | undefined
+                  const change = showComparison ? getChange(value, prevValue) : null
+                  const formattedValue = col.format === 'currency'
+                    ? formatCurrency(value, col.currency)
+                    : formatValue(value, col.format)
 
-          {/* TIMESCORE COLUMN - static, never scrolls */}
-          <div className="w-28 md:w-36 flex-shrink-0 bg-white md:bg-transparent">
-            {/* TimeScore header */}
-            <div className="flex items-center h-[46px] pl-6 border-b border-gray-200">
-              <button
-                onClick={() => handleHeaderClick('median_duration')}
-                className={`text-xs font-medium cursor-pointer hover:text-gray-900 flex items-center gap-0.5 ${sortBy === 'median_duration' ? 'text-gray-900' : 'text-gray-500'}`}
-              >
-                TimeScore
-                {sortBy === 'median_duration' ? (
-                  sortDirection === 'desc' ? (
-                    <ArrowDown size={12} className="text-[var(--primary)]" />
-                  ) : (
-                    <ArrowUp size={12} className="text-[var(--primary)]" />
-                  )
-                ) : (
-                  <ArrowDown size={12} className="opacity-0" />
-                )}
-              </button>
-            </div>
-            {/* TimeScore cells */}
-            {data.map((row, index) => {
-              const durationChange = showComparison ? getChange(row.median_duration, row.prev_median_duration) : null
-              return (
-                <div
-                  key={row.dimension_value}
-                  className={`${getRowClasses(index)} gap-2 pl-6`}
-                  {...rowInteractionProps(index, row)}
-                >
-                  <span style={getHeatMapStyle(row.median_duration, maxMedianDuration, timescoreReference)} />
-                  {/* Mobile: toggle between value+caret and evo% */}
-                  <span className="md:hidden">
-                    {showEvoDetails && showComparison ? (
-                      <span
-                        className={`text-xs ${durationChange !== null ? (durationChange >= 0 ? 'text-green-600' : 'text-orange-500') : 'text-gray-400'}`}
-                      >
-                        {durationChange !== null ? (
-                          <>
-                            {durationChange >= 0 ? <ChevronUp size={14} className="inline" /> : <ChevronDown size={14} className="inline" />}
-                            {Math.abs(durationChange).toFixed(0)}%
-                          </>
-                        ) : '—'}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-gray-800 inline-flex items-center gap-0.5">
-                        {formatValue(row.median_duration, 'duration')}
-                        {showComparison && durationChange !== null && (
-                          durationChange >= 0 ? <ChevronUp size={14} className="text-green-600" /> : <ChevronDown size={14} className="text-orange-500" />
+                  return (
+                    <div
+                      key={row.dimension_value}
+                      className={`${getRowClasses(index)} ${isFirst ? 'justify-end' : 'gap-2 pl-6'}`}
+                      {...rowInteractionProps(index, row)}
+                    >
+                      {hasHeatMap && (
+                        <span style={getHeatMapStyle(value, maxHeatMapValue, timescoreReference)} />
+                      )}
+                      {/* Mobile: toggle between value+caret and evo% */}
+                      <span className="md:hidden">
+                        {showEvoDetails && showComparison ? (
+                          <span
+                            className={`text-xs ${change !== null ? (change >= 0 ? 'text-green-600' : 'text-orange-500') : 'text-gray-400'}`}
+                          >
+                            {change !== null ? (
+                              <>
+                                {change >= 0 ? <ChevronUp size={14} className="inline" /> : <ChevronDown size={14} className="inline" />}
+                                {Math.abs(change).toFixed(0)}%
+                              </>
+                            ) : '—'}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-800 inline-flex items-center justify-end gap-0.5">
+                            {formattedValue}
+                            {showComparison && change !== null && (
+                              change >= 0 ? <ChevronUp size={14} className="text-green-600" /> : <ChevronDown size={14} className="text-orange-500" />
+                            )}
+                          </span>
                         )}
                       </span>
-                    )}
-                  </span>
-                  {/* Desktop: always show value + full evo% */}
-                  <span className="hidden md:inline-flex items-center gap-1 text-xs text-gray-800">
-                    {formatValue(row.median_duration, 'duration')}
-                    {showComparison && durationChange !== null && (
-                      <span className={durationChange >= 0 ? 'text-green-600' : 'text-orange-500'}>
-                        {durationChange >= 0 ? <ChevronUp size={14} className="inline" /> : <ChevronDown size={14} className="inline" />}
-                        {Math.abs(durationChange).toFixed(0)}%
+                      {/* Desktop: always show value + full evo% */}
+                      <span className="hidden md:inline-flex items-center justify-end gap-1 text-xs text-gray-800">
+                        {formattedValue}
+                        {showComparison && change !== null && (
+                          <span className={change >= 0 ? 'text-green-600' : 'text-orange-500'}>
+                            {change >= 0 ? <ChevronUp size={14} className="inline" /> : <ChevronDown size={14} className="inline" />}
+                            {Math.abs(change).toFixed(0)}%
+                          </span>
+                        )}
                       </span>
-                    )}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -380,11 +340,22 @@ export function DimensionTableWidget({
       {!isMapView && (
       <Drawer
         title={
-          <div className="flex items-center gap-2">
-            {title}
-            <Tooltip title="Limited to top 200 results for performance">
-              <Info size={14} className="text-gray-400 cursor-help" />
-            </Tooltip>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {title}
+              <Tooltip title="Limited to top 200 results for performance">
+                <Info size={14} className="text-gray-400 cursor-help" />
+              </Tooltip>
+            </div>
+            {/* Growth toggle - only when comparison is shown */}
+            {showComparison && (
+              <button
+                onClick={() => setShowEvoDetails(!showEvoDetails)}
+                className={`p-1.5 rounded hover:bg-gray-100 transition-colors cursor-pointer ${showEvoDetails ? 'text-[var(--primary)]' : 'text-gray-400 hover:text-gray-600'}`}
+              >
+                <TrendingUp size={16} />
+              </button>
+            )}
           </div>
         }
         open={drawerOpen}
@@ -416,36 +387,27 @@ export function DimensionTableWidget({
           <span className="flex-1 min-w-0 text-xs font-medium text-gray-600 truncate">
             {activeTab.dimensionLabel}
           </span>
-          <button
-            onClick={() => handleHeaderClick('sessions')}
-            className={`text-xs font-medium text-right cursor-pointer hover:text-gray-900 flex items-center justify-end gap-0.5 w-16 md:w-24 flex-shrink-0 ${sortBy === 'sessions' ? 'text-gray-900' : 'text-gray-500'}`}
-          >
-            Sessions
-            {sortBy === 'sessions' ? (
-              sortDirection === 'desc' ? (
-                <ArrowDown size={12} className="text-[var(--primary)]" />
-              ) : (
-                <ArrowUp size={12} className="text-[var(--primary)]" />
-              )
-            ) : (
-              <ArrowDown size={12} className="opacity-0" />
-            )}
-          </button>
-          <button
-            onClick={() => handleHeaderClick('median_duration')}
-            className={`text-xs font-medium pl-6 cursor-pointer hover:text-gray-900 flex items-center gap-0.5 w-28 md:w-36 flex-shrink-0 bg-white md:bg-transparent ${sortBy === 'median_duration' ? 'text-gray-900' : 'text-gray-500'}`}
-          >
-            TimeScore
-            {sortBy === 'median_duration' ? (
-              sortDirection === 'desc' ? (
-                <ArrowDown size={12} className="text-[var(--primary)]" />
-              ) : (
-                <ArrowUp size={12} className="text-[var(--primary)]" />
-              )
-            ) : (
-              <ArrowDown size={12} className="opacity-0" />
-            )}
-          </button>
+          {columns.map((col, colIndex) => {
+            const isFirst = colIndex === 0
+            return (
+              <button
+                key={col.key}
+                onClick={() => handleHeaderClick(col.key)}
+                className={`text-xs font-medium ${isFirst ? 'text-right' : 'pl-6'} cursor-pointer hover:text-gray-900 flex items-center ${isFirst ? 'justify-end' : ''} gap-0.5 ${isFirst ? 'w-16 md:w-24' : 'w-28 md:w-36'} flex-shrink-0 bg-white md:bg-transparent ${sortBy === col.key ? 'text-gray-900' : 'text-gray-500'}`}
+              >
+                {col.label}
+                {sortBy === col.key ? (
+                  sortDirection === 'desc' ? (
+                    <ArrowDown size={12} className="text-[var(--primary)]" />
+                  ) : (
+                    <ArrowUp size={12} className="text-[var(--primary)]" />
+                  )
+                ) : (
+                  <ArrowDown size={12} className="opacity-0" />
+                )}
+              </button>
+            )
+          })}
         </div>
 
         {/* Drawer content */}
@@ -466,12 +428,13 @@ export function DimensionTableWidget({
                 <DimensionRow
                   key={row.dimension_value}
                   row={row}
+                  columns={columns}
                   sortBy={sortBy}
                   maxValue={expandedMaxValue}
-                  maxMedianDuration={expandedMaxMedianDuration}
+                  maxHeatMapValue={expandedMaxHeatMapValue}
                   timescoreReference={timescoreReference}
                   showComparison={showComparison}
-                  showEvoDetails={true}
+                  showEvoDetails={showEvoDetails}
                   iconPrefix={iconPrefix?.(row.dimension_value, activeTabKey)}
                   onClick={onRowClick ? () => onRowClick(row, activeTabKey) : undefined}
                   getChange={getChange}
@@ -500,9 +463,10 @@ export function DimensionTableWidget({
 
 interface DimensionRowProps {
   row: DimensionData
-  sortBy: SortKey
+  columns: ColumnConfig[]
+  sortBy: string
   maxValue: number
-  maxMedianDuration: number
+  maxHeatMapValue: number
   timescoreReference: number
   showComparison: boolean
   showEvoDetails: boolean
@@ -513,9 +477,10 @@ interface DimensionRowProps {
 
 function DimensionRow({
   row,
+  columns,
   sortBy,
   maxValue,
-  maxMedianDuration,
+  maxHeatMapValue,
   timescoreReference,
   showComparison,
   showEvoDetails,
@@ -523,10 +488,8 @@ function DimensionRow({
   onClick,
   getChange,
 }: DimensionRowProps) {
-  const percent = (row[sortBy] / maxValue) * 100
+  const percent = ((row[sortBy] as number) / maxValue) * 100
   const displayValue = row.dimension_value || '(empty)'
-  const sessionsChange = showComparison ? getChange(row.sessions, row.prev_sessions) : null
-  const durationChange = showComparison ? getChange(row.median_duration, row.prev_median_duration) : null
 
   return (
     <div
@@ -550,78 +513,68 @@ function DimensionRow({
         </div>
       </div>
 
-      {/* Sessions - sticky on mobile */}
-      <div className="text-right w-16 md:w-24 flex-shrink-0 bg-white md:bg-transparent h-full flex items-center justify-end sticky right-[7rem] md:static">
-        {/* Mobile: toggle between value+caret and evo% */}
-        <span className="md:hidden">
-          {showEvoDetails && showComparison ? (
-            <span
-              className={`text-xs ${sessionsChange !== null ? (sessionsChange >= 0 ? 'text-green-600' : 'text-orange-500') : 'text-gray-400'}`}
-            >
-              {sessionsChange !== null ? (
-                <>
-                  {sessionsChange >= 0 ? <ChevronUp size={14} className="inline" /> : <ChevronDown size={14} className="inline" />}
-                  {Math.abs(sessionsChange).toFixed(0)}%
-                </>
-              ) : '—'}
-            </span>
-          ) : (
-            <span className="text-xs text-gray-800 inline-flex items-center justify-end gap-0.5">
-              {formatValue(row.sessions, 'number')}
-              {showComparison && sessionsChange !== null && (
-                sessionsChange >= 0 ? <ChevronUp size={14} className="text-green-600" /> : <ChevronDown size={14} className="text-orange-500" />
-              )}
-            </span>
-          )}
-        </span>
-        {/* Desktop: always show value + full evo% */}
-        <span className="hidden md:inline-flex items-center justify-end gap-1 text-xs text-gray-800">
-          {formatValue(row.sessions, 'number')}
-          {showComparison && sessionsChange !== null && (
-            <span className={sessionsChange >= 0 ? 'text-green-600' : 'text-orange-500'}>
-              {sessionsChange >= 0 ? <ChevronUp size={14} className="inline" /> : <ChevronDown size={14} className="inline" />}
-              {Math.abs(sessionsChange).toFixed(0)}%
-            </span>
-          )}
-        </span>
-      </div>
+      {/* Metric columns */}
+      {columns.map((col, colIndex) => {
+        const isFirst = colIndex === 0
+        const isLast = colIndex === columns.length - 1
+        const hasHeatMap = col.heatMap
+        const value = row[col.key] as number
+        const prevValue = row[`prev_${col.key}`] as number | undefined
+        const change = showComparison ? getChange(value, prevValue) : null
+        const formattedValue = col.format === 'currency'
+          ? formatCurrency(value, col.currency)
+          : formatValue(value, col.format)
 
-      {/* TimeScore - sticky on mobile */}
-      <div className="w-28 md:w-36 flex-shrink-0 flex items-center gap-2 pl-6 bg-white md:bg-transparent h-full sticky right-0 md:static">
-        <span style={getHeatMapStyle(row.median_duration, maxMedianDuration, timescoreReference)} />
-        {/* Mobile: toggle between value+caret and evo% */}
-        <span className="md:hidden">
-          {showEvoDetails && showComparison ? (
-            <span
-              className={`text-xs ${durationChange !== null ? (durationChange >= 0 ? 'text-green-600' : 'text-orange-500') : 'text-gray-400'}`}
-            >
-              {durationChange !== null ? (
-                <>
-                  {durationChange >= 0 ? <ChevronUp size={14} className="inline" /> : <ChevronDown size={14} className="inline" />}
-                  {Math.abs(durationChange).toFixed(0)}%
-                </>
-              ) : '—'}
-            </span>
-          ) : (
-            <span className="text-xs text-gray-800 inline-flex items-center gap-0.5">
-              {formatValue(row.median_duration, 'duration')}
-              {showComparison && durationChange !== null && (
-                durationChange >= 0 ? <ChevronUp size={14} className="text-green-600" /> : <ChevronDown size={14} className="text-orange-500" />
+        // Sticky positioning: last column at right-0, second-to-last at right-[7rem]
+        const stickyClass = isLast
+          ? 'sticky right-0 md:static'
+          : isFirst && columns.length > 1
+            ? 'sticky right-[7rem] md:static'
+            : ''
+
+        return (
+          <div
+            key={col.key}
+            className={`${isFirst ? 'text-right w-16 md:w-24 justify-end' : 'w-28 md:w-36 gap-2 pl-6'} flex-shrink-0 flex items-center bg-white md:bg-transparent h-full ${stickyClass}`}
+          >
+            {hasHeatMap && (
+              <span style={getHeatMapStyle(value, maxHeatMapValue, timescoreReference)} />
+            )}
+            {/* Mobile: toggle between value+caret and evo% */}
+            <span className="md:hidden">
+              {showEvoDetails && showComparison ? (
+                <span
+                  className={`text-xs ${change !== null ? (change >= 0 ? 'text-green-600' : 'text-orange-500') : 'text-gray-400'}`}
+                >
+                  {change !== null ? (
+                    <>
+                      {change >= 0 ? <ChevronUp size={14} className="inline" /> : <ChevronDown size={14} className="inline" />}
+                      {Math.abs(change).toFixed(0)}%
+                    </>
+                  ) : '—'}
+                </span>
+              ) : (
+                <span className="text-xs text-gray-800 inline-flex items-center justify-end gap-0.5">
+                  {formattedValue}
+                  {showComparison && change !== null && (
+                    change >= 0 ? <ChevronUp size={14} className="text-green-600" /> : <ChevronDown size={14} className="text-orange-500" />
+                  )}
+                </span>
               )}
             </span>
-          )}
-        </span>
-        {/* Desktop: always show value + full evo% */}
-        <span className="hidden md:inline-flex items-center gap-1 text-xs text-gray-800">
-          {formatValue(row.median_duration, 'duration')}
-          {showComparison && durationChange !== null && (
-            <span className={durationChange >= 0 ? 'text-green-600' : 'text-orange-500'}>
-              {durationChange >= 0 ? <ChevronUp size={14} className="inline" /> : <ChevronDown size={14} className="inline" />}
-              {Math.abs(durationChange).toFixed(0)}%
+            {/* Desktop: always show value + full evo% */}
+            <span className="hidden md:inline-flex items-center justify-end gap-1 text-xs text-gray-800">
+              {formattedValue}
+              {showComparison && change !== null && (
+                <span className={change >= 0 ? 'text-green-600' : 'text-orange-500'}>
+                  {change >= 0 ? <ChevronUp size={14} className="inline" /> : <ChevronDown size={14} className="inline" />}
+                  {Math.abs(change).toFixed(0)}%
+                </span>
+              )}
             </span>
-          )}
-        </span>
-      </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

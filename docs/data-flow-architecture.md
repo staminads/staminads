@@ -47,30 +47,65 @@ SDK → Track Endpoint → Event Processing → Buffer → ClickHouse Events Tab
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/track` | POST | Single event tracking |
-| `/api/track.batch` | POST | Batch event tracking (multiple events) |
+| `/api/track` | POST | Track session with cumulative actions array |
 
 **Source**: `api/src/events/events.controller.ts`
 
-### Event Data Model
+### Session Payload Data Model
 
-The SDK sends events conforming to `TrackEventDto`:
+The SDK sends session payloads conforming to `SessionPayloadDto`. This uses a checkpoint-based delta sending pattern where actions are processed incrementally:
 
 ```typescript
-interface TrackEventDto {
+interface SessionPayloadDto {
   // Identifiers
   workspace_id: string;      // Workspace identifier
   session_id: string;        // Client-generated session ID
 
-  // Event metadata
-  name: string;              // Event name (e.g., "pageview", "click")
-  path: string;              // Current page path
-  duration?: number;         // Time spent on previous page (ms)
+  // Actions array (pageviews and goals)
+  actions: (PageviewActionDto | GoalActionDto)[];
 
+  // Current page being viewed (optional)
+  current_page?: CurrentPageDto;
+
+  // Checkpoint for incremental processing
+  checkpoint?: number;       // Server skips actions at indices <= checkpoint
+
+  // Session attributes (traffic source, device info)
+  attributes?: SessionAttributesDto;
+
+  // Timestamps
+  created_at: number;        // Session start (unix ms)
+  updated_at: number;        // Last interaction (unix ms)
+
+  // SDK metadata
+  sdk_version?: string;
+  sent_at?: number;          // For clock skew detection
+}
+
+interface PageviewActionDto {
+  type: 'pageview';
+  path: string;              // Page path
+  page_number: number;       // Sequence within session (1-based)
+  duration: number;          // Time on page (ms)
+  scroll: number;            // Max scroll depth (0-100)
+  entered_at: number;        // When user entered page (unix ms)
+  exited_at: number;         // When user exited page (unix ms)
+}
+
+interface GoalActionDto {
+  type: 'goal';
+  name: string;              // Goal identifier
+  path: string;              // Page where goal triggered
+  page_number: number;       // Page sequence number
+  timestamp: number;         // When goal triggered (unix ms)
+  value?: number;            // Optional goal value
+  properties?: Record<string, string>;  // Custom properties
+}
+
+interface SessionAttributesDto {
   // Traffic source
   referrer?: string;         // Full referrer URL
-  referrer_domain?: string;  // Referrer domain (can be derived)
-  is_direct?: boolean;       // Direct traffic flag
+  landing_page: string;      // Landing page URL
 
   // UTM parameters
   utm_source?: string;
@@ -79,6 +114,7 @@ interface TrackEventDto {
   utm_term?: string;
   utm_content?: string;
   utm_id?: string;
+  utm_id_from?: string;
 
   // Device information
   device?: string;           // "desktop", "mobile", "tablet"
@@ -95,16 +131,10 @@ interface TrackEventDto {
   // User locale
   language?: string;         // Browser language
   timezone?: string;         // User timezone (IANA format)
-
-  // Engagement
-  max_scroll?: number;       // Maximum scroll depth (0-100%)
-
-  // Extensibility
-  properties?: Map<string, string>;  // Custom properties
 }
 ```
 
-**Source**: `api/src/events/dto/track-event.dto.ts`
+**Source**: `api/src/events/dto/session-payload.dto.ts`
 
 ### Client IP Handling
 
@@ -116,20 +146,20 @@ The client IP is extracted via the `@ClientIp()` decorator but is **never stored
 
 ### Processing Pipeline
 
-When an event is received, it undergoes the following transformations in `EventsService.buildEvent()`:
+When a session payload is received, it undergoes the following transformations in `SessionPayloadHandler.handle()`:
 
-**Source**: `api/src/events/events.service.ts`
+**Source**: `api/src/events/session-payload.handler.ts`
 
 #### 1. Workspace Configuration Loading
 
 ```typescript
-// Workspace config is cached for 1 minute
-const workspace = await this.workspacesService.findOne(workspaceId);
-// Config includes: filters, geo_settings, custom_dimensions, timezone
+// Workspace config is cached for 1 minute (CACHE_TTL_MS = 60 * 1000)
+const workspace = await this.getWorkspace(payload.workspace_id);
+// Config includes: filters, geo_settings, allowed_domains, timezone
 ```
 
 - Workspace settings are cached in-memory for 1 minute
-- Cache is invalidated when workspace is updated or filters change
+- Cache is invalidated via event emitter when filters or settings change
 
 #### 2. Geo-Location Lookup
 
@@ -138,16 +168,21 @@ const workspace = await this.workspacesService.findOne(workspaceId);
 The geo service uses MaxMind GeoLite2 database:
 
 ```typescript
-// IP → Geo lookup (results cached 5 min, max 10,000 entries)
-const geo = await this.geoService.lookup(clientIp);
+// IP → Geo lookup with workspace settings (results cached 5 min, max 10,000 entries)
+const geo = this.geoService.lookupWithSettings(clientIp, {
+  geo_enabled: workspace.settings.geo_enabled,
+  geo_store_city: workspace.settings.geo_store_city,
+  geo_store_region: workspace.settings.geo_store_region,
+  geo_coordinates_precision: workspace.settings.geo_coordinates_precision,
+});
 
 // Geo result structure
-interface GeoResult {
-  country?: string;    // ISO country code
-  region?: string;     // State/province
-  city?: string;       // City name
-  latitude?: number;   // Coordinates (precision configurable)
-  longitude?: number;
+interface GeoLocation {
+  country: string | null;    // ISO country code
+  region: string | null;     // State/province
+  city: string | null;       // City name
+  latitude: number | null;   // Coordinates (precision configurable)
+  longitude: number | null;
 }
 ```
 
@@ -180,33 +215,49 @@ landing_path = "/products/widget"
 Filters are evaluated **before** events are buffered/stored:
 
 ```typescript
-interface Filter {
+interface FilterDefinition {
+  id: string;
   name: string;
-  priority: number;           // Higher priority evaluated first
-  conditions: FilterCondition[];  // AND logic
+  priority: number;           // 0-1000, higher = evaluated first
+  order: number;              // UI display order (drag-drop)
+  tags: string[];             // e.g., ["channel", "marketing", "paid"]
+  conditions: FilterCondition[];  // All conditions must match (AND logic)
   operations: FilterOperation[];
+  enabled: boolean;
+  version: string;            // Hash for staleness detection
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface FilterCondition {
   field: string;              // e.g., "utm_source", "referrer_domain"
-  operator: string;           // "equals", "contains", "matches", etc.
-  values: string[];           // Values to match
-  case_sensitive: boolean;
+  operator: FilterOperator;   // Comparison type
+  value?: string;             // Value to match (optional for is_empty/is_not_empty)
 }
 
+type FilterOperator =
+  | 'equals' | 'not_equals'
+  | 'contains' | 'not_contains'
+  | 'is_empty' | 'is_not_empty'
+  | 'regex';                  // RE2 syntax (ClickHouse compatible)
+
 interface FilterOperation {
-  type: 'set_value' | 'unset_value' | 'set_default_value';
-  dimension: string;          // "channel", "cd_1"-"cd_10"
-  value?: string;             // Value to set
+  dimension: string;          // "channel", "stm_1"-"stm_10", UTM fields, etc.
+  action: FilterAction;       // Operation type
+  value?: string;             // Value to set (required for set_value/set_default_value)
 }
+
+type FilterAction = 'set_value' | 'unset_value' | 'set_default_value';
 ```
 
 **Operation semantics**:
 - `set_value`: Always set the dimension (higher priority filter wins)
-- `unset_value`: Clear the dimension value
+- `unset_value`: Clear the dimension value (set to empty string)
 - `set_default_value`: Set only if dimension is currently null/empty
 
-**Affected dimensions**: `channel`, `channel_group`, `cd_1`-`cd_10`, UTM parameters, `referrer_domain`, `is_direct`
+**Writable dimensions**: `channel`, `channel_group`, `stm_1`-`stm_10`, UTM parameters (`utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`), `referrer_domain`, `is_direct`
+
+**Source fields for conditions**: UTM parameters, `referrer`, `referrer_domain`, `referrer_path`, `is_direct`, `landing_page`, `landing_domain`, `landing_path`, `path`, `device`, `browser`, `browser_type`, `os`, `user_agent`, `connection_type`, `language`, `timezone`
 
 ---
 
@@ -279,7 +330,7 @@ ClickHouse Instance
 
 ### Events Table Schema
 
-**Source**: `api/src/database/schemas.ts:54-127`
+**Source**: `api/src/database/schemas.ts`
 
 ```sql
 CREATE TABLE events (
@@ -287,12 +338,17 @@ CREATE TABLE events (
   id UUID DEFAULT generateUUIDv4(),
   session_id String,
   workspace_id String,
-  created_at DateTime64(3),       -- Millisecond precision
+  received_at DateTime64(3),      -- Server receive time (used for partitioning/TTL)
+  created_at DateTime64(3),       -- SDK timestamp (session start)
+  updated_at DateTime64(3),       -- SDK timestamp (event time)
 
   -- Event metadata
-  name LowCardinality(String),
+  name LowCardinality(String),    -- 'screen_view' or 'goal'
   path String,
-  duration UInt64,
+  duration UInt64,                -- Session duration at this event
+  page_duration UInt32,           -- Time spent on previous page (ms)
+  previous_path String,           -- Path of previous page
+  page_number UInt16,             -- Page sequence number
 
   -- Traffic source
   referrer String,
@@ -305,7 +361,7 @@ CREATE TABLE events (
   landing_domain String,
   landing_path String,
 
-  -- UTM parameters (all String type)
+  -- UTM parameters
   utm_source String,
   utm_medium String,
   utm_campaign String,
@@ -314,12 +370,12 @@ CREATE TABLE events (
   utm_id String,
   utm_id_from String,
 
-  -- Channel classification
+  -- Channel classification (set by filters)
   channel LowCardinality(String),
   channel_group LowCardinality(String),
 
-  -- Custom dimensions
-  cd_1 String, cd_2 String, ..., cd_10 String,
+  -- Custom dimensions (set by filters)
+  stm_1 String, stm_2 String, ..., stm_10 String,
 
   -- Device information
   screen_width UInt16,
@@ -347,25 +403,34 @@ CREATE TABLE events (
   -- Engagement
   max_scroll UInt8,
 
-  -- SDK version
-  sdk_version String,
+  -- Goals (for goal events)
+  goal_name String,
+  goal_value Float32,
+  goal_timestamp Nullable(DateTime64(3)),
 
-  -- Extensibility
+  -- Technical
+  _version UInt64,
+  dedup_token String,
+  sdk_version String,
   properties Map(String, String),
+
+  -- SDK timestamps (pageview boundaries)
+  entered_at DateTime64(3),
+  exited_at DateTime64(3),
 
   -- Indexes
   INDEX idx_name name TYPE bloom_filter(0.01) GRANULARITY 1,
   INDEX idx_browser_type browser_type TYPE set(10) GRANULARITY 1
 )
 ENGINE = MergeTree()
-PARTITION BY toYYYYMMDD(created_at)
-ORDER BY (session_id, created_at)
-TTL created_at + INTERVAL 7 DAY
+PARTITION BY toYYYYMMDD(received_at)
+ORDER BY (session_id, received_at)
+TTL toDateTime(received_at) + INTERVAL 7 DAY
 ```
 
 ### Sessions Table Schema
 
-**Source**: `api/src/database/schemas.ts:129-206`
+**Source**: `api/src/database/schemas.ts`
 
 ```sql
 CREATE TABLE sessions (
@@ -376,7 +441,9 @@ CREATE TABLE sessions (
   updated_at DateTime64(3),       -- Last event timestamp
 
   -- Computed metrics
-  duration UInt64,                -- Session duration (seconds)
+  duration UInt32,                -- Session duration (seconds)
+  pageview_count UInt16,          -- Number of page views
+  median_page_duration UInt32,    -- Median time per page (ms)
 
   -- Time components (for efficient grouping)
   year UInt16,
@@ -395,8 +462,7 @@ CREATE TABLE sessions (
   landing_page String,
   landing_domain String,
   landing_path String,
-  entry_page String,              -- First page viewed
-  exit_page String,               -- Last page viewed
+  exit_path String,               -- Last page viewed
 
   -- UTM (from first event)
   utm_source String,
@@ -407,12 +473,12 @@ CREATE TABLE sessions (
   utm_id String,
   utm_id_from String,
 
-  -- Channels (from first event)
+  -- Channels (set by filters)
   channel LowCardinality(String),
   channel_group LowCardinality(String),
 
-  -- Custom dimensions (from first event)
-  cd_1 String, ..., cd_10 String,
+  -- Custom dimensions (set by filters)
+  stm_1 String, ..., stm_10 String,
 
   -- Device (any value from session)
   screen_width UInt16,
@@ -433,14 +499,105 @@ CREATE TABLE sessions (
   device String,
   connection_type String,
 
-  -- Engagement (max across session)
+  -- Engagement
   max_scroll UInt8,
+  goal_count UInt16,              -- Number of goals triggered
+  goal_value Float32,             -- Total goal value
 
-  sdk_version String
+  sdk_version String,
+  INDEX idx_created_at created_at TYPE minmax GRANULARITY 1
 )
 ENGINE = ReplacingMergeTree(updated_at)
 PARTITION BY toYYYYMM(created_at)
 ORDER BY (created_at, id)
+```
+
+### Pages Table Schema
+
+**Source**: `api/src/database/schemas.ts`
+
+```sql
+CREATE TABLE pages (
+  -- Identity
+  id UUID DEFAULT generateUUIDv4(),
+  page_id String,                 -- session_id + page_number
+  session_id String,
+  workspace_id String,
+
+  -- Page info
+  path String,
+  full_url String,
+
+  -- Timestamps
+  entered_at DateTime64(3),
+  exited_at DateTime64(3),
+
+  -- Engagement
+  duration UInt32,                -- Time on page (ms)
+  max_scroll UInt8,               -- Max scroll depth (0-100)
+
+  -- Sequence
+  page_number UInt16,
+  is_landing Bool,
+  is_exit Bool,
+  entry_type LowCardinality(String),  -- 'landing' or 'navigation'
+
+  -- Technical
+  received_at DateTime64(3),
+  _version UInt64
+)
+ENGINE = ReplacingMergeTree(_version)
+PARTITION BY toYYYYMMDD(received_at)
+ORDER BY (session_id, page_number)
+```
+
+### Goals Table Schema
+
+**Source**: `api/src/database/schemas.ts`
+
+```sql
+CREATE TABLE goals (
+  id UUID DEFAULT generateUUIDv4(),
+  session_id String,
+  workspace_id String,
+
+  -- Goal data
+  goal_name String,
+  goal_value Float32,
+  goal_timestamp DateTime64(3),
+  path String,
+  page_number UInt16,
+  properties Map(String, String),
+
+  -- Session context (for attribution)
+  referrer String,
+  referrer_domain String,
+  is_direct Bool,
+  landing_page String,
+  landing_path String,
+  utm_source String,
+  utm_medium String,
+  utm_campaign String,
+  utm_term String,
+  utm_content String,
+  channel LowCardinality(String),
+  channel_group LowCardinality(String),
+  stm_1 String, ..., stm_10 String,
+  device String,
+  browser String,
+  os String,
+  country LowCardinality(String),
+  region LowCardinality(String),
+  city String,
+  language String,
+
+  -- Technical
+  _version UInt64,
+  INDEX idx_goal_timestamp goal_timestamp TYPE minmax GRANULARITY 1
+)
+ENGINE = ReplacingMergeTree(_version)
+PARTITION BY toYYYYMM(goal_timestamp)
+ORDER BY (goal_timestamp, session_id, goal_name)
 ```
 
 ---
@@ -451,9 +608,11 @@ ORDER BY (created_at, id)
 
 | Table | Engine | Rationale |
 |-------|--------|-----------|
-| `events` | MergeTree | Append-heavy workload, no updates needed |
+| `events` | MergeTree | Append-heavy workload, short TTL (7 days) |
 | `sessions` | ReplacingMergeTree | Updates via materialized view aggregation |
-| `workspaces` | ReplacingMergeTree | Config updates via INSERT pattern |
+| `pages` | ReplacingMergeTree | Updates via materialized view, dedup by _version |
+| `goals` | ReplacingMergeTree | Updates via materialized view, dedup by _version |
+| `workspaces` | MergeTree | Workspace config (system table) |
 | `backfill_tasks` | ReplacingMergeTree | Status updates during processing |
 
 **ReplacingMergeTree** handles updates by:
@@ -465,8 +624,10 @@ ORDER BY (created_at, id)
 
 | Table | Partition Key | Partition Size | Rationale |
 |-------|---------------|----------------|-----------|
-| `events` | `toYYYYMMDD(created_at)` | Daily | Fine-grained pruning for recent data queries |
+| `events` | `toYYYYMMDD(received_at)` | Daily | Fine-grained pruning, TTL drops whole partitions |
 | `sessions` | `toYYYYMM(created_at)` | Monthly | Coarser for longer retention, fewer partitions |
+| `pages` | `toYYYYMMDD(received_at)` | Daily | Aligned with events for consistency |
+| `goals` | `toYYYYMM(goal_timestamp)` | Monthly | Long retention for conversion analysis |
 
 **Benefits**:
 - **Query optimization**: ClickHouse skips irrelevant partitions
@@ -475,17 +636,17 @@ ORDER BY (created_at, id)
 
 ### 3. Primary Key (ORDER BY) Design
 
-**Events table**: `ORDER BY (session_id, created_at)`
+**Events table**: `ORDER BY (session_id, received_at)`
 
 ```sql
 -- Optimized queries:
 -- 1. Get all events for a session
-SELECT * FROM events WHERE session_id = 'abc123' ORDER BY created_at;
+SELECT * FROM events WHERE session_id = 'abc123' ORDER BY received_at;
 
 -- 2. Get events in time range within a session
 SELECT * FROM events
 WHERE session_id = 'abc123'
-  AND created_at BETWEEN '2024-01-01' AND '2024-01-02';
+  AND received_at BETWEEN '2024-01-01' AND '2024-01-02';
 ```
 
 **Sessions table**: `ORDER BY (created_at, id)`
@@ -540,7 +701,7 @@ INDEX idx_browser_type browser_type TYPE set(10) GRANULARITY 1
 
 ```sql
 -- Events auto-deleted after 7 days
-TTL created_at + INTERVAL 7 DAY
+TTL toDateTime(received_at) + INTERVAL 7 DAY
 ```
 
 **Rationale**:
@@ -553,97 +714,167 @@ TTL created_at + INTERVAL 7 DAY
 
 ## Materialized Views & Aggregations
 
+### Table Flow Overview
+
+```
+                           ┌─────────────────┐
+                           │   SDK Tracker   │
+                           │  (POST /track)  │
+                           └────────┬────────┘
+                                    │
+                                    ▼
+                           ┌─────────────────┐
+                           │  events table   │  ← Raw event data inserted
+                           │   (MergeTree)   │
+                           │  TTL: 7 days    │
+                           └────────┬────────┘
+                                    │
+                    ┌───────────────┼───────────────┐
+                    │               │               │
+                    ▼               ▼               ▼
+            ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+            │ sessions_mv │ │  pages_mv   │ │  goals_mv   │
+            │    (MV)     │ │    (MV)     │ │    (MV)     │
+            └──────┬──────┘ └──────┬──────┘ └──────┬──────┘
+                   │               │               │
+                   ▼               ▼               ▼
+            ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+            │  sessions   │ │   pages     │ │   goals     │
+            │ (Replacing) │ │ (Replacing) │ │ (Replacing) │
+            │  No TTL     │ │  No TTL     │ │  No TTL     │
+            └─────────────┘ └─────────────┘ └─────────────┘
+```
+
+### Table Summary
+
+| Table | Engine | Populated By | Data Stored | TTL |
+|-------|--------|--------------|-------------|-----|
+| **events** | MergeTree | Direct INSERT from `/track` | Every pageview/goal event with full context | 7 days |
+| **sessions** | ReplacingMergeTree | `sessions_mv` (aggregates events) | Session-level metrics + attribution | None |
+| **pages** | ReplacingMergeTree | `pages_mv` (filters screen_view events) | Page engagement (duration, scroll) | None |
+| **goals** | ReplacingMergeTree | `goals_mv` (filters goal events) | Goal conversions with session context | None |
+
+### What Each MV Does
+
+- **sessions_mv**: Groups events by `session_id`, computes duration, pageview count, median page duration, and extracts session-level attribution fields
+- **pages_mv**: Extracts from `screen_view` events where `page_duration > 0` - captures page path, timestamps, duration, scroll depth
+- **goals_mv**: Extracts from `goal` events - captures goal name/value/timestamp with full session attribution context
+
+### Backfill Impact
+
+The filter backfill system updates tables with classifiable dimensions:
+
+```
+Backfill (filter rules)
+         │
+         ├──► UPDATE events   (only last 7 days due to TTL)
+         │
+         ├──► UPDATE sessions (full history, no TTL)
+         │
+         └──► UPDATE goals    (full history, no TTL)
+
+         ✗ pages   - no classifiable dimensions (channel, stm_*, utm_*)
+```
+
 ### Sessions Materialized View
 
 **Source**: `api/src/database/schemas.ts` (sessions_mv creation)
 
+The sessions MV aggregates events per session. Since the SDK sends all events with identical session-level attributes (referrer, UTM, etc.), the MV uses `any()` for most fields. Only `exit_path` needs `argMax` to get the last page viewed.
+
 ```sql
 CREATE MATERIALIZED VIEW sessions_mv TO sessions AS
 SELECT
-  session_id as id,
-  workspace_id,
+  e.session_id as id,
+  e.workspace_id,
 
-  -- Timestamps
-  min(created_at) as created_at,
-  max(created_at) as updated_at,
-  dateDiff('second', min(created_at), max(created_at)) as duration,
+  -- Timestamps (SDK timestamps are same for all events in session)
+  any(e.created_at) as created_at,
+  max(e.updated_at) as updated_at,
+  max(e.duration) as duration,
 
-  -- Time components (from first event)
-  argMin(toYear(created_at), created_at) as year,
-  argMin(toMonth(created_at), created_at) as month,
-  argMin(toDayOfMonth(created_at), created_at) as day,
-  argMin(toDayOfWeek(created_at), created_at) as day_of_week,
-  argMin(toWeek(created_at), created_at) as week_number,
-  argMin(toHour(created_at), created_at) as hour,
-  argMin(toDayOfWeek(created_at) IN (6, 7), created_at) as is_weekend,
+  -- Pageview and engagement metrics
+  countIf(e.name = 'screen_view') as pageview_count,
+  toUInt32(if(isNaN(medianIf(e.page_duration, e.page_duration > 0)), 0,
+    round(medianIf(e.page_duration, e.page_duration > 0)))) as median_page_duration,
 
-  -- First event values (argMin = value where created_at is minimum)
-  argMin(referrer, created_at) as referrer,
-  argMin(referrer_domain, created_at) as referrer_domain,
-  argMin(referrer_path, created_at) as referrer_path,
-  argMin(is_direct, created_at) as is_direct,
-  argMin(landing_page, created_at) as landing_page,
-  argMin(landing_domain, created_at) as landing_domain,
-  argMin(landing_path, created_at) as landing_path,
-  argMin(path, created_at) as entry_page,
+  -- Time components (derived from SDK created_at)
+  any(toYear(e.created_at)) as year,
+  any(toMonth(e.created_at)) as month,
+  any(toDayOfMonth(e.created_at)) as day,
+  any(toDayOfWeek(e.created_at)) as day_of_week,
+  any(toWeek(e.created_at)) as week_number,
+  any(toHour(e.created_at)) as hour,
+  any(toDayOfWeek(e.created_at) IN (6, 7)) as is_weekend,
 
-  -- Last event values (argMax = value where created_at is maximum)
-  argMax(path, created_at) as exit_page,
+  -- Session-level fields (same for all events in session)
+  any(e.referrer) as referrer,
+  any(e.referrer_domain) as referrer_domain,
+  any(e.referrer_path) as referrer_path,
+  any(e.is_direct) as is_direct,
+  any(e.landing_page) as landing_page,
+  any(e.landing_domain) as landing_domain,
+  any(e.landing_path) as landing_path,
+  argMax(e.path, e.updated_at) as exit_path,  -- Last page viewed
 
-  -- UTM from first event
-  argMin(utm_source, created_at) as utm_source,
-  argMin(utm_medium, created_at) as utm_medium,
-  argMin(utm_campaign, created_at) as utm_campaign,
-  argMin(utm_term, created_at) as utm_term,
-  argMin(utm_content, created_at) as utm_content,
-  argMin(utm_id, created_at) as utm_id,
-  argMin(utm_id_from, created_at) as utm_id_from,
+  -- UTM (same for all events in session)
+  any(e.utm_source) as utm_source,
+  any(e.utm_medium) as utm_medium,
+  any(e.utm_campaign) as utm_campaign,
+  any(e.utm_term) as utm_term,
+  any(e.utm_content) as utm_content,
+  any(e.utm_id) as utm_id,
+  any(e.utm_id_from) as utm_id_from,
 
-  -- Channels from first event
-  argMin(channel, created_at) as channel,
-  argMin(channel_group, created_at) as channel_group,
+  -- Channels (same for all events in session)
+  any(e.channel) as channel,
+  any(e.channel_group) as channel_group,
 
-  -- Custom dimensions from first event
-  argMin(cd_1, created_at) as cd_1,
-  -- ... cd_2 through cd_10 ...
+  -- Custom dimensions (same for all events in session)
+  any(e.stm_1) as stm_1,
+  -- ... stm_2 through stm_10 ...
 
-  -- Device info (any value - assumed constant per session)
-  any(screen_width) as screen_width,
-  any(screen_height) as screen_height,
-  any(viewport_width) as viewport_width,
-  any(viewport_height) as viewport_height,
-  any(user_agent) as user_agent,
-  any(language) as language,
-  any(timezone) as timezone,
-  any(country) as country,
-  any(region) as region,
-  any(city) as city,
-  any(latitude) as latitude,
-  any(longitude) as longitude,
-  any(browser) as browser,
-  any(browser_type) as browser_type,
-  any(os) as os,
-  any(device) as device,
-  any(connection_type) as connection_type,
+  -- Device info (constant per session)
+  any(e.screen_width) as screen_width,
+  any(e.screen_height) as screen_height,
+  any(e.viewport_width) as viewport_width,
+  any(e.viewport_height) as viewport_height,
+  any(e.user_agent) as user_agent,
+  any(e.language) as language,
+  any(e.timezone) as timezone,
+  any(e.country) as country,
+  any(e.region) as region,
+  any(e.city) as city,
+  any(e.latitude) as latitude,
+  any(e.longitude) as longitude,
+  any(e.browser) as browser,
+  any(e.browser_type) as browser_type,
+  any(e.os) as os,
+  any(e.device) as device,
+  any(e.connection_type) as connection_type,
 
-  -- Engagement (max across all events)
-  max(max_scroll) as max_scroll,
+  -- Engagement metrics
+  max(e.max_scroll) as max_scroll,
+  countIf(e.name = 'goal') as goal_count,
+  sumIf(e.goal_value, e.name = 'goal') as goal_value,
 
-  any(sdk_version) as sdk_version
+  any(e.sdk_version) as sdk_version
 
-FROM events
-GROUP BY session_id, workspace_id
+FROM events e
+GROUP BY e.session_id, e.workspace_id
 ```
 
 ### Aggregation Functions Explained
 
 | Function | Usage | Behavior |
 |----------|-------|----------|
-| `min(created_at)` | Session start | Earliest timestamp |
-| `max(created_at)` | Session end | Latest timestamp |
-| `argMin(field, created_at)` | First event value | Value where created_at is minimum |
-| `argMax(field, created_at)` | Last event value | Value where created_at is maximum |
-| `any(field)` | Stable value | Any value (assumes consistency) |
+| `any(field)` | Session-level fields | Any value (SDK sends identical values for all events) |
+| `max(updated_at)` | Session end | Latest event timestamp |
+| `max(duration)` | Session duration | Maximum cumulative duration |
+| `argMax(path, updated_at)` | Exit path | Last page viewed (by timestamp) |
+| `countIf(condition)` | Pageviews/goals | Count events matching condition |
+| `sumIf(field, condition)` | Goal value | Sum values where condition matches |
+| `medianIf(field, condition)` | Page duration | Median of non-zero values |
 | `max(max_scroll)` | Peak engagement | Maximum scroll depth reached |
 
 ### How It Works
@@ -671,33 +902,39 @@ Filters classify incoming events and can set dimension values based on condition
 ### Filter Data Model
 
 ```typescript
-interface Filter {
+interface FilterDefinition {
+  id: string;
   name: string;
-  priority: number;              // 1-1000, higher = evaluated first
+  priority: number;              // 0-1000, higher = evaluated first
+  order: number;                 // UI display order
+  tags: string[];                // Classification tags
   conditions: FilterCondition[];
   operations: FilterOperation[];
+  enabled: boolean;
+  version: string;               // Hash for staleness detection
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface FilterCondition {
   field: string;                 // Source field to check
   operator: FilterOperator;      // Comparison type
-  values: string[];              // Values to match
-  case_sensitive: boolean;
+  value?: string;                // Value to match (optional for is_empty/is_not_empty)
 }
 
 type FilterOperator =
   | 'equals' | 'not_equals'
   | 'contains' | 'not_contains'
-  | 'starts_with' | 'ends_with'
-  | 'matches' | 'not_matches'    // Regex (RE2 syntax)
   | 'is_empty' | 'is_not_empty'
-  | 'is_null' | 'is_not_null';
+  | 'regex';                     // RE2 syntax (ClickHouse compatible)
 
 interface FilterOperation {
-  type: 'set_value' | 'unset_value' | 'set_default_value';
   dimension: string;             // Target dimension
-  value?: string;                // Value to set (if applicable)
+  action: FilterAction;          // Operation type
+  value?: string;                // Value to set (required for set_value/set_default_value)
 }
+
+type FilterAction = 'set_value' | 'unset_value' | 'set_default_value';
 ```
 
 ### Real-time Evaluation Flow
@@ -776,9 +1013,9 @@ ALTER TABLE events UPDATE
     WHEN (referrer_domain LIKE '%google%') THEN 'Organic Search'
     ELSE channel  -- Keep existing value
   END,
-  cd_1 = CASE
+  stm_1 = CASE
     WHEN (path LIKE '/products/%') THEN 'Product Page'
-    ELSE cd_1
+    ELSE stm_1
   END
 IN PARTITION '20240115'  -- Process one day at a time
 WHERE 1=1
@@ -933,28 +1170,43 @@ This enables the UI to show a simple "Backfill needed" indicator when filters ha
 
 **Source**: `api/src/analytics/constants/metrics.ts`
 
-| Metric | SQL Expression | Description |
-|--------|----------------|-------------|
-| `sessions` | `count()` | Number of sessions |
-| `avg_duration` | `round(avg(duration), 1)` | Average session duration |
-| `median_duration` | `round(median(duration), 1)` | Median session duration |
-| `max_scroll` | `round(avg(max_scroll), 1)` | Average max scroll depth |
-| `bounce_rate` | `round(countIf(duration < 10) * 100.0 / count(), 2)` | Bounce rate percentage |
+Metrics are scoped by table. The `sessions` table supports session-level metrics, `pages` supports per-page metrics, and `goals` supports conversion metrics.
+
+| Metric | SQL Expression | Table | Description |
+|--------|----------------|-------|-------------|
+| `sessions` | `count()` | sessions | Number of sessions |
+| `avg_duration` | `round(avg(duration), 1)` | sessions | Average session duration (seconds) |
+| `median_duration` | `round(median(duration), 1)` | sessions | Median session duration (seconds) |
+| `max_scroll` | `round(avg(max_scroll), 1)` | sessions | Average max scroll depth (%) |
+| `median_scroll` | `round(median(max_scroll), 1)` | sessions | Median max scroll depth (%) |
+| `bounce_rate` | `countIf(duration < {threshold}) * 100.0 / count()` | sessions | Bounce rate (configurable threshold) |
+| `pages_per_session` | `round(avg(pageview_count), 2)` | sessions | Average pages per session |
+| `page_count` | `count()` | pages | Total page views |
+| `page_duration` | `round(median(duration), 1)` | pages | Median time on page (seconds) |
+| `page_scroll` | `round(median(max_scroll), 1)` | pages | Median scroll depth (%) |
+| `exit_rate` | `countIf(is_exit = true) * 100.0 / count()` | pages | Exit page percentage |
+| `goals` | `count()` | goals | Total goals triggered |
+| `goal_value` | `sum(goal_value)` | goals | Total goal value |
 
 ### Available Dimensions
 
 **Source**: `api/src/analytics/constants/dimensions.ts`
 
-| Category | Dimensions |
-|----------|------------|
-| Traffic | referrer, referrer_domain, referrer_path, is_direct |
-| UTM | utm_source, utm_medium, utm_campaign, utm_term, utm_content |
-| Channel | channel, channel_group |
-| Pages | landing_page, landing_domain, landing_path, entry_page, exit_page |
-| Device | device, browser, browser_type, os, screen dimensions, connection_type |
-| Time | year, month, day, day_of_week, week_number, hour, is_weekend |
-| Geo | language, timezone, country, region, city |
-| Custom | cd_1 through cd_10 |
+Dimensions are scoped by table. Each dimension specifies which tables it's available on.
+
+| Category | Dimensions | Tables |
+|----------|------------|--------|
+| Traffic | referrer, referrer_domain, referrer_path, is_direct | sessions, goals |
+| UTM | utm_source, utm_medium, utm_campaign, utm_term, utm_content | sessions, goals |
+| Channel | channel, channel_group | sessions, goals |
+| Session Pages | landing_page, landing_domain, landing_path, exit_path | sessions |
+| Page | page_path, page_number, is_landing_page, is_exit_page, page_entry_type | pages |
+| Device | device, browser, browser_type, os, screen dimensions, connection_type | sessions, goals |
+| Session | duration, pageview_count | sessions |
+| Time | year, month, day, day_of_week, week_number, hour, is_weekend | sessions |
+| Geo | language, timezone, country, region, city, latitude, longitude | sessions, goals |
+| Custom | stm_1 through stm_10 | sessions, goals |
+| Goal | goal_name, goal_path | goals |
 
 ### Query Building
 
@@ -1038,14 +1290,14 @@ Results include both periods for trend analysis.
                                      │
                                      ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    POST /api/track or /api/track.batch                      │
-│  - Validate TrackEventDto                                                   │
+│                           POST /api/track                                   │
+│  - Validate SessionPayloadDto                                               │
 │  - Extract client IP (via @ClientIp decorator)                              │
 └────────────────────────────────────┬────────────────────────────────────────┘
                                      │
                                      ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         EventsService.buildEvent()                          │
+│                      SessionPayloadHandler.handle()                         │
 │                                                                             │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────────┐  │
 │  │  Load Workspace │  │   Geo Lookup    │  │      URL Parsing            │  │
@@ -1059,7 +1311,7 @@ Results include both periods for trend analysis.
 │                       │                 │  │                             │  │
 │                       │  IP NEVER STORED│  │  - Sorted by priority       │  │
 │                       └─────────────────┘  │  - AND logic per filter     │  │
-│                                            │  - Set channel/cd_1-10      │  │
+│                                            │  - Set channel/stm_1-10      │  │
 │                                            └─────────────────────────────┘  │
 └────────────────────────────────────┬────────────────────────────────────────┘
                                      │
@@ -1086,16 +1338,16 @@ Results include both periods for trend analysis.
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                         events table                                 │   │
 │  │  ENGINE = MergeTree()                                               │   │
-│  │  PARTITION BY toYYYYMMDD(created_at)                                │   │
-│  │  ORDER BY (session_id, created_at)                                  │   │
-│  │  TTL created_at + INTERVAL 7 DAY                                    │   │
+│  │  PARTITION BY toYYYYMMDD(received_at)                               │   │
+│  │  ORDER BY (session_id, received_at)                                 │   │
+│  │  TTL toDateTime(received_at) + INTERVAL 7 DAY                       │   │
 │  │                                                                      │   │
 │  │  - Raw event data                                                   │   │
-│  │  - Classified dimensions (channel, cd_1-10)                         │   │
+│  │  - Classified dimensions (channel, stm_1-10)                         │   │
 │  └─────────────────────────────────────┬───────────────────────────────┘   │
 │                                        │                                    │
 │                                        │ Materialized View (sessions_mv)    │
-│                                        │ - argMin/argMax aggregation        │
+│                                        │ - any() for session-level fields   │
 │                                        │ - Automatic on INSERT              │
 │                                        ▼                                    │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
@@ -1155,13 +1407,16 @@ Results include both periods for trend analysis.
 | Component | File Path |
 |-----------|-----------|
 | Track Controller | `api/src/events/events.controller.ts` |
-| Events Service | `api/src/events/events.service.ts` |
+| Session Payload Handler | `api/src/events/session-payload.handler.ts` |
 | Event Buffer | `api/src/events/event-buffer.service.ts` |
-| Event DTO | `api/src/events/dto/track-event.dto.ts` |
+| Session Payload DTO | `api/src/events/dto/session-payload.dto.ts` |
+| Event Entity | `api/src/events/entities/event.entity.ts` |
 | Geo Service | `api/src/geo/geo.service.ts` |
+| Filter Entity | `api/src/filters/entities/filter.entity.ts` |
 | Filter Evaluator | `api/src/filters/lib/filter-evaluator.ts` |
 | Filter Compiler | `api/src/filters/lib/filter-compiler.ts` |
 | Backfill Processor | `api/src/filters/backfill/backfill.processor.ts` |
+| Backfill Service | `api/src/filters/backfill/backfill.service.ts` |
 | Database Schemas | `api/src/database/schemas.ts` |
 | ClickHouse Service | `api/src/database/clickhouse.service.ts` |
 | Analytics Controller | `api/src/analytics/analytics.controller.ts` |

@@ -297,6 +297,29 @@ describe('fillGaps', () => {
     );
     expect(dec2MobileGoogle?.sessions).toBe(0);
   });
+
+  it('respects timezone when generating dates (UTC end time that spans midnight)', () => {
+    // This tests the bug where "2026-01-09 04:59:59.999" in UTC
+    // is actually Jan 8th 23:59:59 in America/New_York (UTC-5)
+    // Without timezone awareness, fillGaps would incorrectly include Jan 9th
+    const result = fillGaps<{ date_day: string; sessions: number }>(
+      [],
+      'day',
+      'date_day',
+      '2026-01-02 05:00:00.000', // Jan 2nd 00:00 NY time
+      '2026-01-09 04:59:59.999', // Jan 8th 23:59 NY time
+      ['sessions'],
+      [],
+      'America/New_York',
+    );
+
+    // Should have 7 days: Jan 2, 3, 4, 5, 6, 7, 8 (NOT Jan 9)
+    expect(result).toHaveLength(7);
+    expect(result[0].date_day).toBe('2026-01-02');
+    expect(result[6].date_day).toBe('2026-01-08');
+    // Verify Jan 9th is NOT included
+    expect(result.find((r) => r.date_day === '2026-01-09')).toBeUndefined();
+  });
 });
 
 describe('shiftPresetToPreviousPeriod', () => {

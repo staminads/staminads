@@ -126,9 +126,8 @@ describe('Analytics E2E', () => {
     });
 
     // Seed test pages in workspace database
-    // Use recent dates to avoid 7-day TTL on pages table
     const pagesBaseDate = new Date();
-    pagesBaseDate.setDate(pagesBaseDate.getDate() - 3); // 3 days ago to stay within TTL
+    pagesBaseDate.setDate(pagesBaseDate.getDate() - 3);
     const pages = [];
     const pagePaths = ['/', '/products', '/about', '/contact', '/blog'];
     for (let i = 0; i < 50; i++) {
@@ -901,7 +900,6 @@ describe('Analytics E2E', () => {
   });
 
   describe('Pages Table Analytics', () => {
-    // Pages table has 7-day TTL, so we use dynamic date ranges
     const getPagesDateRange = () => {
       const today = new Date();
       const start = new Date(today);

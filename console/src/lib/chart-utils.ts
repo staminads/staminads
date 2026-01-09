@@ -464,19 +464,6 @@ export function createMetricChartOption(
               type: 'line' as const,
               smooth: false,
               symbol: 'none' as const,
-              areaStyle: {
-                color: {
-                  type: 'linear' as const,
-                  x: 0,
-                  y: 0,
-                  x2: 0,
-                  y2: 1,
-                  colorStops: [
-                    { offset: 0, color: '#9ca3af30' },
-                    { offset: 1, color: '#9ca3af05' }
-                  ]
-                }
-              },
               lineStyle: {
                 color: '#9ca3af',
                 width: 1,
