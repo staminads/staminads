@@ -31,23 +31,16 @@ export function ExploreFilters({
   customDimensionLabels,
 }: ExploreFiltersProps) {
   return (
-    <div className="flex flex-col md:flex-row md:flex-wrap md:items-center gap-4 mb-6">
-      <div className="flex items-center gap-4">
-        {/* Dimension Selector */}
+    <div className="flex flex-col gap-4 mb-6">
+      {/* First row: Dimensions + Min Sessions */}
+      <div className="flex flex-wrap items-center gap-4">
         <DimensionSelector value={dimensions} onChange={onDimensionsChange} customDimensionLabels={customDimensionLabels} />
-
-        {/* Divider - hidden on mobile */}
-        <div className="hidden md:block h-6 w-px bg-gray-200" />
+        <div className="hidden md:block flex-1" />
+        <MinSessionsInput value={minSessions} onChange={onMinSessionsChange} />
       </div>
 
-      {/* Manual Filters - own line on mobile */}
+      {/* Second row: Filters */}
       <ExploreFilterBuilder value={filters} onChange={onFiltersChange} customDimensionLabels={customDimensionLabels} />
-
-      {/* Spacer */}
-      <div className="hidden md:block flex-1" />
-
-      {/* Min Sessions */}
-      <MinSessionsInput value={minSessions} onChange={onMinSessionsChange} />
     </div>
   )
 }

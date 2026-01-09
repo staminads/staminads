@@ -239,6 +239,13 @@ export const DIMENSIONS: Record<string, DimensionDefinition> = {
     category: 'Session',
     tables: ['sessions'],
   },
+  sdk_version: {
+    name: 'sdk_version',
+    column: 'sdk_version',
+    type: 'string',
+    category: 'Session',
+    tables: ['sessions'],
+  },
 
   // Time (sessions and goals)
   year: {

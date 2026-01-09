@@ -43,6 +43,7 @@ import {
 } from '../../filters/lib/filter-evaluator';
 import { getDemoFilters } from './demo-filters';
 import { toClickHouseDateTime } from '../../common/utils/datetime.util';
+import { APP_VERSION } from '../../version';
 
 // Base session duration categories (in seconds)
 const DURATION_CATEGORIES = [
@@ -94,8 +95,8 @@ function generateBaseDuration(): number {
   return randomBetween(category.min, category.max);
 }
 
-// SDK version - current version
-const SDK_VERSION = '1.2.0';
+// SDK version - use current app version
+const SDK_VERSION = APP_VERSION;
 
 // Cache filters to avoid regenerating for each session
 let _cachedFilters: FilterDefinition[] | null = null;

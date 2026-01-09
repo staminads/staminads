@@ -6,6 +6,7 @@ import {
   GenerationConfig,
   DayBatch,
 } from './generators';
+import { APP_VERSION } from '../../version';
 
 describe('generators', () => {
   const baseConfig: GenerationConfig = {
@@ -313,7 +314,7 @@ describe('generators', () => {
       });
 
       for (const event of events) {
-        expect(event.sdk_version).toBe('1.2.0');
+        expect(event.sdk_version).toBe(APP_VERSION);
       }
     });
 

@@ -83,18 +83,13 @@ export function BreakdownTableView({
   }
 
   return (
-    <div>
-      <h4 className="font-medium text-gray-700 mb-2">
-        By {getDimensionLabel(dimension, customDimensionLabels)}
-      </h4>
-      <Table
-        columns={columns}
-        dataSource={rows as Record<string, unknown>[]}
-        loading={isLoading}
-        pagination={{ pageSize: 10, size: 'small', showSizeChanger: false }}
-        size="small"
-        rowKey={(row) => String(row[dimension] ?? 'null')}
-      />
-    </div>
+    <Table
+      columns={columns}
+      dataSource={rows as Record<string, unknown>[]}
+      loading={isLoading}
+      pagination={{ pageSize: 10, size: 'small', showSizeChanger: false, hideOnSinglePage: true }}
+      size="small"
+      rowKey={(row) => String(row[dimension] ?? 'null')}
+    />
   )
 }
