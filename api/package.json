@@ -20,7 +20,7 @@
     "coverage:merge": "mkdir -p .nyc_output && cp coverage-unit/coverage-final.json .nyc_output/unit.json && cp coverage-e2e/coverage-final.json .nyc_output/e2e.json && nyc report --reporter=lcov --reporter=text --report-dir=coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "CLICKHOUSE_DATABASE=staminads_test jest --config ./test/jest-e2e.json --runInBand",
-    "openapi:generate": "nest build && node dist/scripts/generate-openapi.js",
+    "openapi:generate": "nest build && npx esbuild scripts/generate-openapi.ts --outfile=dist/scripts/generate-openapi.js --platform=node --format=cjs --bundle \"--external:@nestjs/*\" \"--external:../app.module.js\" --external:class-validator --external:class-transformer --external:yaml --external:reflect-metadata && node dist/scripts/generate-openapi.js",
     "build:full": "npm run build && cp -r ../console/dist ./dist/public"
   },
   "dependencies": {

@@ -3,7 +3,7 @@
 
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import { AppModule } from '../src/app.module';
+import { AppModule } from '../app.module.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'yaml';

@@ -79,14 +79,8 @@ paths:
             schema:
               $ref: "#/components/schemas/UpdateProfileDto"
       responses:
-        "200":
-          description: Updated user profile
         "201":
-          description: ""
-          content:
-            application/json:
-              schema:
-                type: object
+          description: Updated user profile
       security: *a2
       summary: Update current user profile
       tags: *a3
@@ -101,10 +95,8 @@ paths:
             schema:
               $ref: "#/components/schemas/ChangePasswordDto"
       responses:
-        "200":
-          description: Password changed successfully
         "201":
-          description: ""
+          description: Password changed successfully
       security: *a2
       summary: Change current user password
       tags: *a3
@@ -129,7 +121,7 @@ paths:
             schema:
               $ref: "#/components/schemas/LoginDto"
       responses:
-        "200":
+        "201":
           description: Login successful
           content:
             application/json:
@@ -146,8 +138,6 @@ paths:
                         type: string
                       name:
                         type: string
-        "201":
-          description: ""
         "401":
           description: Invalid credentials
       security:
@@ -171,7 +161,7 @@ paths:
             schema:
               $ref: "#/components/schemas/ForgotPasswordDto"
       responses:
-        "200":
+        "201":
           description: Reset email sent (if email exists)
           content:
             application/json:
@@ -179,8 +169,6 @@ paths:
                 properties:
                   success:
                     type: boolean
-        "201":
-          description: ""
       security:
         - {}
       summary: Request password reset email
@@ -209,8 +197,6 @@ paths:
                 properties:
                   success:
                     type: boolean
-        "201":
-          description: ""
         "400":
           description: Invalid or expired token
       security:
@@ -272,8 +258,6 @@ paths:
                 properties:
                   success:
                     type: boolean
-        "201":
-          description: ""
       security:
         - jwt-auth: []
       summary: Revoke a specific session
@@ -291,8 +275,6 @@ paths:
                 properties:
                   success:
                     type: boolean
-        "201":
-          description: ""
       security:
         - jwt-auth: []
       summary: Logout from all devices
@@ -1161,12 +1143,6 @@ paths:
       responses:
         "200":
           description: Updated filter
-        "201":
-          description: ""
-          content:
-            application/json:
-              schema:
-                type: object
       security: *a16
       summary: Update filter
       tags: *a17
@@ -1186,9 +1162,17 @@ paths:
             type: string
       responses:
         "200":
-          description: Filter deleted
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackfillSuccessResponseDto"
         "201":
           description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackfillSuccessResponseDto"
       security: *a16
       summary: Delete filter
       tags: *a17
@@ -1204,9 +1188,17 @@ paths:
               $ref: "#/components/schemas/ReorderFiltersDto"
       responses:
         "200":
-          description: Filters reordered
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackfillSuccessResponseDto"
         "201":
           description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackfillSuccessResponseDto"
       security: *a16
       summary: Reorder filters
       tags: *a17
@@ -1237,7 +1229,11 @@ paths:
               $ref: "#/components/schemas/StartBackfillDto"
       responses:
         "201":
-          description: Task created
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackfillStartResponseDto"
       security: *a16
       summary: Start background backfill for all filters
       tags: *a17
@@ -1267,9 +1263,11 @@ paths:
             type: string
       responses:
         "200":
-          description: Task cancelled
-        "201":
           description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackfillSuccessResponseDto"
       security: *a16
       summary: Cancel running backfill task
       tags: *a17
@@ -1381,12 +1379,20 @@ paths:
       tags: *a19
   /api/track:
     post:
+      description: Processes a session payload containing pageview and goal actions.
+        Actions are processed incrementally using checkpoint-based delta
+        sending. The server skips actions at indices <= checkpoint and processes
+        only new actions.
       operationId: EventsController_track
       parameters:
-        - name: Authorization
-          in: header
-          description: Bearer stam_live_...
+        - name: origin
           required: true
+          in: header
+          schema:
+            type: string
+        - name: referer
+          required: true
+          in: header
           schema:
             type: string
       requestBody:
@@ -1394,38 +1400,25 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/TrackEventDto"
+              $ref: "#/components/schemas/SessionPayloadDto"
       responses:
         "200":
-          description: ""
-      security:
-        - api-key: []
-      summary: Track a single event
-      tags: &a20
+          description: Session payload processed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  checkpoint:
+                    type: number
+                    description: Index of the last processed action
+                    example: 5
+      summary: Track session with cumulative actions array
+      tags:
         - events
-  /api/track.batch:
-    post:
-      operationId: EventsController_trackBatch
-      parameters:
-        - name: Authorization
-          in: header
-          description: Bearer stam_live_...
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TrackBatchDto"
-      responses:
-        "200":
-          description: ""
-      security:
-        - api-key: []
-      summary: Track multiple events in a batch
-      tags: *a20
   /api/analytics.query:
     post:
       operationId: AnalyticsController_query
@@ -1443,10 +1436,10 @@ paths:
             application/json:
               schema:
                 type: object
-      security: &a21
+      security: &a20
         - jwt-auth: []
       summary: Execute an analytics query
-      tags: &a22
+      tags: &a21
         - analytics
   /api/analytics.extremes:
     post:
@@ -1465,13 +1458,23 @@ paths:
             application/json:
               schema:
                 type: object
-      security: *a21
+      security: *a20
       summary: Get min/max extremes of a metric across grouped data
-      tags: *a22
+      tags: *a21
   /api/analytics.metrics:
     get:
       operationId: AnalyticsController_getMetrics
-      parameters: []
+      parameters:
+        - name: table
+          required: false
+          in: query
+          description: Filter metrics by table (sessions or pages)
+          schema:
+            enum:
+              - sessions
+              - pages
+              - goals
+            type: string
       responses:
         "200":
           description: ""
@@ -1481,13 +1484,23 @@ paths:
                 type: array
                 items:
                   type: object
-      security: *a21
+      security: *a20
       summary: Get available metrics
-      tags: *a22
+      tags: *a21
   /api/analytics.dimensions:
     get:
       operationId: AnalyticsController_getDimensions
-      parameters: []
+      parameters:
+        - name: table
+          required: false
+          in: query
+          description: Filter dimensions by table (sessions or pages)
+          schema:
+            enum:
+              - sessions
+              - pages
+              - goals
+            type: string
       responses:
         "200":
           description: ""
@@ -1495,9 +1508,19 @@ paths:
             application/json:
               schema:
                 type: object
-      security: *a21
+      security: *a20
       summary: Get available dimensions
-      tags: *a22
+      tags: *a21
+  /api/analytics.tables:
+    get:
+      operationId: AnalyticsController_getTables
+      parameters: []
+      responses:
+        "200":
+          description: ""
+      security: *a20
+      summary: Get available analytics tables
+      tags: *a21
   /api/assistant.chat:
     post:
       description: Creates a new chat job and returns a job ID. Use the stream
@@ -1521,10 +1544,10 @@ paths:
                   job_id:
                     type: string
                     description: Job ID for streaming
-      security: &a23
+      security: &a22
         - jwt-auth: []
       summary: Create an AI assistant chat job
-      tags: &a24
+      tags: &a23
         - assistant
   /api/assistant.stream/{jobId}:
     get:
@@ -1540,9 +1563,9 @@ paths:
       responses:
         "200":
           description: ""
-      security: *a23
+      security: *a22
       summary: Stream AI assistant results via SSE
-      tags: *a24
+      tags: *a23
 info:
   title: Staminads API
   description: Web analytics platform for tracking TimeScore metrics
@@ -1732,6 +1755,9 @@ components:
           type: string
         date:
           type: string
+        time:
+          type: string
+          pattern: /^([01]\d|2[0-3]):([0-5]\d)$/
         timezone:
           type: string
         title:
@@ -1746,6 +1772,7 @@ components:
       required:
         - id
         - date
+        - time
         - timezone
         - title
     CreateWorkspaceSettingsDto:
@@ -1864,6 +1891,12 @@ components:
             $ref: "#/components/schemas/AnnotationDto"
         smtp:
           $ref: "#/components/schemas/SmtpSettingsUpdateDto"
+        allowed_domains:
+          type: array
+          items:
+            type: string
+            maxLength: 253
+            pattern: /^(\*\.)?([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/
     UpdateWorkspaceDto:
       type: object
       properties:
@@ -1944,23 +1977,19 @@ components:
         description:
           type: string
           maxLength: 500
-        scopes:
+        role:
           type: string
           enum:
-            - events.track
-            - analytics.view
-            - analytics.export
-            - workspace.read
-            - filters.manage
-            - annotations.manage
-          minItems: 1
+            - admin
+            - editor
+            - viewer
         expires_at:
           type: string
           nullable: true
       required:
         - workspace_id
         - name
-        - scopes
+        - role
     CreateApiKeyResponseDto:
       type: object
       properties:
@@ -2159,6 +2188,14 @@ components:
       required:
         - workspace_id
         - id
+    BackfillSuccessResponseDto:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+      required:
+        - success
     ReorderFiltersDto:
       type: object
       properties:
@@ -2192,6 +2229,15 @@ components:
       required:
         - workspace_id
         - lookback_days
+    BackfillStartResponseDto:
+      type: object
+      properties:
+        task_id:
+          type: string
+          example: 550e8400-e29b-41d4-a716-446655440000
+          description: The unique identifier for the backfill task
+      required:
+        - task_id
     WebsiteMetaDto:
       type: object
       properties:
@@ -2209,33 +2255,32 @@ components:
         logo_url:
           type: string
           description: Website logo URL
-    TrackEventDto:
+    CurrentPageDto:
       type: object
       properties:
-        workspace_id:
-          type: string
-        session_id:
-          type: string
-        name:
-          type: string
         path:
           type: string
-        duration:
+          maxLength: 2048
+        page_number:
+          type: number
+          minimum: 1
+        entered_at:
+          type: number
+        scroll:
           type: number
           minimum: 0
+          maximum: 100
+      required:
+        - path
+        - page_number
+        - entered_at
+        - scroll
+    SessionAttributesDto:
+      type: object
+      properties:
         referrer:
           type: string
-        referrer_domain:
-          type: string
-        referrer_path:
-          type: string
-        is_direct:
-          type: boolean
         landing_page:
-          type: string
-        landing_domain:
-          type: string
-        landing_path:
           type: string
         utm_source:
           type: string
@@ -2275,35 +2320,40 @@ components:
           type: string
         timezone:
           type: string
-        max_scroll:
+      required:
+        - landing_page
+    SessionPayloadDto:
+      type: object
+      properties:
+        workspace_id:
+          type: string
+        session_id:
+          type: string
+        actions:
+          type: array
+          items:
+            type: object
+        current_page:
+          $ref: "#/components/schemas/CurrentPageDto"
+        checkpoint:
           type: number
           minimum: 0
-          maximum: 100
-        sdk_version:
-          type: string
+        attributes:
+          $ref: "#/components/schemas/SessionAttributesDto"
         created_at:
           type: number
         updated_at:
           type: number
-        properties:
-          type: object
+        sdk_version:
+          type: string
+        sent_at:
+          type: number
       required:
         - workspace_id
         - session_id
-        - name
-        - path
-        - landing_page
+        - actions
         - created_at
         - updated_at
-    TrackBatchDto:
-      type: object
-      properties:
-        events:
-          type: array
-          items:
-            $ref: "#/components/schemas/TrackEventDto"
-      required:
-        - events
     FilterDto:
       type: object
       properties:
@@ -2404,6 +2454,12 @@ components:
         havingMinSessions:
           type: number
           minimum: 1
+        table:
+          type: string
+          enum: &a24
+            - sessions
+            - pages
+            - goals
       required:
         - workspace_id
         - metrics
@@ -2431,6 +2487,9 @@ components:
         havingMinSessions:
           type: number
           minimum: 1
+        table:
+          type: string
+          enum: *a24
       required:
         - workspace_id
         - metric
