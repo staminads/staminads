@@ -5,6 +5,9 @@
 
 import { vi } from 'vitest';
 
+// Mock __SDK_VERSION__ global
+(globalThis as unknown as Record<string, string>).__SDK_VERSION__ = '5.0.0';
+
 // Mock navigator.sendBeacon
 Object.defineProperty(navigator, 'sendBeacon', {
   writable: true,

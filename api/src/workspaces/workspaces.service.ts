@@ -4,6 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ClickHouseService } from '../database/clickhouse.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
@@ -71,6 +72,7 @@ export class WorkspacesService {
   constructor(
     private readonly clickhouse: ClickHouseService,
     private readonly configService: ConfigService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async list(user: CurrentUser): Promise<Workspace[]> {
@@ -211,6 +213,14 @@ export class WorkspacesService {
     await this.clickhouse.insertSystem('workspaces', [
       serializeWorkspace(updated),
     ]);
+
+    // Emit event to invalidate caches when settings change
+    if (dto.settings) {
+      this.eventEmitter.emit('workspace.settings.changed', {
+        workspaceId: dto.id,
+      });
+    }
+
     return updated;
   }
 

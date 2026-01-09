@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { WorkspacesService } from './workspaces.service';
 import { ClickHouseService } from '../database/clickhouse.service';
@@ -65,6 +66,12 @@ describe('WorkspacesService', () => {
           provide: ConfigService,
           useValue: {
             get: jest.fn().mockReturnValue('test-encryption-key'),
+          },
+        },
+        {
+          provide: EventEmitter2,
+          useValue: {
+            emit: jest.fn(),
           },
         },
       ],

@@ -56,6 +56,7 @@ const Staminads: StaminadsAPI = {
   resume: () => sdk.resume(),
   reset: () => sdk.reset(),
   debug: (): SessionDebugInfo => sdk.debug(),
+  decorateUrl: (url: string) => sdk.decorateUrl(url),
 };
 
 // Export types

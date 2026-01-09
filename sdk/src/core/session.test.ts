@@ -91,6 +91,9 @@ describe('SessionManager', () => {
       ],
       heartbeatMaxDuration: 10 * 60 * 1000,
       resetHeartbeatOnNavigation: false,
+      crossDomains: [],
+      crossDomainExpiry: 120,
+      crossDomainStripParams: true,
     };
 
     sessionManager = new SessionManager(storage, tabStorage, config);
@@ -446,6 +449,151 @@ describe('SessionManager', () => {
     it('getSession() returns current session', () => {
       const session = sessionManager.getOrCreateSession();
       expect(sessionManager.getSession()).toBe(session);
+    });
+  });
+
+  describe('cross-domain session', () => {
+    const getValidCrossDomainInput = () => ({
+      visitorId: 'cross-domain-visitor-id-1234-567890abcdef',
+      sessionId: 'cross-domain-session-id-1234-567890abcdef',
+      timestamp: Math.floor(Date.now() / 1000), // Evaluated at test time (with fake timers)
+      expiry: 120,
+    });
+
+    it('should resume session from valid cross-domain input', () => {
+      const input = getValidCrossDomainInput();
+      sessionManager.setCrossDomainInput(input);
+      const session = sessionManager.getOrCreateSession();
+
+      expect(session.id).toBe(input.sessionId);
+      expect(session.visitor_id).toBe(input.visitorId);
+    });
+
+    it('should store visitor_id from cross-domain in localStorage', () => {
+      const input = getValidCrossDomainInput();
+      sessionManager.setCrossDomainInput(input);
+      sessionManager.getOrCreateSession();
+
+      // Check that visitor_id was stored
+      expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
+        'stm_visitor_id',
+        JSON.stringify(input.visitorId)
+      );
+    });
+
+    it('should ignore expired cross-domain input', () => {
+      const expiredInput = {
+        ...getValidCrossDomainInput(),
+        timestamp: Math.floor(Date.now() / 1000) - 300, // 5 minutes ago
+        expiry: 120, // 2 minute expiry
+      };
+
+      sessionManager.setCrossDomainInput(expiredInput);
+      const session = sessionManager.getOrCreateSession();
+
+      // Should create new session, not use cross-domain
+      expect(session.id).not.toBe(expiredInput.sessionId);
+      expect(session.visitor_id).not.toBe(expiredInput.visitorId);
+    });
+
+    it('should ignore cross-domain input with future timestamp (>60s)', () => {
+      const futureInput = {
+        ...getValidCrossDomainInput(),
+        timestamp: Math.floor(Date.now() / 1000) + 120, // 2 minutes in future
+      };
+
+      sessionManager.setCrossDomainInput(futureInput);
+      const session = sessionManager.getOrCreateSession();
+
+      // Should create new session, not use cross-domain
+      expect(session.id).not.toBe(futureInput.sessionId);
+    });
+
+    it('should accept cross-domain input within clock skew tolerance (60s future)', () => {
+      const slightlyFutureInput = {
+        ...getValidCrossDomainInput(),
+        timestamp: Math.floor(Date.now() / 1000) + 30, // 30 seconds in future
+      };
+
+      sessionManager.setCrossDomainInput(slightlyFutureInput);
+      const session = sessionManager.getOrCreateSession();
+
+      // Should use cross-domain input
+      expect(session.id).toBe(slightlyFutureInput.sessionId);
+    });
+
+    it('should fallback to localStorage if cross-domain invalid', () => {
+      // Store an existing session in localStorage
+      const existingSession: Session = {
+        id: 'existing-local-session-id',
+        visitor_id: 'local-visitor-123',
+        workspace_id: 'ws_123',
+        created_at: Date.now() - 5 * 60 * 1000,
+        updated_at: Date.now() - 1 * 60 * 1000,
+        last_active_at: Date.now() - 1 * 60 * 1000,
+        focus_duration_ms: 0,
+        total_duration_ms: 0,
+        referrer: null,
+        landing_page: 'https://example.com',
+        utm: null,
+        max_scroll_percent: 0,
+        interaction_count: 0,
+        sdk_version: '5.0.0',
+        sequence: 3,
+        dimensions: {},
+      };
+
+      mockLocalStorage._store['stm_session'] = JSON.stringify(existingSession);
+      storage = new Storage();
+      sessionManager = new SessionManager(storage, tabStorage, config);
+
+      // Set expired cross-domain input
+      const expiredInput = {
+        ...getValidCrossDomainInput(),
+        timestamp: Math.floor(Date.now() / 1000) - 300,
+      };
+      sessionManager.setCrossDomainInput(expiredInput);
+
+      const session = sessionManager.getOrCreateSession();
+
+      // Should resume from localStorage, not cross-domain
+      expect(session.id).toBe('existing-local-session-id');
+    });
+
+    it('should prefer cross-domain input over localStorage when valid', () => {
+      // Store an existing session in localStorage
+      const existingSession: Session = {
+        id: 'existing-local-session-id',
+        visitor_id: 'local-visitor-123',
+        workspace_id: 'ws_123',
+        created_at: Date.now() - 5 * 60 * 1000,
+        updated_at: Date.now() - 1 * 60 * 1000,
+        last_active_at: Date.now() - 1 * 60 * 1000,
+        focus_duration_ms: 0,
+        total_duration_ms: 0,
+        referrer: null,
+        landing_page: 'https://example.com',
+        utm: null,
+        max_scroll_percent: 0,
+        interaction_count: 0,
+        sdk_version: '5.0.0',
+        sequence: 3,
+        dimensions: {},
+      };
+
+      mockLocalStorage._store['stm_session'] = JSON.stringify(existingSession);
+      storage = new Storage();
+      sessionManager = new SessionManager(storage, tabStorage, config);
+
+      // Set valid cross-domain input
+      const input = getValidCrossDomainInput();
+      sessionManager.setCrossDomainInput(input);
+
+      const session = sessionManager.getOrCreateSession();
+
+      // Should use cross-domain, not localStorage
+      expect(session.id).toBe(input.sessionId);
+      expect(session.visitor_id).toBe(input.visitorId);
     });
   });
 });

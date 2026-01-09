@@ -55,6 +55,7 @@ export interface WorkspaceSettings {
   geo_store_region: boolean
   geo_coordinates_precision: number
   annotations?: Annotation[]
+  allowed_domains?: string[]
 }
 
 /**

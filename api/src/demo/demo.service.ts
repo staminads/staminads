@@ -201,6 +201,7 @@ export class DemoService {
       custom_dimensions: DEMO_CUSTOM_DIMENSION_LABELS,
       filters: getCachedFilters().filters,
       annotations: generateDemoAnnotations(endDate),
+      allowed_domains: ['*.apple.com'],
     };
 
     const workspace: WorkspaceRow = {

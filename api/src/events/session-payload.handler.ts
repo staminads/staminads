@@ -47,11 +47,24 @@ export class SessionPayloadHandler {
   async handle(
     payload: SessionPayloadDto,
     clientIp: string | null,
+    origin?: string,
+    referer?: string,
   ): Promise<HandleResult> {
     // 1. Validate workspace
     const workspace = await this.getWorkspace(payload.workspace_id);
 
-    // 2. Filter actions by checkpoint
+    // 2. Check domain restriction using browser headers (not spoofable)
+    const requestDomain = this.extractRequestDomain(origin, referer);
+    if (
+      !this.isDomainAllowed(requestDomain, workspace.settings.allowed_domains)
+    ) {
+      this.logger.debug(
+        `Domain rejected: ${requestDomain} for workspace ${workspace.id}`,
+      );
+      return { success: true, checkpoint: payload.actions.length };
+    }
+
+    // 3. Filter actions by checkpoint
     const startIndex = (payload.checkpoint ?? -1) + 1;
     const actionsToProcess = payload.actions.slice(startIndex);
 
@@ -151,6 +164,14 @@ export class SessionPayloadHandler {
    */
   @OnEvent('filters.changed')
   handleFiltersChanged(payload: { workspaceId: string }): void {
+    this.workspaceCache.delete(payload.workspaceId);
+  }
+
+  /**
+   * Invalidate workspace cache (called when workspace settings change).
+   */
+  @OnEvent('workspace.settings.changed')
+  handleSettingsChanged(payload: { workspaceId: string }): void {
     this.workspaceCache.delete(payload.workspaceId);
   }
 
@@ -407,5 +428,61 @@ export class SessionPayloadHandler {
    */
   private correctTimestamp(timestampMs: number, skewMs: number): number {
     return timestampMs + skewMs;
+  }
+
+  /**
+   * Extract domain from Origin header, fallback to Referer.
+   */
+  private extractRequestDomain(origin?: string, referer?: string): string {
+    if (origin) {
+      try {
+        return new URL(origin).hostname;
+      } catch {
+        // Invalid URL, fall through to referer
+      }
+    }
+    if (referer) {
+      try {
+        return new URL(referer).hostname;
+      } catch {
+        // Invalid URL, return empty
+      }
+    }
+    return '';
+  }
+
+  /**
+   * Check if domain matches allowed list (with wildcard support).
+   * Returns true if no restrictions configured or domain matches.
+   */
+  private isDomainAllowed(domain: string, allowedDomains?: string[]): boolean {
+    // No restriction configured - allow all
+    if (!allowedDomains?.length) {
+      return true;
+    }
+
+    // No domain info + restrictions = reject
+    if (!domain) {
+      return false;
+    }
+
+    const normalized = domain.toLowerCase();
+
+    for (const allowed of allowedDomains) {
+      const pattern = allowed.toLowerCase().trim();
+
+      if (pattern.startsWith('*.')) {
+        // Wildcard: *.example.com matches sub.example.com and example.com
+        const base = pattern.slice(2);
+        if (normalized === base || normalized.endsWith('.' + base)) {
+          return true;
+        }
+      } else if (normalized === pattern) {
+        // Exact match
+        return true;
+      }
+    }
+
+    return false;
   }
 }

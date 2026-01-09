@@ -65,6 +65,9 @@ export interface WorkspaceSettings {
 
   // SMTP settings
   smtp?: SmtpSettings;
+
+  // Domain restriction (optional)
+  allowed_domains?: string[];
 }
 
 /**

@@ -9,6 +9,17 @@ import { generateUUIDv4, generateUUIDv7 } from '../utils/uuid';
 import { parseUTMParams } from '../utils/utm';
 
 const SDK_VERSION = __SDK_VERSION__;
+const CLOCK_SKEW_TOLERANCE = 60; // seconds
+
+/**
+ * Cross-domain session input (from URL parameters)
+ */
+export interface CrossDomainInput {
+  visitorId: string;
+  sessionId: string;
+  timestamp: number; // Unix epoch seconds
+  expiry: number; // seconds
+}
 
 export class SessionManager {
   private storage: Storage;
@@ -17,6 +28,7 @@ export class SessionManager {
   private session: Session | null = null;
   private tabId: string;
   private debug: boolean;
+  private crossDomainInput: CrossDomainInput | null = null;
 
   constructor(storage: Storage, tabStorage: TabStorage, config: InternalConfig) {
     this.storage = storage;
@@ -27,12 +39,29 @@ export class SessionManager {
   }
 
   /**
+   * Set cross-domain input (from URL parameters)
+   * Must be called before getOrCreateSession()
+   */
+  setCrossDomainInput(input: CrossDomainInput): void {
+    this.crossDomainInput = input;
+  }
+
+  /**
    * Get or create session
-   * A new session is ONLY created when:
-   * 1. No existing session exists
-   * 2. Previous session has expired
+   * Priority:
+   * 1. Valid cross-domain input (from URL params)
+   * 2. Valid existing session in localStorage
+   * 3. Create new session
    */
   getOrCreateSession(): Session {
+    // Check cross-domain input first (highest priority)
+    if (this.crossDomainInput && this.isValidCrossDomain()) {
+      const session = this.createSessionFromCrossDomain();
+      if (session) {
+        return session;
+      }
+    }
+
     const stored = this.storage.get<Session>(STORAGE_KEYS.SESSION);
 
     // Resume existing session if valid
@@ -57,6 +86,77 @@ export class SessionManager {
 
     // Create new session
     return this.createSession();
+  }
+
+  /**
+   * Check if cross-domain input is valid
+   */
+  private isValidCrossDomain(): boolean {
+    if (!this.crossDomainInput) return false;
+
+    const now = Math.floor(Date.now() / 1000);
+    const { timestamp, expiry } = this.crossDomainInput;
+
+    // Check if expired
+    const age = now - timestamp;
+    if (age > expiry) {
+      if (this.debug) {
+        console.log('[Staminads] Cross-domain input expired:', age, 'seconds old');
+      }
+      return false;
+    }
+
+    // Check if too far in future (clock skew)
+    if (timestamp > now + CLOCK_SKEW_TOLERANCE) {
+      if (this.debug) {
+        console.log('[Staminads] Cross-domain timestamp too far in future');
+      }
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Create session from cross-domain input
+   */
+  private createSessionFromCrossDomain(): Session | null {
+    if (!this.crossDomainInput) return null;
+
+    const { visitorId, sessionId } = this.crossDomainInput;
+    const now = Date.now();
+    const utm = parseUTMParams(window.location.href, this.config.adClickIds);
+
+    // Store visitor_id for future sessions on this domain
+    this.storage.set(STORAGE_KEYS.VISITOR_ID, visitorId);
+
+    const session: Session = {
+      id: sessionId,
+      visitor_id: visitorId,
+      workspace_id: this.config.workspace_id,
+      created_at: now,
+      updated_at: now,
+      last_active_at: now,
+      focus_duration_ms: 0,
+      total_duration_ms: 0,
+      referrer: document.referrer || null,
+      landing_page: window.location.href,
+      utm: this.hasUTMValues(utm) ? utm : null,
+      max_scroll_percent: 0,
+      interaction_count: 0,
+      sdk_version: SDK_VERSION,
+      sequence: 0,
+      dimensions: this.loadDimensions(),
+    };
+
+    this.session = session;
+    this.saveSession();
+
+    if (this.debug) {
+      console.log('[Staminads] Created session from cross-domain:', session.id);
+    }
+
+    return session;
   }
 
   /**

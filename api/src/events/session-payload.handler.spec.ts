@@ -1032,4 +1032,217 @@ describe('SessionPayloadHandler', () => {
       });
     });
   });
+
+  describe('allowed_domains restriction', () => {
+    it('allows all domains when allowed_domains is not configured', async () => {
+      const payload = createPayload({
+        actions: [createPageviewAction({ page_number: 1 })],
+        attributes: { landing_page: 'https://any-domain.com/' },
+      });
+
+      const result = await handler.handle(
+        payload,
+        null,
+        'https://any-domain.com',
+      );
+
+      expect(result.success).toBe(true);
+      expect(bufferService.addBatch).toHaveBeenCalled();
+    });
+
+    it('allows all domains when allowed_domains is empty array', async () => {
+      workspacesService.get.mockResolvedValue({
+        ...mockWorkspace,
+        settings: { ...mockWorkspace.settings, allowed_domains: [] },
+      } as never);
+
+      const payload = createPayload({
+        actions: [createPageviewAction({ page_number: 1 })],
+        attributes: { landing_page: 'https://any-domain.com/' },
+      });
+
+      const result = await handler.handle(
+        payload,
+        null,
+        'https://any-domain.com',
+      );
+
+      expect(result.success).toBe(true);
+      expect(bufferService.addBatch).toHaveBeenCalled();
+    });
+
+    it('accepts requests from allowed domain (via Origin header)', async () => {
+      workspacesService.get.mockResolvedValue({
+        ...mockWorkspace,
+        settings: {
+          ...mockWorkspace.settings,
+          allowed_domains: ['example.com'],
+        },
+      } as never);
+
+      const payload = createPayload({
+        actions: [createPageviewAction({ page_number: 1 })],
+        attributes: { landing_page: 'https://example.com/page' },
+      });
+
+      const result = await handler.handle(payload, null, 'https://example.com');
+
+      expect(result.success).toBe(true);
+      expect(bufferService.addBatch).toHaveBeenCalled();
+    });
+
+    it('rejects requests from non-allowed domain', async () => {
+      workspacesService.get.mockResolvedValue({
+        ...mockWorkspace,
+        settings: {
+          ...mockWorkspace.settings,
+          allowed_domains: ['example.com'],
+        },
+      } as never);
+
+      const payload = createPayload({
+        actions: [createPageviewAction({ page_number: 1 })],
+        attributes: { landing_page: 'https://other-domain.com/page' },
+      });
+
+      const result = await handler.handle(
+        payload,
+        null,
+        'https://other-domain.com',
+      );
+
+      expect(result.success).toBe(true); // Silent rejection
+      expect(result.checkpoint).toBe(1); // Checkpoint advances
+      expect(bufferService.addBatch).not.toHaveBeenCalled();
+    });
+
+    it('supports wildcard subdomain matching (*.example.com)', async () => {
+      workspacesService.get.mockResolvedValue({
+        ...mockWorkspace,
+        settings: {
+          ...mockWorkspace.settings,
+          allowed_domains: ['*.example.com'],
+        },
+      } as never);
+
+      // Subdomain should match
+      const payload = createPayload({
+        actions: [createPageviewAction({ page_number: 1 })],
+        attributes: { landing_page: 'https://app.example.com/' },
+      });
+
+      const result = await handler.handle(
+        payload,
+        null,
+        'https://app.example.com',
+      );
+
+      expect(result.success).toBe(true);
+      expect(bufferService.addBatch).toHaveBeenCalled();
+
+      bufferService.addBatch.mockClear();
+
+      // Deep subdomain should also match
+      const payloadDeep = createPayload({
+        actions: [createPageviewAction({ page_number: 1 })],
+        attributes: { landing_page: 'https://deep.sub.example.com/' },
+      });
+
+      const resultDeep = await handler.handle(
+        payloadDeep,
+        null,
+        'https://deep.sub.example.com',
+      );
+
+      expect(resultDeep.success).toBe(true);
+      expect(bufferService.addBatch).toHaveBeenCalled();
+    });
+
+    it('wildcard also matches root domain (*.example.com matches example.com)', async () => {
+      workspacesService.get.mockResolvedValue({
+        ...mockWorkspace,
+        settings: {
+          ...mockWorkspace.settings,
+          allowed_domains: ['*.example.com'],
+        },
+      } as never);
+
+      const payload = createPayload({
+        actions: [createPageviewAction({ page_number: 1 })],
+        attributes: { landing_page: 'https://example.com/' },
+      });
+
+      const result = await handler.handle(payload, null, 'https://example.com');
+
+      expect(result.success).toBe(true);
+      expect(bufferService.addBatch).toHaveBeenCalled();
+    });
+
+    it('matches domains case-insensitively', async () => {
+      workspacesService.get.mockResolvedValue({
+        ...mockWorkspace,
+        settings: {
+          ...mockWorkspace.settings,
+          allowed_domains: ['Example.COM'],
+        },
+      } as never);
+
+      const payload = createPayload({
+        actions: [createPageviewAction({ page_number: 1 })],
+        attributes: { landing_page: 'https://EXAMPLE.com/' },
+      });
+
+      const result = await handler.handle(payload, null, 'https://EXAMPLE.com');
+
+      expect(result.success).toBe(true);
+      expect(bufferService.addBatch).toHaveBeenCalled();
+    });
+
+    it('falls back to Referer header when Origin is missing', async () => {
+      workspacesService.get.mockResolvedValue({
+        ...mockWorkspace,
+        settings: {
+          ...mockWorkspace.settings,
+          allowed_domains: ['example.com'],
+        },
+      } as never);
+
+      const payload = createPayload({
+        actions: [createPageviewAction({ page_number: 1 })],
+        attributes: { landing_page: 'https://example.com/' },
+      });
+
+      // No origin, but referer is provided
+      const result = await handler.handle(
+        payload,
+        null,
+        undefined,
+        'https://example.com/some-page',
+      );
+
+      expect(result.success).toBe(true);
+      expect(bufferService.addBatch).toHaveBeenCalled();
+    });
+
+    it('rejects when both Origin and Referer are missing and domains restricted', async () => {
+      workspacesService.get.mockResolvedValue({
+        ...mockWorkspace,
+        settings: {
+          ...mockWorkspace.settings,
+          allowed_domains: ['example.com'],
+        },
+      } as never);
+
+      const payload = createPayload({
+        actions: [createPageviewAction({ page_number: 1 })],
+        attributes: { landing_page: 'https://example.com/' },
+      });
+
+      // No origin, no referer
+      const result = await handler.handle(payload, null, undefined, undefined);
+
+      expect(result.success).toBe(true); // Silent rejection
+      expect(bufferService.addBatch).not.toHaveBeenCalled();
+    });
+  });
 });

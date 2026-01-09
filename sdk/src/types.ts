@@ -61,12 +61,24 @@ export interface StaminadsConfig {
   heartbeatTiers?: HeartbeatTier[];
   heartbeatMaxDuration?: number;
   resetHeartbeatOnNavigation?: boolean;
+
+  // Cross-domain tracking (URL decoration)
+  /** List of domains to share sessions with (e.g., ['blog.example.com', 'shop.example.com']) */
+  crossDomains?: string[];
+  /** Cross-domain param expiry in seconds (default: 120) */
+  crossDomainExpiry?: number;
+  /** Strip _stm param from URL after reading (default: true) */
+  crossDomainStripParams?: boolean;
 }
 
-export interface InternalConfig extends Required<Omit<StaminadsConfig, 'workspace_id' | 'endpoint' | 'heartbeatTiers'>> {
+export interface InternalConfig extends Required<Omit<StaminadsConfig, 'workspace_id' | 'endpoint' | 'heartbeatTiers' | 'crossDomains' | 'crossDomainExpiry' | 'crossDomainStripParams'>> {
   workspace_id: string;
   endpoint: string;
   heartbeatTiers: HeartbeatTier[];
+  // Cross-domain (optional, with defaults)
+  crossDomains: string[];
+  crossDomainExpiry: number;
+  crossDomainStripParams: boolean;
 }
 
 // Session
@@ -146,6 +158,8 @@ export interface StaminadsAPI {
   resume(): Promise<void>;
   reset(): Promise<void>;
   debug(): SessionDebugInfo;
+  /** Decorate URL with cross-domain session params (for programmatic navigation) */
+  decorateUrl(url: string): Promise<string>;
 }
 
 // Debug info (V3)

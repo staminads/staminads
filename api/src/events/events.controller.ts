@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, Post } from '@nestjs/common';
+import { Body, Controller, Headers, HttpCode, Post } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ClientIp } from '../common/decorators/client-ip.decorator';
 import { Public } from '../common/decorators/public.decorator';
@@ -41,7 +41,14 @@ export class EventsController {
   async track(
     @Body() payload: SessionPayloadDto,
     @ClientIp() clientIp: string | null,
+    @Headers('origin') origin?: string,
+    @Headers('referer') referer?: string,
   ) {
-    return this.sessionPayloadHandler.handle(payload, clientIp);
+    return this.sessionPayloadHandler.handle(
+      payload,
+      clientIp,
+      origin,
+      referer,
+    );
   }
 }

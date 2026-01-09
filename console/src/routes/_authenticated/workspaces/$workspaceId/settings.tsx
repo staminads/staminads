@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useSuspenseQuery, useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
-import { Form, Input, InputNumber, Button, Select, message, Table, Tag, Modal, Avatar, Spin } from 'antd'
-import { SearchOutlined, EditOutlined, LoadingOutlined } from '@ant-design/icons'
+import { Form, Input, InputNumber, Button, Select, message, Table, Tag, Modal, Avatar, Spin, Tooltip } from 'antd'
+import { SearchOutlined, EditOutlined, LoadingOutlined, PlusOutlined, InfoCircleOutlined } from '@ant-design/icons'
 import { api } from '../../../../lib/api'
 import { workspaceQueryOptions } from '../../../../lib/queries'
 import { IntegrationsSettings } from '../../../../components/settings/IntegrationsSettings'
@@ -117,6 +117,8 @@ function Settings() {
   const [detectingLogo, setDetectingLogo] = useState(false)
   const [editingSlot, setEditingSlot] = useState<number | null>(null)
   const [newLabel, setNewLabel] = useState('')
+  const [allowedDomains, setAllowedDomains] = useState<string[]>(workspace.settings.allowed_domains || [])
+  const [domainInput, setDomainInput] = useState('')
 
   const updateWorkspaceMutation = useMutation({
     mutationFn: api.workspaces.update,
@@ -125,8 +127,8 @@ function Settings() {
       queryClient.invalidateQueries({ queryKey: ['workspaces'] })
       message.success('Workspace settings saved')
     },
-    onError: () => {
-      message.error('Failed to save workspace settings')
+    onError: (error: Error) => {
+      message.error(error.message || 'Failed to save workspace settings')
     },
   })
 
@@ -137,8 +139,8 @@ function Settings() {
       setEditingSlot(null)
       message.success('Label updated')
     },
-    onError: () => {
-      message.error('Failed to update label')
+    onError: (error: Error) => {
+      message.error(error.message || 'Failed to update label')
     },
   })
 
@@ -153,6 +155,7 @@ function Settings() {
       settings: {
         timescore_reference: values.timescore_reference,
         bounce_threshold: values.bounce_threshold,
+        allowed_domains: allowedDomains.length > 0 ? allowedDomains : undefined,
       },
     })
   }
@@ -221,6 +224,21 @@ function Settings() {
   }
 
   const logoUrl = Form.useWatch('logo_url', form)
+
+  const handleAddDomain = () => {
+    const trimmed = domainInput.trim().toLowerCase()
+    if (!trimmed) return
+    if (allowedDomains.includes(trimmed)) {
+      message.warning('Domain already added')
+      return
+    }
+    setAllowedDomains([...allowedDomains, trimmed])
+    setDomainInput('')
+  }
+
+  const handleRemoveDomain = (domain: string) => {
+    setAllowedDomains(allowedDomains.filter(d => d !== domain))
+  }
 
   const workspaceContent = (
     <div className="bg-white p-6 rounded-lg shadow-sm max-w-xl">
@@ -321,6 +339,56 @@ function Settings() {
             tooltip="Sessions shorter than this duration are counted as bounces. Default is 10 seconds."
           >
             <InputNumber min={1} style={{ width: '100%' }} />
+          </Form.Item>
+
+          <Form.Item
+            label={
+              <span>
+                Allowed Domains{' '}
+                <Tooltip title="Restrict tracking to specific domains. Leave empty to allow all domains. Supports wildcards like *.example.com">
+                  <InfoCircleOutlined className="text-gray-400" />
+                </Tooltip>
+              </span>
+            }
+          >
+            <div className="space-y-2">
+              <Input
+                value={domainInput}
+                onChange={(e) => setDomainInput(e.target.value)}
+                placeholder="example.com or *.example.com"
+                onPressEnter={(e) => {
+                  e.preventDefault()
+                  handleAddDomain()
+                }}
+                suffix={
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<PlusOutlined />}
+                    onClick={handleAddDomain}
+                    className="!p-0 !h-auto"
+                  >
+                    Add
+                  </Button>
+                }
+              />
+              {allowedDomains.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {allowedDomains.map((domain) => (
+                    <Tag
+                      key={domain}
+                      closable
+                      onClose={() => handleRemoveDomain(domain)}
+                    >
+                      {domain}
+                    </Tag>
+                  ))}
+                </div>
+              )}
+              {allowedDomains.length === 0 && (
+                <div className="text-gray-400 text-sm">All domains allowed (no restrictions)</div>
+              )}
+            </div>
           </Form.Item>
 
           <Form.Item className="mb-0">

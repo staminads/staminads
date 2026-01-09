@@ -132,6 +132,17 @@ export class UpdateWorkspaceSettingsDto {
   @ValidateNested()
   @Type(() => SmtpSettingsUpdateDto)
   smtp?: SmtpSettingsUpdateDto;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(253, { each: true })
+  @Matches(/^(\*\.)?([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/, {
+    each: true,
+    message:
+      'Each domain must be a valid domain (e.g., example.com or *.example.com)',
+  })
+  allowed_domains?: string[];
 }
 
 export class UpdateWorkspaceDto {

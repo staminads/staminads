@@ -23,6 +23,7 @@ import { ScrollTracker } from './events/scroll';
 import { NavigationTracker } from './events/navigation';
 import { isBot } from './detection/bot';
 import { DEFAULT_AD_CLICK_IDS } from './utils/utm';
+import { CrossDomainLinker } from './core/cross-domain';
 
 // Heartbeat constants
 const MIN_HEARTBEAT_INTERVAL = 5000; // 5 seconds minimum
@@ -51,6 +52,10 @@ const DEFAULT_CONFIG: Omit<InternalConfig, 'workspace_id' | 'endpoint'> = {
   heartbeatTiers: DEFAULT_HEARTBEAT_TIERS,
   heartbeatMaxDuration: 10 * 60 * 1000, // 10 minutes
   resetHeartbeatOnNavigation: false,
+  // Cross-domain tracking
+  crossDomains: [],
+  crossDomainExpiry: 120, // 2 minutes
+  crossDomainStripParams: true,
 };
 
 export class StaminadsSDK {
@@ -63,6 +68,7 @@ export class StaminadsSDK {
   private deviceDetector: DeviceDetector | null = null;
   private scrollTracker: ScrollTracker | null = null;
   private navigationTracker: NavigationTracker | null = null;
+  private crossDomainLinker: CrossDomainLinker | null = null;
   private deviceInfo: DeviceInfo | null = null;
   private heartbeatTimeout: ReturnType<typeof setTimeout> | null = null;
   private sendDebounceTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -145,13 +151,33 @@ export class StaminadsSDK {
     // Set mobile device flag for heartbeat intervals
     this.isMobileDevice = this.deviceInfo?.device !== 'desktop';
 
+    // Read cross-domain param BEFORE session creation
+    const crossDomainPayload = CrossDomainLinker.readParam(this.config.crossDomainExpiry);
+
     // Initialize session manager
     this.sessionManager = new SessionManager(
       this.storage,
       this.tabStorage,
       this.config
     );
+
+    // Inject cross-domain payload if present
+    if (crossDomainPayload) {
+      this.sessionManager.setCrossDomainInput({
+        visitorId: crossDomainPayload.v,
+        sessionId: crossDomainPayload.s,
+        timestamp: crossDomainPayload.t,
+        expiry: this.config.crossDomainExpiry,
+      });
+    }
+
+    // Get or create session (uses cross-domain payload if valid)
     const session = this.sessionManager.getOrCreateSession();
+
+    // Strip _stm param from URL after processing
+    if (crossDomainPayload && this.config.crossDomainStripParams) {
+      CrossDomainLinker.stripParam();
+    }
 
     // Initialize sender
     this.sender = new Sender(this.config.endpoint, this.storage, this.config.debug);
@@ -168,6 +194,20 @@ export class StaminadsSDK {
       this.navigationTracker = new NavigationTracker();
       this.navigationTracker.setNavigationCallback((url) => this.onNavigation(url));
       this.navigationTracker.start();
+    }
+
+    // Initialize cross-domain linker if configured
+    if (this.config.crossDomains.length > 0) {
+      this.crossDomainLinker = new CrossDomainLinker({
+        domains: this.config.crossDomains,
+        expiry: this.config.crossDomainExpiry,
+        debug: this.config.debug,
+      });
+      this.crossDomainLinker.setIdGetters(
+        () => this.sessionManager?.getVisitorId() || '',
+        () => this.sessionManager?.getSessionId() || ''
+      );
+      this.crossDomainLinker.start();
     }
 
     // Initialize SessionState (V3)
@@ -943,6 +983,18 @@ export class StaminadsSDK {
       checkpoint: this.sessionState?.getCheckpoint() || -1,
       currentPage: this.sessionState?.getCurrentPage()?.path || null,
     };
+  }
+
+  /**
+   * Decorate URL with cross-domain session params
+   * Use this for programmatic navigation (window.location.href, window.open)
+   */
+  async decorateUrl(url: string): Promise<string> {
+    await this.ensureInitialized();
+    if (!this.crossDomainLinker) {
+      return url; // Return unchanged if cross-domain not configured
+    }
+    return this.crossDomainLinker.decorateUrl(url);
   }
 
   /**

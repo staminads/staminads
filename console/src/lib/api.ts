@@ -43,6 +43,12 @@ import type {
 } from '../types/invitation'
 import type { Member, Invitation, Role } from '../types/member'
 
+// Extract error message from NestJS response (handles both string and array formats)
+function extractErrorMessage(errorData: { message?: string | string[] }, fallback: string): string {
+  if (!errorData.message) return fallback
+  return Array.isArray(errorData.message) ? errorData.message[0] : errorData.message
+}
+
 export interface WebsiteMetaResponse {
   title?: string
   logo_url?: string
@@ -60,7 +66,7 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
   })
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}))
-    throw new Error(errorData.message || 'Request failed')
+    throw new Error(extractErrorMessage(errorData, 'Request failed'))
   }
   return res.json()
 }
@@ -166,8 +172,8 @@ export const api = {
         body: JSON.stringify({ email, password }),
       })
       if (!res.ok) {
-        const error = await res.json()
-        throw new Error(error.message || 'Login failed')
+        const error = await res.json().catch(() => ({}))
+        throw new Error(extractErrorMessage(error, 'Login failed'))
       }
       return res.json()
     },
@@ -179,8 +185,8 @@ export const api = {
         body: JSON.stringify(data),
       })
       if (!res.ok) {
-        const error = await res.json()
-        throw new Error(error.message || 'Registration failed')
+        const error = await res.json().catch(() => ({}))
+        throw new Error(extractErrorMessage(error, 'Registration failed'))
       }
       return res.json()
     },
@@ -222,8 +228,8 @@ export const api = {
         body: JSON.stringify({ currentPassword, newPassword }),
       })
       if (!res.ok) {
-        const error = await res.json()
-        throw new Error(error.message || 'Failed to change password')
+        const error = await res.json().catch(() => ({}))
+        throw new Error(extractErrorMessage(error, 'Failed to change password'))
       }
     },
 
@@ -243,8 +249,8 @@ export const api = {
         body: JSON.stringify({ token, newPassword }),
       })
       if (!res.ok) {
-        const error = await res.json()
-        throw new Error(error.message || 'Password reset failed')
+        const error = await res.json().catch(() => ({}))
+        throw new Error(extractErrorMessage(error, 'Password reset failed'))
       }
     },
 
@@ -328,8 +334,8 @@ export const api = {
     get: async (token: string): Promise<InvitationDetails> => {
       const res = await fetch(`/api/invitations.get?token=${encodeURIComponent(token)}`)
       if (!res.ok) {
-        const error = await res.json()
-        throw new Error(error.message || 'Invalid invitation')
+        const error = await res.json().catch(() => ({}))
+        throw new Error(extractErrorMessage(error, 'Invalid invitation'))
       }
       return res.json()
     },
@@ -341,8 +347,8 @@ export const api = {
         body: JSON.stringify(data),
       })
       if (!res.ok) {
-        const error = await res.json()
-        throw new Error(error.message || 'Failed to accept invitation')
+        const error = await res.json().catch(() => ({}))
+        throw new Error(extractErrorMessage(error, 'Failed to accept invitation'))
       }
       return res.json()
     },
