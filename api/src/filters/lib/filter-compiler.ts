@@ -11,7 +11,7 @@ import { computeFilterVersion } from './filter-evaluator';
  * Result of compiling filters to ClickHouse SQL.
  */
 export interface CompiledFilters {
-  /** SET clause for UPDATE statement (channel = CASE..., cd_1 = CASE...) */
+  /** SET clause for UPDATE statement (channel = CASE..., stm_1 = CASE...) */
   setClause: string;
   /** Filter version hash for idempotency */
   filterVersion: string;

@@ -15,9 +15,9 @@ interface TestFilterModalProps {
 }
 
 function getDimensionLabel(dimension: string, customLabels?: CustomDimensionLabels | null): string {
-  // Check for custom label first (for cd_1, cd_2, etc.)
-  if (customLabels && dimension.startsWith('cd_')) {
-    const slot = dimension.replace('cd_', '')
+  // Check for custom label first (for stm_1, stm_2, etc.)
+  if (customLabels && dimension.startsWith('stm_')) {
+    const slot = dimension.replace('stm_', '')
     if (customLabels[slot]) {
       return customLabels[slot]
     }

@@ -18,8 +18,8 @@ interface FilterTableProps {
 }
 
 function getDimensionLabel(dimension: string, customLabels?: CustomDimensionLabels | null): string {
-  if (customLabels && dimension.startsWith('cd_')) {
-    const slot = dimension.replace('cd_', '')
+  if (customLabels && dimension.startsWith('stm_')) {
+    const slot = dimension.replace('stm_', '')
     if (customLabels[slot]) {
       return customLabels[slot]
     }

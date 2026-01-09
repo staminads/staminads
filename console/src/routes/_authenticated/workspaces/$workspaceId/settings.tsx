@@ -430,7 +430,7 @@ function Settings() {
               dataIndex: 'slot',
               key: 'slot',
               width: 100,
-              render: (slot: number) => <Tag color="purple">cd_{slot}</Tag>,
+              render: (slot: number) => <Tag color="purple">stm_{slot}</Tag>,
             },
             {
               title: 'Label',
@@ -471,7 +471,7 @@ function Settings() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Slot</label>
-              <Input value={`cd_${editingSlot}`} disabled />
+              <Input value={`stm_${editingSlot}`} disabled />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Label</label>

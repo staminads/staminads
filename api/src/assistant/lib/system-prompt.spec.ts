@@ -60,8 +60,8 @@ describe('buildSystemPrompt', () => {
 
     const prompt = buildSystemPrompt(workspace);
 
-    expect(prompt).toContain('cd_1: Campaign Type');
-    expect(prompt).toContain('cd_2: Content Theme');
+    expect(prompt).toContain('stm_1: Campaign Type');
+    expect(prompt).toContain('stm_2: Content Theme');
   });
 
   it('includes current state when provided', () => {

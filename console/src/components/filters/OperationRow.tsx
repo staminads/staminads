@@ -23,11 +23,11 @@ const actionOptions = FILTER_ACTIONS.map((a) => ({
 }))
 
 function getDimensionOptions(customLabels?: CustomDimensionLabels | null) {
-  // Create a map of custom labels with cd_ prefix
+  // Create a map of custom labels with stm_ prefix
   const labelMap: Record<string, string> = {}
   if (customLabels) {
     for (const [slot, label] of Object.entries(customLabels)) {
-      labelMap[`cd_${slot}`] = label
+      labelMap[`stm_${slot}`] = label
     }
   }
 

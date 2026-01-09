@@ -30,6 +30,7 @@ interface GoalRow {
   goal_name: string
   metrics: {
     goals: GoalMetricData
+    conversion_rate: GoalMetricData
     sum_goal_value: GoalMetricData
     median_goal_value: GoalMetricData
   }
@@ -107,6 +108,21 @@ function Goals() {
     staleTime: 60_000,
   })
 
+  // Query total sessions for conversion rate calculation
+  const { data: sessionsResponse, isLoading: sessionsLoading } = useQuery({
+    queryKey: ['goals', 'sessions', workspaceId, dateRange, showComparison],
+    queryFn: () =>
+      api.analytics.query({
+        workspace_id: workspaceId,
+        table: 'sessions',
+        metrics: ['sessions'],
+        dateRange,
+        ...(showComparison && { compareDateRange: dateRange }),
+        timezone: workspace.timezone,
+      }),
+    staleTime: 60_000,
+  })
+
   // Query time-series data for charts
   const { data: timeSeriesResponse, isLoading: timeSeriesLoading } = useQuery({
     queryKey: ['goals', 'timeseries', workspaceId, dateRange, showComparison, granularity],
@@ -123,7 +139,26 @@ function Goals() {
     staleTime: 60_000,
   })
 
-  const isLoading = summaryLoading || timeSeriesLoading
+  const isLoading = summaryLoading || timeSeriesLoading || sessionsLoading
+
+  // Extract total sessions for conversion rate
+  const totalSessions = useMemo(() => {
+    if (!sessionsResponse?.data) return { current: 0, previous: 0 }
+
+    if (showComparison && typeof sessionsResponse.data === 'object' && 'current' in sessionsResponse.data) {
+      const compData = sessionsResponse.data as { current: Record<string, unknown>[]; previous: Record<string, unknown>[] }
+      return {
+        current: (compData.current?.[0]?.sessions as number) || 0,
+        previous: (compData.previous?.[0]?.sessions as number) || 0,
+      }
+    }
+
+    const data = sessionsResponse.data as Record<string, unknown>[]
+    return {
+      current: (data?.[0]?.sessions as number) || 0,
+      previous: 0,
+    }
+  }, [sessionsResponse, showComparison])
 
   // Get date column based on granularity
   const getDateColumn = (g: Granularity): string => {
@@ -227,6 +262,12 @@ function Goals() {
           value: metric === 'goals' ? d.value : (d[metric] ?? 0),
         }))
 
+      // Calculate conversion rate (goals / sessions * 100)
+      const currentGoals = row.goals as number
+      const prevGoals = prev?.goals
+      const currentConvRate = totalSessions.current > 0 ? (currentGoals / totalSessions.current) * 100 : 0
+      const prevConvRate = totalSessions.previous > 0 && prevGoals ? (prevGoals / totalSessions.previous) * 100 : undefined
+
       return {
         goal_name: goalName,
         metrics: {
@@ -236,6 +277,13 @@ function Goals() {
             change: calcChange(row.goals as number, prev?.goals),
             chartData: extractChartData(currentChartData, 'goals'),
             chartDataPrev: extractChartData(previousChartData, 'goals'),
+          },
+          conversion_rate: {
+            current: currentConvRate,
+            previous: prevConvRate,
+            change: calcChange(currentConvRate, prevConvRate),
+            chartData: [], // No time-series for conversion rate
+            chartDataPrev: [],
           },
           sum_goal_value: {
             current: row.sum_goal_value as number,
@@ -254,7 +302,7 @@ function Goals() {
         },
       }
     })
-  }, [goalsResponse, timeSeriesResponse, showComparison, granularity])
+  }, [goalsResponse, timeSeriesResponse, showComparison, granularity, totalSessions])
 
   // Handle view click - open dashboard drawer
   const handleView = (goalName: string) => {
@@ -274,7 +322,7 @@ function Goals() {
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <h1 className="text-2xl font-semibold">Goals</h1>
         <div className="flex items-center gap-2">
           <DateRangePicker

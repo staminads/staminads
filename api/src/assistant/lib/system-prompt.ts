@@ -10,7 +10,7 @@ export function buildSystemPrompt(
 ): string {
   const customDimensionLabels = workspace.settings.custom_dimensions
     ? Object.entries(workspace.settings.custom_dimensions)
-        .map(([slot, label]) => `cd_${slot}: ${label}`)
+        .map(([slot, label]) => `stm_${slot}: ${label}`)
         .join(', ')
     : 'None configured';
 

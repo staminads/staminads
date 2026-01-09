@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Card, Statistic, Button } from 'antd'
-import { EyeOutlined } from '@ant-design/icons'
+import { Card, Statistic, Button, Tooltip } from 'antd'
+import { EyeOutlined, InfoCircleOutlined } from '@ant-design/icons'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import ReactECharts from 'echarts-for-react'
 import dayjs from 'dayjs'
@@ -17,7 +17,7 @@ dayjs.extend(isBetween)
 dayjs.extend(tz)
 dayjs.extend(utc)
 
-type GoalMetricKey = 'goals' | 'sum_goal_value' | 'median_goal_value'
+type GoalMetricKey = 'goals' | 'conversion_rate' | 'sum_goal_value' | 'median_goal_value'
 
 interface GoalMetricData {
   current: number
@@ -31,6 +31,7 @@ interface GoalCardProps {
   goalName: string
   metrics: {
     goals: GoalMetricData
+    conversion_rate: GoalMetricData
     sum_goal_value: GoalMetricData
     median_goal_value: GoalMetricData
   }
@@ -47,9 +48,16 @@ const PRIMARY_COLOR = '#7763f1'
 const METRIC_CONFIG: {
   key: GoalMetricKey
   label: string
-  format: 'number' | 'currency'
+  format: 'number' | 'currency' | 'percent'
+  tooltip?: string
 }[] = [
   { key: 'goals', label: 'Count', format: 'number' },
+  {
+    key: 'conversion_rate',
+    label: 'Conv. Rate',
+    format: 'percent',
+    tooltip: 'Not all visitors come with the same intent. This rate should be interpreted with caution as it includes all traffic regardless of purpose.',
+  },
   { key: 'sum_goal_value', label: 'Value', format: 'currency' },
   { key: 'median_goal_value', label: 'Median', format: 'currency' },
 ]
@@ -244,7 +252,7 @@ export function GoalCard({
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4">
         {METRIC_CONFIG.map((config, index) => {
           const data = metrics[config.key]
           const isSelected = selectedMetric === config.key
@@ -252,21 +260,37 @@ export function GoalCard({
           const changePercent = data.change ?? 0
           const isPositive = changePercent >= 0
 
+          // Format value based on type
+          const formatValue = () => {
+            if (config.format === 'currency') {
+              return data.current === 0 ? '-' : formatCurrency(data.current, currency)
+            }
+            if (config.format === 'percent') {
+              return `${data.current.toFixed(2)}%`
+            }
+            return formatNumber(data.current)
+          }
+
           return (
             <div
               key={config.key}
               onClick={() => setSelectedMetric(config.key)}
               className={`
-                cursor-pointer p-3 transition-colors text-center
+                cursor-pointer p-2 transition-colors text-center
                 ${!isLast ? 'border-r border-gray-100' : ''}
                 ${isSelected ? 'border-b-2 border-b-[var(--primary)] bg-gray-50/50' : 'border-b border-b-gray-100 hover:bg-gray-50'}
               `}
             >
-              <div className="text-xs text-gray-500 mb-1">{config.label}</div>
-              <div className="text-lg font-semibold text-gray-800">
-                {config.format === 'currency'
-                  ? (data.current === 0 ? '-' : formatCurrency(data.current, currency))
-                  : formatNumber(data.current)}
+              <div className="text-xs text-gray-500 mb-1 flex items-center justify-center gap-1">
+                {config.label}
+                {config.tooltip && (
+                  <Tooltip title={config.tooltip}>
+                    <InfoCircleOutlined className="text-gray-400 cursor-help" style={{ fontSize: 10 }} />
+                  </Tooltip>
+                )}
+              </div>
+              <div className="text-base font-semibold text-gray-800">
+                {formatValue()}
               </div>
               {showComparison && changePercent !== 0 && (
                 <Statistic
@@ -308,6 +332,10 @@ export function GoalCard({
             opts={{ renderer: 'svg' }}
             notMerge
           />
+        ) : selectedMetric === 'conversion_rate' ? (
+          <div className="h-[80px] flex items-center justify-center text-gray-400 text-xs">
+            Select another metric to view chart
+          </div>
         ) : (
           <div className="h-[80px] flex items-center justify-center text-gray-400 text-xs">
             No chart data

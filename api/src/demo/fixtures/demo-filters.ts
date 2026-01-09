@@ -8,7 +8,7 @@ import { computeFilterVersion } from '../../filters/lib/filter-evaluator';
 /**
  * Demo custom dimension labels.
  * Note: channel and channel_group are now first-class dimensions,
- * so only cd_1 (Product Category) needs a label.
+ * so only stm_1 (Product Category) needs a label.
  */
 export const DEMO_CUSTOM_DIMENSION_LABELS: Record<string, string> = {
   '1': 'Product Category',
