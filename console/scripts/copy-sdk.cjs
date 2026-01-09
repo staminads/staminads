@@ -24,15 +24,6 @@ if (!fs.existsSync(sdkSource)) {
   process.exit(1);
 }
 
-// Remove old versioned SDK files
-const existingFiles = fs.readdirSync(sdkDir);
-for (const file of existingFiles) {
-  if (file.match(/^staminads_[\d.]+\.min\.js$/)) {
-    fs.unlinkSync(path.join(sdkDir, file));
-    console.log(`Removed old SDK: ${file}`);
-  }
-}
-
 // Copy the SDK file with versioned name
 fs.copyFileSync(sdkSource, sdkDest);
 console.log(`SDK copied to public/sdk/staminads_${version}.min.js`);

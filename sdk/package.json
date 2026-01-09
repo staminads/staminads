@@ -1,6 +1,6 @@
 {
   "name": "@staminads/sdk",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "type": "module",
   "description": "Ultra-reliable web analytics SDK for tracking TimeScore metrics with millisecond precision",
   "main": "dist/staminads.cjs.js",

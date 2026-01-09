@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.1.0] - 2026-01-09
+
+- Add conversion rate KPI to Goals page with explanatory tooltip
+- Mobile-responsive Goals page: date selectors on separate line, 2x2 KPI grid
+
 ## [3.0.0] - 2026-01-07
 
 ### Breaking Changes
