@@ -139,15 +139,6 @@ const sessionId = await Staminads.getSessionId();
 // "550e8400-e29b-41d4-a716-446655440000"
 ```
 
-#### `getVisitorId(): Promise<string>`
-
-Returns the persistent visitor UUID. This ID survives across sessions and is stored in localStorage.
-
-```typescript
-const visitorId = await Staminads.getVisitorId();
-// "019abc12-3def-7890-abcd-ef1234567890"
-```
-
 #### `getFocusDuration(): Promise<number>`
 
 Returns active/focused time in milliseconds. Only counts time when the page is visible and focused.
@@ -228,9 +219,25 @@ await Staminads.trackGoal({
 
 Custom dimensions allow you to segment analytics data with your own attributes. Supports indices **1-10** with max **256 characters** per value.
 
+#### URL Parameters (Automatic)
+
+Custom dimensions can be set via URL parameters `stm_1` through `stm_10`. They are automatically captured when the SDK initializes.
+
+```
+https://example.com/page?stm_1=campaign_a&stm_2=variant_b&stm_3=source_x
+```
+
+**Priority rule**: Existing dimension values take priority over URL parameters. If a dimension is already set (e.g., from a previous page in the session), the URL parameter will NOT overwrite it.
+
+This is useful for:
+- Campaign tracking links
+- A/B test variant assignment
+- Affiliate tracking
+- Any scenario where you want to pass dimension values via URL
+
 #### `setDimension(index: number, value: string): Promise<void>`
 
-Set a single custom dimension.
+Set a single custom dimension programmatically.
 
 ```typescript
 await Staminads.setDimension(1, 'premium-user');
@@ -322,7 +329,7 @@ Returns debug information about the current session state. **Synchronous**.
 const info = Staminads.debug();
 console.log(info);
 // {
-//   session: { id: '...', visitor_id: '...', focus_duration_ms: 12345, ... },
+//   session: { id: '...', focus_duration_ms: 12345, ... },
 //   config: { workspace_id: '...', endpoint: '...', ... },
 //   isTracking: true,
 //   actionsCount: 5,
@@ -412,7 +419,6 @@ interface SessionDebugInfo {
 ```typescript
 interface Session {
   id: string;
-  visitor_id: string;
   workspace_id: string;
   created_at: number;
   updated_at: number;
@@ -532,9 +538,8 @@ The SDK uses localStorage with prefix `stm_`:
 | Key | Purpose |
 |-----|---------|
 | `stm_session` | Current session data |
-| `stm_visitor_id` | Persistent visitor identifier |
 | `stm_dimensions` | Custom dimensions |
-| `stm_pending_queue` | Offline payload queue |
+| `stm_pending` | Offline payload queue |
 
 SessionStorage is used for tab-specific data:
 | Key | Purpose |
@@ -592,6 +597,21 @@ await Staminads.setDimensions({
   2: user.region,             // 'us', 'eu', 'apac'
   3: user.account_age         // 'new', 'returning', 'veteran'
 });
+```
+
+### Track Campaign Attribution via URL
+
+Pass custom dimensions through URL parameters for campaign tracking:
+
+```
+https://example.com/landing?stm_1=summer_sale&stm_2=email&stm_3=variant_a
+```
+
+The SDK automatically captures `stm_1` through `stm_10` on initialization.
+Combine with UTM parameters for full attribution:
+
+```
+https://example.com/landing?utm_source=newsletter&utm_campaign=summer&stm_1=segment_a&stm_2=cohort_2024
 ```
 
 ### Handle User Consent

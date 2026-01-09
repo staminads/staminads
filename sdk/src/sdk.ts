@@ -24,6 +24,7 @@ import { NavigationTracker } from './events/navigation';
 import { isBot } from './detection/bot';
 import { DEFAULT_AD_CLICK_IDS } from './utils/utm';
 import { CrossDomainLinker } from './core/cross-domain';
+import { parseStmDimensions } from './utils/stm-dimensions';
 
 // Heartbeat constants
 const MIN_HEARTBEAT_INTERVAL = 5000; // 5 seconds minimum
@@ -164,7 +165,6 @@ export class StaminadsSDK {
     // Inject cross-domain payload if present
     if (crossDomainPayload) {
       this.sessionManager.setCrossDomainInput({
-        visitorId: crossDomainPayload.v,
         sessionId: crossDomainPayload.s,
         timestamp: crossDomainPayload.t,
         expiry: this.config.crossDomainExpiry,
@@ -173,6 +173,12 @@ export class StaminadsSDK {
 
     // Get or create session (uses cross-domain payload if valid)
     const session = this.sessionManager.getOrCreateSession();
+
+    // Apply URL dimensions (existing values take priority)
+    const urlDimensions = parseStmDimensions(window.location.href);
+    if (Object.keys(urlDimensions).length > 0) {
+      this.sessionManager.applyUrlDimensions(urlDimensions);
+    }
 
     // Strip _stm param from URL after processing
     if (crossDomainPayload && this.config.crossDomainStripParams) {
@@ -204,7 +210,6 @@ export class StaminadsSDK {
         debug: this.config.debug,
       });
       this.crossDomainLinker.setIdGetters(
-        () => this.sessionManager?.getVisitorId() || '',
         () => this.sessionManager?.getSessionId() || ''
       );
       this.crossDomainLinker.start();
@@ -243,7 +248,6 @@ export class StaminadsSDK {
     if (this.config.debug) {
       console.log('[Staminads] Initialized', {
         session_id: session.id,
-        visitor_id: this.sessionManager.getVisitorId(),
         device: this.deviceInfo,
       });
     }
@@ -784,14 +788,6 @@ export class StaminadsSDK {
   async getSessionId(): Promise<string> {
     await this.ensureInitialized();
     return this.sessionManager?.getSessionId() || '';
-  }
-
-  /**
-   * Get visitor ID
-   */
-  async getVisitorId(): Promise<string> {
-    await this.ensureInitialized();
-    return this.sessionManager?.getVisitorId() || '';
   }
 
   /**

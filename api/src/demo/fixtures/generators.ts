@@ -5,6 +5,8 @@ import {
   IPHONE_LAUNCH_PAGES,
   IPHONE_LAUNCH_PAGES_TOTAL_WEIGHT,
   ApplePage,
+  getProductPrice,
+  generateRandomPrice,
 } from './apple-pages';
 import {
   REFERRERS,
@@ -49,6 +51,25 @@ const DURATION_CATEGORIES = [
   { min: 180, max: 600, weight: 20 }, // Deep
   { min: 600, max: 1800, weight: 10 }, // Power users
 ];
+
+// Goal conversion configuration
+const GOAL_CONFIG = {
+  addToCartRate: 0.04, // 4% of eligible sessions
+  checkoutFromCartRate: 0.4, // 40% of add_to_cart proceed to checkout
+  purchaseFromCheckoutRate: 0.5, // 50% of checkout complete purchase
+  launchMultiplier: 1.5, // Higher conversion during launch
+  postLaunchMultiplier: 1.2,
+  minDurationForGoal: 30, // Minimum session duration (seconds)
+  minScrollForGoal: 20, // Minimum scroll depth %
+};
+
+interface GoalDecision {
+  hasAddToCart: boolean;
+  hasCheckoutStart: boolean;
+  hasPurchase: boolean;
+  productSlug: string | null;
+  goalValue: number;
+}
 
 function weightedRandom<T extends { weight: number }>(
   items: T[],
@@ -118,6 +139,59 @@ function generateMaxScroll(duration: number): number {
   } else {
     return randomBetween(80, 100); // Power users: full scroll
   }
+}
+
+// Decide which goals a session should have
+function decideGoals(
+  page: ApplePage,
+  duration: number,
+  maxScroll: number,
+  launchPeriod: 'launch' | 'post' | 'normal',
+): GoalDecision {
+  const result: GoalDecision = {
+    hasAddToCart: false,
+    hasCheckoutStart: false,
+    hasPurchase: false,
+    productSlug: null,
+    goalValue: 0,
+  };
+
+  // Only product pages can trigger goals
+  if (page.category !== 'product') return result;
+  if (duration < GOAL_CONFIG.minDurationForGoal) return result;
+  if (maxScroll < GOAL_CONFIG.minScrollForGoal) return result;
+
+  const priceInfo = getProductPrice(page.path);
+  if (!priceInfo) return result;
+
+  // Calculate adjusted rate based on launch period
+  let rateMultiplier = 1.0;
+  if (launchPeriod === 'launch') rateMultiplier = GOAL_CONFIG.launchMultiplier;
+  else if (launchPeriod === 'post')
+    rateMultiplier = GOAL_CONFIG.postLaunchMultiplier;
+
+  // Engagement bonus: longer sessions and deeper scrolls convert better
+  const engagementBonus = Math.min(duration / 300, 1.0);
+  const scrollBonus = maxScroll / 100;
+  const sessionMultiplier = 1 + engagementBonus * 0.5 + scrollBonus * 0.3;
+
+  const addToCartRate =
+    GOAL_CONFIG.addToCartRate * rateMultiplier * sessionMultiplier;
+
+  if (Math.random() < addToCartRate) {
+    result.hasAddToCart = true;
+    result.productSlug = priceInfo.productSlug;
+    result.goalValue = generateRandomPrice(priceInfo);
+
+    if (Math.random() < GOAL_CONFIG.checkoutFromCartRate) {
+      result.hasCheckoutStart = true;
+      if (Math.random() < GOAL_CONFIG.purchaseFromCheckoutRate) {
+        result.hasPurchase = true;
+      }
+    }
+  }
+
+  return result;
 }
 
 // Connection type distribution (null for ~30% to simulate Safari/Firefox)
@@ -620,6 +694,98 @@ function generateSessionEvents(
       exited_at: toClickHouseDateTime(endTime),
       goal_timestamp: null,
     });
+  }
+
+  // Goal events (e-commerce funnel)
+  const maxScrollForGoals = generateMaxScroll(duration);
+  const goals = decideGoals(page, duration, maxScrollForGoals, launchPeriod);
+
+  if (goals.hasAddToCart && goals.productSlug) {
+    // add_to_cart happens at 40-60% through session
+    const addToCartTime = new Date(
+      sessionStart.getTime() + duration * 1000 * (0.4 + Math.random() * 0.2),
+    );
+    const addToCartTs = addToCartTime.getTime();
+
+    events.push({
+      ...baseProps,
+      received_at: toClickHouseDateTime(addToCartTime),
+      created_at: sessionCreatedAt,
+      updated_at: toClickHouseDateTime(addToCartTime),
+      name: 'goal',
+      path: page.path,
+      duration: 0,
+      page_duration: 0,
+      previous_path: '',
+      max_scroll: 0,
+      page_number: events.filter((e) => e.name === 'screen_view').length,
+      dedup_token: `${sessionId}_goal_add_to_cart_${addToCartTs}`,
+      _version: version,
+      goal_name: 'add_to_cart',
+      goal_value: goals.goalValue,
+      entered_at: toClickHouseDateTime(addToCartTime),
+      exited_at: toClickHouseDateTime(addToCartTime),
+      goal_timestamp: toClickHouseDateTime(addToCartTime),
+      properties: { product: goals.productSlug },
+    });
+
+    if (goals.hasCheckoutStart) {
+      // checkout_start happens 5-15 seconds after add_to_cart
+      const checkoutTime = new Date(addToCartTs + 5000 + Math.random() * 10000);
+      const checkoutTs = checkoutTime.getTime();
+
+      events.push({
+        ...baseProps,
+        received_at: toClickHouseDateTime(checkoutTime),
+        created_at: sessionCreatedAt,
+        updated_at: toClickHouseDateTime(checkoutTime),
+        name: 'goal',
+        path: page.path,
+        duration: 0,
+        page_duration: 0,
+        previous_path: '',
+        max_scroll: 0,
+        page_number: events.filter((e) => e.name === 'screen_view').length,
+        dedup_token: `${sessionId}_goal_checkout_start_${checkoutTs}`,
+        _version: version,
+        goal_name: 'checkout_start',
+        goal_value: 0,
+        entered_at: toClickHouseDateTime(checkoutTime),
+        exited_at: toClickHouseDateTime(checkoutTime),
+        goal_timestamp: toClickHouseDateTime(checkoutTime),
+        properties: { product: goals.productSlug },
+      });
+
+      if (goals.hasPurchase) {
+        // purchase happens 30-120 seconds after checkout_start
+        const purchaseTime = new Date(
+          checkoutTs + 30000 + Math.random() * 90000,
+        );
+        const purchaseTs = purchaseTime.getTime();
+
+        events.push({
+          ...baseProps,
+          received_at: toClickHouseDateTime(purchaseTime),
+          created_at: sessionCreatedAt,
+          updated_at: toClickHouseDateTime(purchaseTime),
+          name: 'goal',
+          path: page.path,
+          duration: 0,
+          page_duration: 0,
+          previous_path: '',
+          max_scroll: 0,
+          page_number: events.filter((e) => e.name === 'screen_view').length,
+          dedup_token: `${sessionId}_goal_purchase_${purchaseTs}`,
+          _version: version,
+          goal_name: 'purchase',
+          goal_value: goals.goalValue,
+          entered_at: toClickHouseDateTime(purchaseTime),
+          exited_at: toClickHouseDateTime(purchaseTime),
+          goal_timestamp: toClickHouseDateTime(purchaseTime),
+          properties: { product: goals.productSlug },
+        });
+      }
+    }
   }
 
   return events;

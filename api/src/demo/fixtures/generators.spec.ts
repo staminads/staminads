@@ -86,7 +86,7 @@ describe('generators', () => {
         daysRange: 3,
       });
 
-      const validEventNames = ['screen_view', 'scroll'];
+      const validEventNames = ['screen_view', 'scroll', 'goal'];
       for (const event of events) {
         expect(validEventNames).toContain(event.name);
       }
@@ -375,6 +375,124 @@ describe('generators', () => {
       for (const event of referredEvents.slice(0, 20)) {
         expect(event.referrer).toMatch(/^https:\/\//);
         expect(event.referrer_domain).toBeTruthy();
+      }
+    });
+  });
+
+  describe('goal events', () => {
+    it('generates goal events for some sessions', () => {
+      const events = generateEvents({
+        ...baseConfig,
+        sessionCount: 500,
+        daysRange: 7,
+      });
+
+      const goalEvents = events.filter((e) => e.name === 'goal');
+      expect(goalEvents.length).toBeGreaterThan(0);
+    });
+
+    it('maintains funnel integrity', () => {
+      const events = generateEvents({
+        ...baseConfig,
+        sessionCount: 1000,
+        daysRange: 14,
+      });
+
+      // Group goals by session
+      const sessionGoals = new Map<string, string[]>();
+      for (const event of events.filter((e) => e.name === 'goal')) {
+        const goals = sessionGoals.get(event.session_id) || [];
+        goals.push(event.goal_name);
+        sessionGoals.set(event.session_id, goals);
+      }
+
+      // Verify funnel integrity: purchase requires checkout_start, checkout_start requires add_to_cart
+      for (const [, goals] of sessionGoals) {
+        if (goals.includes('purchase')) {
+          expect(goals).toContain('checkout_start');
+          expect(goals).toContain('add_to_cart');
+        }
+        if (goals.includes('checkout_start')) {
+          expect(goals).toContain('add_to_cart');
+        }
+      }
+    });
+
+    it('goal values are within product price ranges', () => {
+      const events = generateEvents({
+        ...baseConfig,
+        sessionCount: 500,
+        daysRange: 7,
+      });
+
+      const addToCartEvents = events.filter(
+        (e) => e.name === 'goal' && e.goal_name === 'add_to_cart',
+      );
+
+      for (const goal of addToCartEvents) {
+        // All Apple product prices are between $99 and $6999
+        expect(goal.goal_value).toBeGreaterThanOrEqual(99);
+        expect(goal.goal_value).toBeLessThanOrEqual(6999);
+      }
+    });
+
+    it('includes product slug in properties', () => {
+      const events = generateEvents({
+        ...baseConfig,
+        sessionCount: 500,
+        daysRange: 7,
+      });
+
+      const goalEvents = events.filter((e) => e.name === 'goal');
+
+      for (const goal of goalEvents) {
+        expect(goal.properties?.product).toBeDefined();
+        expect(goal.properties?.product).not.toBe('');
+      }
+    });
+
+    it('checkout_start has zero goal_value', () => {
+      const events = generateEvents({
+        ...baseConfig,
+        sessionCount: 500,
+        daysRange: 7,
+      });
+
+      const checkoutEvents = events.filter(
+        (e) => e.name === 'goal' && e.goal_name === 'checkout_start',
+      );
+
+      for (const event of checkoutEvents) {
+        expect(event.goal_value).toBe(0);
+      }
+    });
+
+    it('purchase and add_to_cart have same goal_value in same session', () => {
+      const events = generateEvents({
+        ...baseConfig,
+        sessionCount: 1000,
+        daysRange: 14,
+      });
+
+      // Group goal events by session
+      const sessionGoalEvents = new Map<
+        string,
+        { name: string; value: number }[]
+      >();
+      for (const event of events.filter((e) => e.name === 'goal')) {
+        const goals = sessionGoalEvents.get(event.session_id) || [];
+        goals.push({ name: event.goal_name, value: event.goal_value });
+        sessionGoalEvents.set(event.session_id, goals);
+      }
+
+      // Find sessions with both add_to_cart and purchase
+      for (const [, goals] of sessionGoalEvents) {
+        const addToCart = goals.find((g) => g.name === 'add_to_cart');
+        const purchase = goals.find((g) => g.name === 'purchase');
+
+        if (addToCart && purchase) {
+          expect(purchase.value).toBe(addToCart.value);
+        }
       }
     });
   });

@@ -92,7 +92,6 @@ export interface GoalData {
 export interface StaminadsAPI {
   init(config: { workspace_id: string; endpoint: string; debug?: boolean }): Promise<void>;
   getSessionId(): Promise<string>;
-  getVisitorId(): Promise<string>;
   getConfig(): Record<string, unknown> | null;
   getFocusDuration(): Promise<number>;
   getTotalDuration(): Promise<number>;

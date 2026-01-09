@@ -276,3 +276,86 @@ export const IPHONE_LAUNCH_PAGES_TOTAL_WEIGHT = IPHONE_LAUNCH_PAGES.reduce(
   (sum, page) => sum + page.weight,
   0,
 );
+
+// Product prices for goal generation
+export interface ProductPrice {
+  minPrice: number;
+  maxPrice: number;
+  productSlug: string;
+}
+
+export const PRODUCT_PRICES: Record<string, ProductPrice> = {
+  // iPhone
+  '/iphone-17-pro/': {
+    minPrice: 999,
+    maxPrice: 1199,
+    productSlug: 'iphone-17-pro',
+  },
+  '/iphone-air/': { minPrice: 999, maxPrice: 999, productSlug: 'iphone-air' },
+  '/iphone-17/': { minPrice: 799, maxPrice: 799, productSlug: 'iphone-17' },
+  '/iphone-16e/': { minPrice: 599, maxPrice: 599, productSlug: 'iphone-16e' },
+  // Mac
+  '/macbook-air/': {
+    minPrice: 999,
+    maxPrice: 1299,
+    productSlug: 'macbook-air',
+  },
+  '/macbook-pro/': {
+    minPrice: 1599,
+    maxPrice: 2499,
+    productSlug: 'macbook-pro',
+  },
+  '/imac/': { minPrice: 1299, maxPrice: 1299, productSlug: 'imac' },
+  '/mac-mini/': { minPrice: 599, maxPrice: 599, productSlug: 'mac-mini' },
+  '/mac-studio/': {
+    minPrice: 1999,
+    maxPrice: 3999,
+    productSlug: 'mac-studio',
+  },
+  '/mac-pro/': { minPrice: 5999, maxPrice: 6999, productSlug: 'mac-pro' },
+  // iPad
+  '/ipad-pro/': { minPrice: 999, maxPrice: 1299, productSlug: 'ipad-pro' },
+  '/ipad-air/': { minPrice: 599, maxPrice: 599, productSlug: 'ipad-air' },
+  '/ipad-mini/': { minPrice: 499, maxPrice: 499, productSlug: 'ipad-mini' },
+  // Watch
+  '/apple-watch-series-11/': {
+    minPrice: 399,
+    maxPrice: 399,
+    productSlug: 'apple-watch-series-11',
+  },
+  '/apple-watch-ultra-3/': {
+    minPrice: 799,
+    maxPrice: 799,
+    productSlug: 'apple-watch-ultra-3',
+  },
+  '/apple-watch-se-3/': {
+    minPrice: 249,
+    maxPrice: 249,
+    productSlug: 'apple-watch-se-3',
+  },
+  // AirPods
+  '/airpods-pro/': { minPrice: 249, maxPrice: 249, productSlug: 'airpods-pro' },
+  '/airpods-4/': { minPrice: 129, maxPrice: 129, productSlug: 'airpods-4' },
+  '/airpods-max/': { minPrice: 549, maxPrice: 549, productSlug: 'airpods-max' },
+  // TV & Home
+  '/apple-tv-4k/': {
+    minPrice: 129,
+    maxPrice: 149,
+    productSlug: 'apple-tv-4k',
+  },
+  '/homepod-mini/': {
+    minPrice: 99,
+    maxPrice: 99,
+    productSlug: 'homepod-mini',
+  },
+};
+
+export function getProductPrice(path: string): ProductPrice | null {
+  return PRODUCT_PRICES[path] || null;
+}
+
+export function generateRandomPrice(priceInfo: ProductPrice): number {
+  if (priceInfo.minPrice === priceInfo.maxPrice) return priceInfo.minPrice;
+  const range = priceInfo.maxPrice - priceInfo.minPrice;
+  return priceInfo.minPrice + Math.round((Math.random() * range) / 100) * 100;
+}

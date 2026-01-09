@@ -1,4 +1,4 @@
-export const ANALYTICS_TABLES = ['sessions', 'pages'] as const;
+export const ANALYTICS_TABLES = ['sessions', 'pages', 'goals'] as const;
 export type AnalyticsTable = (typeof ANALYTICS_TABLES)[number];
 
 export interface TableConfig {
@@ -17,5 +17,10 @@ export const TABLE_CONFIGS: Record<AnalyticsTable, TableConfig> = {
     name: 'pages',
     dateColumn: 'entered_at',
     finalModifier: false, // MergeTree doesn't need FINAL
+  },
+  goals: {
+    name: 'goals',
+    dateColumn: 'goal_timestamp',
+    finalModifier: true, // ReplacingMergeTree needs FINAL
   },
 };

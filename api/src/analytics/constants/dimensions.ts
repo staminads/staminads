@@ -9,20 +9,20 @@ export interface DimensionDefinition {
 }
 
 export const DIMENSIONS: Record<string, DimensionDefinition> = {
-  // Traffic (sessions only)
+  // Traffic (sessions and goals)
   referrer: {
     name: 'referrer',
     column: 'referrer',
     type: 'string',
     category: 'Traffic',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   referrer_domain: {
     name: 'referrer_domain',
     column: 'referrer_domain',
     type: 'string',
     category: 'Traffic',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   referrer_path: {
     name: 'referrer_path',
@@ -36,69 +36,69 @@ export const DIMENSIONS: Record<string, DimensionDefinition> = {
     column: 'is_direct',
     type: 'boolean',
     category: 'Traffic',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
 
-  // UTM (sessions only)
+  // UTM (sessions and goals)
   utm_source: {
     name: 'utm_source',
     column: 'utm_source',
     type: 'string',
     category: 'UTM',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   utm_medium: {
     name: 'utm_medium',
     column: 'utm_medium',
     type: 'string',
     category: 'UTM',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   utm_campaign: {
     name: 'utm_campaign',
     column: 'utm_campaign',
     type: 'string',
     category: 'UTM',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   utm_term: {
     name: 'utm_term',
     column: 'utm_term',
     type: 'string',
     category: 'UTM',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   utm_content: {
     name: 'utm_content',
     column: 'utm_content',
     type: 'string',
     category: 'UTM',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
 
-  // Channel (sessions only)
+  // Channel (sessions and goals)
   channel: {
     name: 'channel',
     column: 'channel',
     type: 'string',
     category: 'Channel',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   channel_group: {
     name: 'channel_group',
     column: 'channel_group',
     type: 'string',
     category: 'Channel',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
 
-  // Session Pages (sessions only)
+  // Session Pages (sessions and some on goals)
   landing_page: {
     name: 'landing_page',
     column: 'landing_page',
     type: 'string',
     category: 'Session Pages',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   landing_domain: {
     name: 'landing_domain',
@@ -112,7 +112,7 @@ export const DIMENSIONS: Record<string, DimensionDefinition> = {
     column: 'landing_path',
     type: 'string',
     category: 'Session Pages',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   exit_path: {
     name: 'exit_path',
@@ -159,20 +159,20 @@ export const DIMENSIONS: Record<string, DimensionDefinition> = {
     tables: ['pages'],
   },
 
-  // Device (sessions only)
+  // Device (sessions and some on goals)
   device: {
     name: 'device',
     column: 'device',
     type: 'string',
     category: 'Device',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   browser: {
     name: 'browser',
     column: 'browser',
     type: 'string',
     category: 'Device',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   browser_type: {
     name: 'browser_type',
@@ -186,7 +186,7 @@ export const DIMENSIONS: Record<string, DimensionDefinition> = {
     column: 'os',
     type: 'string',
     category: 'Device',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   screen_width: {
     name: 'screen_width',
@@ -291,27 +291,27 @@ export const DIMENSIONS: Record<string, DimensionDefinition> = {
     tables: ['sessions'],
   },
 
-  // Geo (sessions only)
+  // Geo (sessions and some on goals)
   country: {
     name: 'country',
     column: 'country',
     type: 'string',
     category: 'Geo',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   region: {
     name: 'region',
     column: 'region',
     type: 'string',
     category: 'Geo',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   city: {
     name: 'city',
     column: 'city',
     type: 'string',
     category: 'Geo',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   latitude: {
     name: 'latitude',
@@ -332,7 +332,7 @@ export const DIMENSIONS: Record<string, DimensionDefinition> = {
     column: 'language',
     type: 'string',
     category: 'Geo',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   timezone: {
     name: 'timezone',
@@ -342,75 +342,91 @@ export const DIMENSIONS: Record<string, DimensionDefinition> = {
     tables: ['sessions'],
   },
 
-  // Custom Dimensions (sessions only)
+  // Custom Dimensions (sessions and goals)
   stm_1: {
     name: 'stm_1',
     column: 'stm_1',
     type: 'string',
     category: 'Custom',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   stm_2: {
     name: 'stm_2',
     column: 'stm_2',
     type: 'string',
     category: 'Custom',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   stm_3: {
     name: 'stm_3',
     column: 'stm_3',
     type: 'string',
     category: 'Custom',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   stm_4: {
     name: 'stm_4',
     column: 'stm_4',
     type: 'string',
     category: 'Custom',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   stm_5: {
     name: 'stm_5',
     column: 'stm_5',
     type: 'string',
     category: 'Custom',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   stm_6: {
     name: 'stm_6',
     column: 'stm_6',
     type: 'string',
     category: 'Custom',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   stm_7: {
     name: 'stm_7',
     column: 'stm_7',
     type: 'string',
     category: 'Custom',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   stm_8: {
     name: 'stm_8',
     column: 'stm_8',
     type: 'string',
     category: 'Custom',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   stm_9: {
     name: 'stm_9',
     column: 'stm_9',
     type: 'string',
     category: 'Custom',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   stm_10: {
     name: 'stm_10',
     column: 'stm_10',
     type: 'string',
     category: 'Custom',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
+  },
+
+  // Goal (goals table only)
+  goal_name: {
+    name: 'goal_name',
+    column: 'goal_name',
+    type: 'string',
+    category: 'Goal',
+    tables: ['goals'],
+  },
+  goal_path: {
+    name: 'goal_path',
+    column: 'path',
+    type: 'string',
+    category: 'Goal',
+    tables: ['goals'],
   },
 };

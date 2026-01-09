@@ -154,13 +154,13 @@ describe('Storage', () => {
 
     it('removes only keys starting with stm_', () => {
       mockLocalStorage._store['stm_session'] = '"session_data"';
-      mockLocalStorage._store['stm_visitor_id'] = '"visitor_123"';
+      mockLocalStorage._store['stm_pending'] = '"pending_data"';
       mockLocalStorage._store['other_key'] = '"should_remain"';
 
       storage.clear();
 
       expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('stm_session');
-      expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('stm_visitor_id');
+      expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('stm_pending');
       expect(mockLocalStorage.removeItem).not.toHaveBeenCalledWith('other_key');
     });
 
@@ -283,7 +283,6 @@ describe('STORAGE_KEYS', () => {
   it('contains all expected keys', () => {
     expect(STORAGE_KEYS).toEqual({
       SESSION: 'session',
-      VISITOR_ID: 'visitor_id',
       PENDING_QUEUE: 'pending',
       TAB_ID: 'tab_id',
       DIMENSIONS: 'dimensions',

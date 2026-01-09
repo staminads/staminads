@@ -113,21 +113,6 @@ describe('SessionManager', () => {
       expect(session.id).toMatch(/^mock-uuid-v7-/);
     });
 
-    it('generates UUIDv4 for visitor_id when not existing', async () => {
-      const { generateUUIDv4 } = await import('../utils/uuid');
-      sessionManager.getOrCreateSession();
-      expect(generateUUIDv4).toHaveBeenCalled();
-    });
-
-    it('reuses existing visitor_id from storage', () => {
-      mockLocalStorage._store['stm_visitor_id'] = '"existing-visitor-id"';
-      storage = new Storage();
-      sessionManager = new SessionManager(storage, tabStorage, config);
-
-      const session = sessionManager.getOrCreateSession();
-      expect(session.visitor_id).toBe('existing-visitor-id');
-    });
-
     it('sets workspace_id from config', () => {
       const session = sessionManager.getOrCreateSession();
       expect(session.workspace_id).toBe('ws_123');
@@ -184,7 +169,6 @@ describe('SessionManager', () => {
     it('resumes session when not expired', () => {
       const existingSession: Session = {
         id: 'existing-session-id',
-        visitor_id: 'visitor-123',
         workspace_id: 'ws_123',
         created_at: Date.now() - 5 * 60 * 1000, // 5 minutes ago
         updated_at: Date.now() - 1 * 60 * 1000,
@@ -212,7 +196,6 @@ describe('SessionManager', () => {
     it('increments sequence on resume', () => {
       const existingSession: Session = {
         id: 'existing-session-id',
-        visitor_id: 'visitor-123',
         workspace_id: 'ws_123',
         created_at: Date.now() - 5 * 60 * 1000,
         updated_at: Date.now() - 1 * 60 * 1000,
@@ -241,7 +224,6 @@ describe('SessionManager', () => {
       const oldTime = Date.now() - 5 * 60 * 1000;
       const existingSession: Session = {
         id: 'existing-session-id',
-        visitor_id: 'visitor-123',
         workspace_id: 'ws_123',
         created_at: oldTime,
         updated_at: oldTime,
@@ -270,7 +252,6 @@ describe('SessionManager', () => {
       const expiredTime = Date.now() - 35 * 60 * 1000; // 35 minutes ago
       const existingSession: Session = {
         id: 'old-session-id',
-        visitor_id: 'visitor-123',
         workspace_id: 'ws_123',
         created_at: expiredTime,
         updated_at: expiredTime,
@@ -366,6 +347,76 @@ describe('SessionManager', () => {
     });
   });
 
+  describe('applyUrlDimensions', () => {
+    beforeEach(() => {
+      sessionManager.getOrCreateSession();
+    });
+
+    it('sets dimensions from URL params when session has no dimensions', () => {
+      sessionManager.applyUrlDimensions({ 1: 'campaign_a', 3: 'variant_b' });
+
+      expect(sessionManager.getDimension(1)).toBe('campaign_a');
+      expect(sessionManager.getDimension(3)).toBe('variant_b');
+    });
+
+    it('does not overwrite existing dimensions (priority rule)', () => {
+      sessionManager.setDimension(1, 'existing_value');
+
+      sessionManager.applyUrlDimensions({ 1: 'url_value', 2: 'new_value' });
+
+      expect(sessionManager.getDimension(1)).toBe('existing_value');
+      expect(sessionManager.getDimension(2)).toBe('new_value');
+    });
+
+    it('handles partial overlap correctly', () => {
+      sessionManager.setDimension(2, 'existing_2');
+      sessionManager.setDimension(5, 'existing_5');
+
+      sessionManager.applyUrlDimensions({ 1: 'url_1', 2: 'url_2', 3: 'url_3', 5: 'url_5' });
+
+      expect(sessionManager.getDimension(1)).toBe('url_1');
+      expect(sessionManager.getDimension(2)).toBe('existing_2'); // Not overwritten
+      expect(sessionManager.getDimension(3)).toBe('url_3');
+      expect(sessionManager.getDimension(5)).toBe('existing_5'); // Not overwritten
+    });
+
+    it('persists changes to storage', () => {
+      sessionManager.applyUrlDimensions({ 1: 'persisted_value' });
+
+      // Verify it was saved to localStorage
+      expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
+        'stm_dimensions',
+        expect.stringContaining('persisted_value')
+      );
+    });
+
+    it('does not save if no new dimensions were applied', () => {
+      sessionManager.setDimension(1, 'existing');
+      const callCountBefore = mockLocalStorage.setItem.mock.calls.length;
+
+      sessionManager.applyUrlDimensions({ 1: 'ignored' });
+
+      // Should not have additional calls since dimension 1 already exists
+      const callsAfter = mockLocalStorage.setItem.mock.calls.slice(callCountBefore);
+      const dimensionCalls = callsAfter.filter(call => call[0] === 'stm_dimensions');
+      expect(dimensionCalls).toHaveLength(0);
+    });
+
+    it('does nothing if no session exists', () => {
+      const freshSessionManager = new SessionManager(storage, tabStorage, config);
+      // Don't call getOrCreateSession()
+
+      // Should not throw
+      expect(() => freshSessionManager.applyUrlDimensions({ 1: 'test' })).not.toThrow();
+    });
+
+    it('handles empty object gracefully', () => {
+      sessionManager.applyUrlDimensions({});
+      // Should not throw and no dimensions should be set
+      expect(sessionManager.getDimension(1)).toBeNull();
+    });
+  });
+
   describe('tab ID', () => {
     it('getTabId() returns a UUIDv4', async () => {
       // Tab ID is created in the SessionManager constructor
@@ -436,11 +487,6 @@ describe('SessionManager', () => {
   });
 
   describe('getters', () => {
-    it('getVisitorId() returns visitor_id', () => {
-      const session = sessionManager.getOrCreateSession();
-      expect(sessionManager.getVisitorId()).toBe(session.visitor_id);
-    });
-
     it('getSessionId() returns session.id', () => {
       const session = sessionManager.getOrCreateSession();
       expect(sessionManager.getSessionId()).toBe(session.id);
@@ -454,7 +500,6 @@ describe('SessionManager', () => {
 
   describe('cross-domain session', () => {
     const getValidCrossDomainInput = () => ({
-      visitorId: 'cross-domain-visitor-id-1234-567890abcdef',
       sessionId: 'cross-domain-session-id-1234-567890abcdef',
       timestamp: Math.floor(Date.now() / 1000), // Evaluated at test time (with fake timers)
       expiry: 120,
@@ -466,19 +511,6 @@ describe('SessionManager', () => {
       const session = sessionManager.getOrCreateSession();
 
       expect(session.id).toBe(input.sessionId);
-      expect(session.visitor_id).toBe(input.visitorId);
-    });
-
-    it('should store visitor_id from cross-domain in localStorage', () => {
-      const input = getValidCrossDomainInput();
-      sessionManager.setCrossDomainInput(input);
-      sessionManager.getOrCreateSession();
-
-      // Check that visitor_id was stored
-      expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
-        'stm_visitor_id',
-        JSON.stringify(input.visitorId)
-      );
     });
 
     it('should ignore expired cross-domain input', () => {
@@ -493,7 +525,6 @@ describe('SessionManager', () => {
 
       // Should create new session, not use cross-domain
       expect(session.id).not.toBe(expiredInput.sessionId);
-      expect(session.visitor_id).not.toBe(expiredInput.visitorId);
     });
 
     it('should ignore cross-domain input with future timestamp (>60s)', () => {
@@ -526,7 +557,6 @@ describe('SessionManager', () => {
       // Store an existing session in localStorage
       const existingSession: Session = {
         id: 'existing-local-session-id',
-        visitor_id: 'local-visitor-123',
         workspace_id: 'ws_123',
         created_at: Date.now() - 5 * 60 * 1000,
         updated_at: Date.now() - 1 * 60 * 1000,
@@ -564,7 +594,6 @@ describe('SessionManager', () => {
       // Store an existing session in localStorage
       const existingSession: Session = {
         id: 'existing-local-session-id',
-        visitor_id: 'local-visitor-123',
         workspace_id: 'ws_123',
         created_at: Date.now() - 5 * 60 * 1000,
         updated_at: Date.now() - 1 * 60 * 1000,
@@ -593,7 +622,6 @@ describe('SessionManager', () => {
 
       // Should use cross-domain, not localStorage
       expect(session.id).toBe(input.sessionId);
-      expect(session.visitor_id).toBe(input.visitorId);
     });
   });
 });

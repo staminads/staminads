@@ -15,7 +15,7 @@
  *
  * Then use the SDK (all methods are async):
  * ```typescript
- * // Track custom dimension
+ * // Track custom dimension programmatically
  * await Staminads.setDimension(1, 'premium-user');
  *
  * // Track goal
@@ -25,6 +25,13 @@
  *   currency: 'USD',
  * });
  * ```
+ *
+ * Custom dimensions can also be set via URL parameters:
+ * ```
+ * https://example.com/page?stm_1=campaign_a&stm_2=variant_b
+ * ```
+ * URL parameters stm_1 through stm_10 are automatically captured on init.
+ * Existing dimension values take priority over URL parameters.
  */
 
 import { StaminadsSDK } from './sdk';
@@ -42,7 +49,6 @@ const sdk = new StaminadsSDK();
 const Staminads: StaminadsAPI = {
   init: (config: StaminadsConfig) => sdk.init(config),
   getSessionId: () => sdk.getSessionId(),
-  getVisitorId: () => sdk.getVisitorId(),
   getConfig: () => sdk.getConfig(),
   getFocusDuration: () => sdk.getFocusDuration(),
   getTotalDuration: () => sdk.getTotalDuration(),

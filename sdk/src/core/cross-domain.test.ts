@@ -10,7 +10,6 @@ describe('CrossDomainLinker', () => {
   describe('encode/decode', () => {
     it('should encode payload to base64url string', () => {
       const payload: CrossDomainPayload = {
-        v: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
         s: '019012ab-cdef-7890-abcd-ef1234567890',
         t: 1704067200,
       };
@@ -26,7 +25,6 @@ describe('CrossDomainLinker', () => {
 
     it('should decode valid base64url payload', () => {
       const original: CrossDomainPayload = {
-        v: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
         s: '019012ab-cdef-7890-abcd-ef1234567890',
         t: 1704067200,
       };
@@ -34,7 +32,6 @@ describe('CrossDomainLinker', () => {
       const decoded = decode(encoded);
 
       expect(decoded).not.toBeNull();
-      expect(decoded?.v).toBe(original.v);
       expect(decoded?.s).toBe(original.s);
       expect(decoded?.t).toBe(original.t);
     });
@@ -56,7 +53,7 @@ describe('CrossDomainLinker', () => {
 
     it('should return null for missing fields', () => {
       // Missing 's' field
-      const partialPayload = { v: 'visitor-id', t: 1704067200 };
+      const partialPayload = { t: 1704067200 };
       const encoded = btoa(JSON.stringify(partialPayload))
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
@@ -65,18 +62,8 @@ describe('CrossDomainLinker', () => {
       expect(decoded).toBeNull();
     });
 
-    it('should return null for invalid UUID format in visitor_id', () => {
-      const payload = { v: 'not-a-uuid', s: '019012ab-cdef-7890-abcd-ef1234567890', t: 1704067200 };
-      const encoded = btoa(JSON.stringify(payload))
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
-      const decoded = decode(encoded);
-      expect(decoded).toBeNull();
-    });
-
     it('should return null for invalid UUID format in session_id', () => {
-      const payload = { v: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', s: 'not-a-uuid', t: 1704067200 };
+      const payload = { s: 'not-a-uuid', t: 1704067200 };
       const encoded = btoa(JSON.stringify(payload))
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
@@ -96,7 +83,6 @@ describe('CrossDomainLinker', () => {
         debug: false,
       });
       linker.setIdGetters(
-        () => 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
         () => '019012ab-cdef-7890-abcd-ef1234567890'
       );
     });
@@ -149,7 +135,6 @@ describe('CrossDomainLinker', () => {
 
     it('should read _stm param from window.location', () => {
       const payload: CrossDomainPayload = {
-        v: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
         s: '019012ab-cdef-7890-abcd-ef1234567890',
         t: Math.floor(Date.now() / 1000),
       };
@@ -162,7 +147,6 @@ describe('CrossDomainLinker', () => {
 
       const result = CrossDomainLinker.readParam(120);
       expect(result).not.toBeNull();
-      expect(result?.v).toBe(payload.v);
       expect(result?.s).toBe(payload.s);
     });
 
@@ -178,7 +162,6 @@ describe('CrossDomainLinker', () => {
 
     it('should return null for expired timestamp', () => {
       const payload: CrossDomainPayload = {
-        v: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
         s: '019012ab-cdef-7890-abcd-ef1234567890',
         t: Math.floor(Date.now() / 1000) - 300, // 5 minutes ago
       };
@@ -195,7 +178,6 @@ describe('CrossDomainLinker', () => {
 
     it('should return null for future timestamp (>60s)', () => {
       const payload: CrossDomainPayload = {
-        v: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
         s: '019012ab-cdef-7890-abcd-ef1234567890',
         t: Math.floor(Date.now() / 1000) + 120, // 2 minutes in future
       };
@@ -212,7 +194,6 @@ describe('CrossDomainLinker', () => {
 
     it('should accept timestamp within clock skew tolerance (60s future)', () => {
       const payload: CrossDomainPayload = {
-        v: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
         s: '019012ab-cdef-7890-abcd-ef1234567890',
         t: Math.floor(Date.now() / 1000) + 30, // 30 seconds in future (within tolerance)
       };
@@ -377,7 +358,6 @@ describe('CrossDomainLinker', () => {
         debug: false,
       });
       linker.setIdGetters(
-        () => 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
         () => '019012ab-cdef-7890-abcd-ef1234567890'
       );
     });
@@ -429,7 +409,6 @@ describe('CrossDomainLinker', () => {
         debug: false,
       });
       linkerReal.setIdGetters(
-        () => 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
         () => '019012ab-cdef-7890-abcd-ef1234567890'
       );
       linkerReal.start();
@@ -465,7 +444,6 @@ describe('CrossDomainLinker', () => {
         debug: false,
       });
       linkerReal.setIdGetters(
-        () => 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
         () => '019012ab-cdef-7890-abcd-ef1234567890'
       );
       linkerReal.start();

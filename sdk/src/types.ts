@@ -84,7 +84,6 @@ export interface InternalConfig extends Required<Omit<StaminadsConfig, 'workspac
 // Session
 export interface Session {
   id: string;
-  visitor_id: string;
   workspace_id: string;
   created_at: number;
   updated_at: number;
@@ -144,7 +143,6 @@ export interface GoalData {
 export interface StaminadsAPI {
   init(config: StaminadsConfig): Promise<void>;
   getSessionId(): Promise<string>;
-  getVisitorId(): Promise<string>;
   getConfig(): Readonly<StaminadsConfig> | null;
   getFocusDuration(): Promise<number>;
   getTotalDuration(): Promise<number>;

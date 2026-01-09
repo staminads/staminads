@@ -27,16 +27,6 @@ test.describe('Session Lifecycle', () => {
     expect(sessionId.length).toBeGreaterThan(10);
   });
 
-  test('creates visitor ID on first visit', async ({ page }) => {
-    await page.goto('/test-page.html');
-    await page.waitForFunction(() => window.SDK_INITIALIZED);
-    await page.evaluate(() => window.SDK_READY);
-
-    const visitorId = await page.evaluate(() => Staminads.getVisitorId());
-    expect(visitorId).toBeTruthy();
-    expect(typeof visitorId).toBe('string');
-  });
-
   test('sends initial payload with current_page on init', async ({ page, request }) => {
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
@@ -73,7 +63,6 @@ test.describe('Session Lifecycle', () => {
     await page.evaluate(() => window.SDK_READY);
 
     const sessionId1 = await page.evaluate(() => Staminads.getSessionId());
-    const visitorId1 = await page.evaluate(() => Staminads.getVisitorId());
 
     // Reload page
     await page.reload();
@@ -81,11 +70,9 @@ test.describe('Session Lifecycle', () => {
     await page.evaluate(() => window.SDK_READY);
 
     const sessionId2 = await page.evaluate(() => Staminads.getSessionId());
-    const visitorId2 = await page.evaluate(() => Staminads.getVisitorId());
 
-    // Session and visitor should persist
+    // Session should persist
     expect(sessionId2).toBe(sessionId1);
-    expect(visitorId2).toBe(visitorId1);
   });
 
   test('sends periodic payloads on heartbeat', async ({ page, request }) => {

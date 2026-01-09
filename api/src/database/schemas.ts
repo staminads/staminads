@@ -461,4 +461,104 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
     FROM {database}.events e
     WHERE e.name = 'screen_view' AND e.page_duration > 0
   `,
+
+  goals: `
+    CREATE TABLE IF NOT EXISTS {database}.goals (
+      id UUID DEFAULT generateUUIDv4(),
+      session_id String,
+      workspace_id String,
+
+      -- Goal data
+      goal_name String,
+      goal_value Float32 DEFAULT 0,
+      goal_timestamp DateTime64(3),
+      path String,
+      page_number UInt16 DEFAULT 1,
+      properties Map(String, String) DEFAULT map(),
+
+      -- Session context (for attribution)
+      referrer String DEFAULT '',
+      referrer_domain String DEFAULT '',
+      is_direct Bool DEFAULT false,
+      landing_page String,
+      landing_path String DEFAULT '',
+      utm_source String DEFAULT '',
+      utm_medium String DEFAULT '',
+      utm_campaign String DEFAULT '',
+      utm_term String DEFAULT '',
+      utm_content String DEFAULT '',
+      channel LowCardinality(String) DEFAULT '',
+      channel_group LowCardinality(String) DEFAULT '',
+      stm_1 String DEFAULT '',
+      stm_2 String DEFAULT '',
+      stm_3 String DEFAULT '',
+      stm_4 String DEFAULT '',
+      stm_5 String DEFAULT '',
+      stm_6 String DEFAULT '',
+      stm_7 String DEFAULT '',
+      stm_8 String DEFAULT '',
+      stm_9 String DEFAULT '',
+      stm_10 String DEFAULT '',
+      device String DEFAULT '',
+      browser String DEFAULT '',
+      os String DEFAULT '',
+      country LowCardinality(String) DEFAULT '',
+      region LowCardinality(String) DEFAULT '',
+      city String DEFAULT '',
+      language String DEFAULT '',
+
+      -- Technical
+      _version UInt64 DEFAULT 0,
+      INDEX idx_goal_timestamp goal_timestamp TYPE minmax GRANULARITY 1
+    ) ENGINE = ReplacingMergeTree(_version)
+    PARTITION BY toYYYYMM(goal_timestamp)
+    ORDER BY (goal_timestamp, session_id, goal_name)
+  `,
+
+  goals_mv: `
+    CREATE MATERIALIZED VIEW IF NOT EXISTS {database}.goals_mv
+    TO {database}.goals AS
+    SELECT
+      generateUUIDv4() as id,
+      e.session_id,
+      e.workspace_id,
+      e.goal_name,
+      e.goal_value,
+      assumeNotNull(e.goal_timestamp) as goal_timestamp,
+      e.path,
+      e.page_number,
+      e.properties,
+      e.referrer,
+      e.referrer_domain,
+      e.is_direct,
+      e.landing_page,
+      e.landing_path,
+      e.utm_source,
+      e.utm_medium,
+      e.utm_campaign,
+      e.utm_term,
+      e.utm_content,
+      e.channel,
+      e.channel_group,
+      e.stm_1,
+      e.stm_2,
+      e.stm_3,
+      e.stm_4,
+      e.stm_5,
+      e.stm_6,
+      e.stm_7,
+      e.stm_8,
+      e.stm_9,
+      e.stm_10,
+      e.device,
+      e.browser,
+      e.os,
+      e.country,
+      e.region,
+      e.city,
+      e.language,
+      e._version
+    FROM {database}.events e
+    WHERE e.name = 'goal'
+  `,
 };

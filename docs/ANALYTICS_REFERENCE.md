@@ -211,10 +211,19 @@ Specify the table using the `table` parameter in API requests.
 | `stm_9` | `stm_9` | string | Custom dimension 9 | User-defined |
 | `stm_10` | `stm_10` | string | Custom dimension 10 | User-defined |
 
-Custom dimensions are set via the SDK:
+Custom dimensions can be set in two ways:
+
+**1. Via URL parameters (automatic)**
+```
+https://example.com/page?stm_1=campaign_a&stm_2=variant_b
+```
+URL parameters `stm_1` through `stm_10` are automatically captured on SDK initialization.
+Existing dimension values take priority over URL parameters.
+
+**2. Via SDK (programmatic)**
 ```javascript
-staminads.setDimension(1, 'premium');      // stm_1 = 'premium'
-staminads.setDimension(2, 'logged_in');    // stm_2 = 'logged_in'
+Staminads.setDimension(1, 'premium');      // stm_1 = 'premium'
+Staminads.setDimension(2, 'logged_in');    // stm_2 = 'logged_in'
 ```
 
 ---

@@ -64,7 +64,6 @@ All methods (except `getConfig()` and `debug()`) are async and return Promises.
 ```typescript
 // Session info (async)
 await Staminads.getSessionId();       // Current session UUID
-await Staminads.getVisitorId();       // Persistent visitor UUID
 await Staminads.getFocusDuration();   // Active time in milliseconds
 await Staminads.getTotalDuration();   // Wall clock time in milliseconds
 

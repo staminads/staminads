@@ -2,7 +2,7 @@
  * Cross-Domain Session Tracking Integration Tests
  *
  * Tests the full cross-domain flow including:
- * - Session continuity across domains (same visitor_id, session_id)
+ * - Session continuity across domains (same session_id)
  * - URL decoration with _stm parameter
  * - Parameter reading and stripping
  * - Expired/invalid payload handling
@@ -103,7 +103,6 @@ describe('Cross-Domain Integration', () => {
         debug: false,
       });
       linker.setIdGetters(
-        () => sourceManager.getVisitorId(),
         () => sourceManager.getSessionId()
       );
 
@@ -133,7 +132,6 @@ describe('Cross-Domain Integration', () => {
       // Read the cross-domain parameter
       const payload = CrossDomainLinker.readParam(config.crossDomainExpiry);
       expect(payload).not.toBeNull();
-      expect(payload!.v).toBe(sourceSession.visitor_id);
       expect(payload!.s).toBe(sourceSession.id);
 
       // Create session on target domain with cross-domain input
@@ -142,7 +140,6 @@ describe('Cross-Domain Integration', () => {
       const targetManager = new SessionManager(targetStorage, targetTabStorage, config);
 
       targetManager.setCrossDomainInput({
-        visitorId: payload!.v,
         sessionId: payload!.s,
         timestamp: payload!.t,
         expiry: config.crossDomainExpiry,
@@ -151,80 +148,16 @@ describe('Cross-Domain Integration', () => {
       const targetSession = targetManager.getOrCreateSession();
 
       // Verify session continuity
-      expect(targetSession.visitor_id).toBe(sourceSession.visitor_id);
       expect(targetSession.id).toBe(sourceSession.id);
-    });
-
-    it('should store visitor_id on target domain for future sessions', () => {
-      const visitorId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
-      const sessionId = '01901234-5678-7abc-def0-123456789abc';
-      const timestamp = Math.floor(Date.now() / 1000);
-
-      // Create cross-domain payload
-      const payload = encode({ v: visitorId, s: sessionId, t: timestamp });
-
-      // Simulate arrival on target domain
-      Object.defineProperty(window, 'location', {
-        value: {
-          href: `https://blog.example.com/page?_stm=${payload}`,
-          pathname: '/page',
-          search: `?_stm=${payload}`,
-          hash: '',
-          origin: 'https://blog.example.com',
-          hostname: 'blog.example.com',
-        },
-        writable: true,
-        configurable: true,
-      });
-
-      const crossDomainPayload = CrossDomainLinker.readParam(config.crossDomainExpiry);
-
-      // Create session on target domain
-      const targetManager = new SessionManager(storage, tabStorage, config);
-      targetManager.setCrossDomainInput({
-        visitorId: crossDomainPayload!.v,
-        sessionId: crossDomainPayload!.s,
-        timestamp: crossDomainPayload!.t,
-        expiry: config.crossDomainExpiry,
-      });
-      targetManager.getOrCreateSession();
-
-      // Verify visitor_id is stored (Storage class adds stm_ prefix internally)
-      const storedVisitorId = storage.get<string>('visitor_id');
-      expect(storedVisitorId).toBe(visitorId);
-
-      // Create new session later (without cross-domain params)
-      vi.advanceTimersByTime(31 * 60 * 1000); // Expire session
-
-      Object.defineProperty(window, 'location', {
-        value: {
-          href: 'https://blog.example.com/other-page',
-          pathname: '/other-page',
-          search: '',
-          hash: '',
-          origin: 'https://blog.example.com',
-          hostname: 'blog.example.com',
-        },
-        writable: true,
-        configurable: true,
-      });
-
-      const newManager = new SessionManager(storage, tabStorage, config);
-      const newSession = newManager.getOrCreateSession();
-
-      // Same visitor, different session
-      expect(newSession.visitor_id).toBe(visitorId);
-      expect(newSession.id).not.toBe(sessionId);
     });
   });
 
   describe('Expired Payload Handling', () => {
     it('should create new session when cross-domain payload is expired', () => {
-      const visitorId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
       const sessionId = '01901234-5678-7abc-def0-123456789abc';
       const oldTimestamp = Math.floor(Date.now() / 1000) - 300; // 5 minutes ago
 
-      const payload = encode({ v: visitorId, s: sessionId, t: oldTimestamp });
+      const payload = encode({ s: sessionId, t: oldTimestamp });
 
       Object.defineProperty(window, 'location', {
         value: {
@@ -247,16 +180,14 @@ describe('Cross-Domain Integration', () => {
       const manager = new SessionManager(storage, tabStorage, config);
       const session = manager.getOrCreateSession();
 
-      expect(session.visitor_id).not.toBe(visitorId);
       expect(session.id).not.toBe(sessionId);
     });
 
     it('should reject payload with future timestamp beyond tolerance', () => {
-      const visitorId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
       const sessionId = '01901234-5678-7abc-def0-123456789abc';
       const futureTimestamp = Math.floor(Date.now() / 1000) + 120; // 2 minutes in future
 
-      const payload = encode({ v: visitorId, s: sessionId, t: futureTimestamp });
+      const payload = encode({ s: sessionId, t: futureTimestamp });
 
       Object.defineProperty(window, 'location', {
         value: {
@@ -276,11 +207,10 @@ describe('Cross-Domain Integration', () => {
     });
 
     it('should accept payload with slight clock skew (within 60s tolerance)', () => {
-      const visitorId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
       const sessionId = '01901234-5678-7abc-def0-123456789abc';
       const slightFutureTimestamp = Math.floor(Date.now() / 1000) + 30; // 30 seconds in future
 
-      const payload = encode({ v: visitorId, s: sessionId, t: slightFutureTimestamp });
+      const payload = encode({ s: sessionId, t: slightFutureTimestamp });
 
       Object.defineProperty(window, 'location', {
         value: {
@@ -297,7 +227,7 @@ describe('Cross-Domain Integration', () => {
 
       const crossDomainPayload = CrossDomainLinker.readParam(120);
       expect(crossDomainPayload).not.toBeNull();
-      expect(crossDomainPayload!.v).toBe(visitorId);
+      expect(crossDomainPayload!.s).toBe(sessionId);
     });
   });
 
@@ -324,13 +254,11 @@ describe('Cross-Domain Integration', () => {
 
       // Should create fresh session
       expect(session.id).toBeTruthy();
-      expect(session.visitor_id).toBeTruthy();
     });
 
     it('should create new session for invalid UUID format', () => {
       const invalidPayload = encode({
-        v: 'not-a-uuid',
-        s: 'also-not-a-uuid',
+        s: 'not-a-uuid',
         t: Math.floor(Date.now() / 1000),
       });
 
@@ -353,7 +281,7 @@ describe('Cross-Domain Integration', () => {
 
     it('should create new session for missing fields in payload', () => {
       // Encode partial payload (missing session_id)
-      const partialPayload = btoa(JSON.stringify({ v: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', t: Date.now() }))
+      const partialPayload = btoa(JSON.stringify({ t: Date.now() }))
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
         .replace(/=+$/, '');
@@ -378,10 +306,9 @@ describe('Cross-Domain Integration', () => {
 
   describe('Parameter Stripping', () => {
     it('should strip _stm parameter from URL after reading', () => {
-      const visitorId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
       const sessionId = '01901234-5678-7abc-def0-123456789abc';
       const timestamp = Math.floor(Date.now() / 1000);
-      const payload = encode({ v: visitorId, s: sessionId, t: timestamp });
+      const payload = encode({ s: sessionId, t: timestamp });
 
       const replaceStateSpy = vi.fn();
       Object.defineProperty(window, 'history', {
@@ -417,7 +344,6 @@ describe('Cross-Domain Integration', () => {
 
     it('should preserve other query parameters when stripping', () => {
       const payload = encode({
-        v: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
         s: '01901234-5678-7abc-def0-123456789abc',
         t: Math.floor(Date.now() / 1000),
       });
@@ -456,7 +382,6 @@ describe('Cross-Domain Integration', () => {
 
     it('should handle URL with only _stm parameter', () => {
       const payload = encode({
-        v: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
         s: '01901234-5678-7abc-def0-123456789abc',
         t: Math.floor(Date.now() / 1000),
       });
@@ -502,10 +427,8 @@ describe('Cross-Domain Integration', () => {
         debug: false,
       });
 
-      const visitorId = 'visitor-123';
       const sessionId = 'session-456';
       linker.setIdGetters(
-        () => visitorId,
         () => sessionId
       );
 
@@ -516,7 +439,6 @@ describe('Cross-Domain Integration', () => {
       const url = new URL(decorated);
       const stm = url.searchParams.get('_stm');
       const decoded = JSON.parse(atob(stm!.replace(/-/g, '+').replace(/_/g, '/')));
-      expect(decoded.v).toBe(visitorId);
       expect(decoded.s).toBe(sessionId);
     });
 
@@ -528,7 +450,6 @@ describe('Cross-Domain Integration', () => {
       });
 
       linker.setIdGetters(
-        () => 'visitor-123',
         () => 'session-456'
       );
 
@@ -545,7 +466,6 @@ describe('Cross-Domain Integration', () => {
       });
 
       linker.setIdGetters(
-        () => 'visitor-123',
         () => 'session-456'
       );
 
@@ -563,7 +483,6 @@ describe('Cross-Domain Integration', () => {
       });
 
       linker.setIdGetters(
-        () => 'visitor-123',
         () => 'session-456'
       );
 
@@ -581,7 +500,6 @@ describe('Cross-Domain Integration', () => {
       });
 
       linker.setIdGetters(
-        () => 'visitor-123',
         () => 'session-456'
       );
 
@@ -600,7 +518,6 @@ describe('Cross-Domain Integration', () => {
       });
 
       linker.setIdGetters(
-        () => 'visitor-123',
         () => 'session-456'
       );
 
@@ -634,7 +551,6 @@ describe('Cross-Domain Integration', () => {
       });
 
       linker.setIdGetters(
-        () => 'visitor-123',
         () => 'session-456'
       );
 
@@ -666,7 +582,6 @@ describe('Cross-Domain Integration', () => {
       });
 
       linker.setIdGetters(
-        () => 'visitor-123',
         () => 'session-456'
       );
 
@@ -695,7 +610,6 @@ describe('Cross-Domain Integration', () => {
       // Step 1: Create session on source domain (www.example.com)
       const sourceManager = new SessionManager(storage, tabStorage, config);
       const sourceSession = sourceManager.getOrCreateSession();
-      const originalVisitorId = sourceSession.visitor_id;
       const originalSessionId = sourceSession.id;
 
       // Step 2: Create linker and decorate URL
@@ -705,7 +619,6 @@ describe('Cross-Domain Integration', () => {
         debug: false,
       });
       linker.setIdGetters(
-        () => sourceManager.getVisitorId(),
         () => sourceManager.getSessionId()
       );
 
@@ -736,7 +649,6 @@ describe('Cross-Domain Integration', () => {
       const targetManager = new SessionManager(targetStorage, targetTabStorage, config);
 
       targetManager.setCrossDomainInput({
-        visitorId: payload!.v,
         sessionId: payload!.s,
         timestamp: payload!.t,
         expiry: config.crossDomainExpiry,
@@ -745,11 +657,7 @@ describe('Cross-Domain Integration', () => {
       const targetSession = targetManager.getOrCreateSession();
 
       // Step 6: Verify complete session continuity
-      expect(targetSession.visitor_id).toBe(originalVisitorId);
       expect(targetSession.id).toBe(originalSessionId);
-
-      // Step 7: Verify visitor persisted for future sessions on target domain
-      expect(targetStorage.get<string>('visitor_id')).toBe(originalVisitorId);
     });
   });
 });

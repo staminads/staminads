@@ -15,7 +15,6 @@ const CLOCK_SKEW_TOLERANCE = 60; // seconds
  * Cross-domain session input (from URL parameters)
  */
 export interface CrossDomainInput {
-  visitorId: string;
   sessionId: string;
   timestamp: number; // Unix epoch seconds
   expiry: number; // seconds
@@ -72,11 +71,6 @@ export class SessionManager {
       this.session = stored;
       this.saveSession();
 
-      // Ensure visitor_id is stored separately (for persistence across sessions)
-      if (!this.storage.get<string>(STORAGE_KEYS.VISITOR_ID)) {
-        this.storage.set(STORAGE_KEYS.VISITOR_ID, stored.visitor_id);
-      }
-
       if (this.debug) {
         console.log('[Staminads] Resumed session:', stored.id);
       }
@@ -123,16 +117,12 @@ export class SessionManager {
   private createSessionFromCrossDomain(): Session | null {
     if (!this.crossDomainInput) return null;
 
-    const { visitorId, sessionId } = this.crossDomainInput;
+    const { sessionId } = this.crossDomainInput;
     const now = Date.now();
     const utm = parseUTMParams(window.location.href, this.config.adClickIds);
 
-    // Store visitor_id for future sessions on this domain
-    this.storage.set(STORAGE_KEYS.VISITOR_ID, visitorId);
-
     const session: Session = {
       id: sessionId,
-      visitor_id: visitorId,
       workspace_id: this.config.workspace_id,
       created_at: now,
       updated_at: now,
@@ -166,16 +156,8 @@ export class SessionManager {
     const now = Date.now();
     const utm = parseUTMParams(window.location.href, this.config.adClickIds);
 
-    // Get or create visitor ID
-    let visitorId = this.storage.get<string>(STORAGE_KEYS.VISITOR_ID);
-    if (!visitorId) {
-      visitorId = generateUUIDv4();
-      this.storage.set(STORAGE_KEYS.VISITOR_ID, visitorId);
-    }
-
     const session: Session = {
       id: generateUUIDv7(),
-      visitor_id: visitorId,
       workspace_id: this.config.workspace_id,
       created_at: now,
       updated_at: now,
@@ -267,13 +249,6 @@ export class SessionManager {
   }
 
   /**
-   * Get visitor ID
-   */
-  getVisitorId(): string {
-    return this.session?.visitor_id || '';
-  }
-
-  /**
    * Get session ID
    */
   getSessionId(): string {
@@ -362,6 +337,32 @@ export class SessionManager {
   private saveDimensions(): void {
     if (!this.session) return;
     this.storage.set(STORAGE_KEYS.DIMENSIONS, this.session.dimensions);
+  }
+
+  /**
+   * Apply dimensions from URL parameters
+   * Only sets dimensions that don't already have values (existing wins)
+   */
+  applyUrlDimensions(urlDimensions: CustomDimensions): void {
+    if (!this.session) return;
+
+    let changed = false;
+    for (const [index, value] of Object.entries(urlDimensions)) {
+      const numIndex = Number(index);
+      if (!this.session.dimensions[numIndex]) {
+        this.session.dimensions[numIndex] = value;
+        changed = true;
+
+        if (this.debug) {
+          console.log(`[Staminads] Set dimension stm_${numIndex} from URL:`, value);
+        }
+      }
+    }
+
+    if (changed) {
+      this.saveDimensions();
+      this.saveSession();
+    }
   }
 
   /**

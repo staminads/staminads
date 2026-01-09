@@ -43,7 +43,6 @@
     <button id="btn-goal" onclick="trackGoal()">Track Goal</button>
     <button id="btn-dimension" onclick="setDimension()">Set Dimension</button>
     <button id="btn-session-id" onclick="showSessionId()">Show Session ID</button>
-    <button id="btn-visitor-id" onclick="showVisitorId()">Show Visitor ID</button>
   </div>
 
   <div id="status">SDK Status: Loading...</div>
@@ -107,11 +106,6 @@
     async function showSessionId() {
       const sessionId = await Staminads.getSessionId();
       updateStatus('Session ID: ' + sessionId);
-    }
-
-    async function showVisitorId() {
-      const visitorId = await Staminads.getVisitorId();
-      updateStatus('Visitor ID: ' + visitorId);
     }
 
     function updateStatus(msg) {

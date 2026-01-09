@@ -9,7 +9,6 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 const CLOCK_SKEW_TOLERANCE = 60; // seconds
 
 export interface CrossDomainPayload {
-  v: string; // visitor_id
   s: string; // session_id
   t: number; // timestamp (Unix epoch seconds)
 }
@@ -43,15 +42,14 @@ export function decode(encoded: string): CrossDomainPayload | null {
 
     // Validate required fields exist
     if (
-      typeof payload.v !== 'string' ||
       typeof payload.s !== 'string' ||
       typeof payload.t !== 'number'
     ) {
       return null;
     }
 
-    // Validate UUID formats
-    if (!UUID_REGEX.test(payload.v) || !UUID_REGEX.test(payload.s)) {
+    // Validate UUID format
+    if (!UUID_REGEX.test(payload.s)) {
       return null;
     }
 
@@ -63,7 +61,6 @@ export function decode(encoded: string): CrossDomainPayload | null {
 
 export class CrossDomainLinker {
   private config: CrossDomainConfig;
-  private getVisitorId: () => string = () => '';
   private getSessionId: () => string = () => '';
   private clickHandler: ((e: MouseEvent) => void) | null = null;
   private submitHandler: ((e: SubmitEvent) => void) | null = null;
@@ -73,10 +70,9 @@ export class CrossDomainLinker {
   }
 
   /**
-   * Set ID getter functions
+   * Set ID getter function
    */
-  setIdGetters(getVisitorId: () => string, getSessionId: () => string): void {
-    this.getVisitorId = getVisitorId;
+  setIdGetters(getSessionId: () => string): void {
     this.getSessionId = getSessionId;
   }
 
@@ -146,13 +142,11 @@ export class CrossDomainLinker {
 
     if (!this.shouldDecorate(form.action)) return;
 
-    const visitorId = this.getVisitorId();
     const sessionId = this.getSessionId();
 
-    if (!visitorId || !sessionId) return;
+    if (!sessionId) return;
 
     const payload: CrossDomainPayload = {
-      v: visitorId,
       s: sessionId,
       t: Math.floor(Date.now() / 1000),
     };
@@ -177,10 +171,9 @@ export class CrossDomainLinker {
    * Decorate a URL with cross-domain parameters
    */
   decorateUrl(url: string): string {
-    const visitorId = this.getVisitorId();
     const sessionId = this.getSessionId();
 
-    if (!visitorId || !sessionId) {
+    if (!sessionId) {
       return url;
     }
 
@@ -191,7 +184,6 @@ export class CrossDomainLinker {
     try {
       const parsed = new URL(url, window.location.origin);
       const payload: CrossDomainPayload = {
-        v: visitorId,
         s: sessionId,
         t: Math.floor(Date.now() / 1000),
       };

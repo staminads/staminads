@@ -15,50 +15,6 @@ test.describe('Data Persistence', () => {
     await page.evaluate(() => localStorage.clear());
   });
 
-  test('visitor_id persists across sessions', async ({ page, context }) => {
-    await page.goto('/test-page.html');
-    await page.waitForFunction(() => window.SDK_INITIALIZED);
-    await page.evaluate(() => window.SDK_READY);
-
-    const visitorId1 = await page.evaluate(() => Staminads.getVisitorId());
-
-    // Close page and create new one
-    await page.close();
-
-    const newPage = await context.newPage();
-    await newPage.goto('/test-page.html');
-    await newPage.waitForFunction(() => window.SDK_INITIALIZED);
-    await newPage.evaluate(() => window.SDK_READY);
-
-    const visitorId2 = await newPage.evaluate(() => Staminads.getVisitorId());
-
-    expect(visitorId2).toBe(visitorId1);
-  });
-
-  test('visitor_id persists across browser restart', async ({ page }) => {
-    await page.goto('/test-page.html');
-    await page.waitForFunction(() => window.SDK_INITIALIZED);
-    await page.evaluate(() => window.SDK_READY);
-
-    const visitorId1 = await page.evaluate(() => Staminads.getVisitorId());
-
-    // Verify it's in localStorage
-    const storedVisitorId = await page.evaluate(() => {
-      const data = localStorage.getItem('stm_visitor_id');
-      return data ? JSON.parse(data) : null;
-    });
-
-    expect(storedVisitorId).toBe(visitorId1);
-
-    // Reload page (simulates browser restart with persisted storage)
-    await page.reload();
-    await page.waitForFunction(() => window.SDK_INITIALIZED);
-    await page.evaluate(() => window.SDK_READY);
-
-    const visitorId2 = await page.evaluate(() => Staminads.getVisitorId());
-    expect(visitorId2).toBe(visitorId1);
-  });
-
   test('custom dimensions persist in localStorage', async ({ page }) => {
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
@@ -147,9 +103,8 @@ test.describe('Data Persistence', () => {
       return stmKeys;
     });
 
-    // Should have session and visitor_id at minimum
+    // Should have session at minimum
     expect(keys).toContain('stm_session');
-    expect(keys).toContain('stm_visitor_id');
   });
 
   test('tab_id is unique per tab (sessionStorage)', async ({ page, context }) => {

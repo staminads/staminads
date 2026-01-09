@@ -47,7 +47,11 @@ describe('Analytics E2E', () => {
     // Create test workspace in system database
     workspaceId = testWorkspaceId;
     await truncateSystemTables(systemClient, ['workspaces'], 0);
-    await truncateWorkspaceTables(workspaceClient, ['sessions', 'pages'], 0);
+    await truncateWorkspaceTables(
+      workspaceClient,
+      ['sessions', 'pages', 'goals'],
+      0,
+    );
 
     await createTestWorkspace(systemClient, workspaceId, {
       name: 'Analytics Test Workspace',
@@ -130,7 +134,7 @@ describe('Analytics E2E', () => {
       const path = pagePaths[i % pagePaths.length];
 
       pages.push({
-        id: `00000000-0000-0000-0000-00000000000${i.toString().padStart(2, '0')}`,
+        id: `00000000-0000-0000-0000-0000000000${i.toString().padStart(2, '0')}`,
         session_id: `session-${Math.floor(i / 2)}`,
         workspace_id: workspaceId,
         path: path,
@@ -152,6 +156,70 @@ describe('Analytics E2E', () => {
     await workspaceClient.insert({
       table: 'pages',
       values: pages,
+      format: 'JSONEachRow',
+    });
+
+    // Seed test goals in workspace database
+    const goals = [];
+    const goalNames = ['add_to_cart', 'checkout_start', 'purchase'];
+    for (let i = 0; i < 30; i++) {
+      const date = new Date(baseDate);
+      date.setDate(date.getDate() + Math.floor(i / 3));
+      const goalName = goalNames[i % goalNames.length];
+      const hasValue = goalName === 'purchase';
+
+      goals.push({
+        id: `00000000-0000-0001-0000-0000000000${i.toString().padStart(2, '0')}`,
+        session_id: `session-${Math.floor(i / 2)}`,
+        workspace_id: workspaceId,
+        goal_name: goalName,
+        goal_value: hasValue ? 99.99 + i : 0,
+        goal_timestamp: toClickHouseDateTime(date),
+        path: '/products',
+        page_number: 1,
+        properties: {},
+        referrer: '',
+        referrer_domain: '',
+        is_direct: true,
+        landing_page: 'https://test.com/',
+        landing_path: '/',
+        utm_source: i % 2 === 0 ? 'google' : 'facebook',
+        utm_medium: 'cpc',
+        utm_campaign: i % 3 === 0 ? 'summer' : 'winter',
+        utm_term: '',
+        utm_content: '',
+        channel:
+          i % 3 === 0 ? 'Paid Search' : i % 3 === 1 ? 'Social' : 'Direct',
+        channel_group:
+          i % 3 === 0
+            ? 'search-paid'
+            : i % 3 === 1
+              ? 'social-organic'
+              : 'direct',
+        stm_1: '',
+        stm_2: '',
+        stm_3: '',
+        stm_4: '',
+        stm_5: '',
+        stm_6: '',
+        stm_7: '',
+        stm_8: '',
+        stm_9: '',
+        stm_10: '',
+        device: i % 2 === 0 ? 'desktop' : 'mobile',
+        browser: 'Chrome',
+        os: 'macOS',
+        country: 'US',
+        region: 'CA',
+        city: 'San Francisco',
+        language: 'en-US',
+        _version: 1,
+      });
+    }
+
+    await workspaceClient.insert({
+      table: 'goals',
+      values: goals,
       format: 'JSONEachRow',
     });
 
@@ -1157,6 +1225,359 @@ describe('Analytics E2E', () => {
 
         expect(response.body).toContain('sessions');
         expect(response.body).toContain('pages');
+        expect(response.body).toContain('goals');
+      });
+    });
+  });
+
+  describe('Goals Table Analytics', () => {
+    describe('POST /api/analytics.query with table=goals', () => {
+      it('returns goals count from goals table', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metrics: ['goals'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(response.body.data).toHaveLength(1);
+        expect(Number(response.body.data[0].goals)).toBe(30);
+      });
+
+      it('returns goal_value sum from goals table', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metrics: ['goals', 'goal_value'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(response.body.data[0]).toHaveProperty('goals');
+        expect(response.body.data[0]).toHaveProperty('goal_value');
+        // 10 purchase goals with values: 99.99 + [2,5,8,11,14,17,20,23,26,29]
+        // = 10 * 99.99 + (2+5+8+11+14+17+20+23+26+29) = 999.9 + 155 = 1154.9
+        expect(Number(response.body.data[0].goal_value)).toBeGreaterThan(1000);
+      });
+
+      it('returns goals grouped by goal_name', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metrics: ['goals', 'goal_value'],
+            dimensions: ['goal_name'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(response.body.data.length).toBe(3); // 3 goal types
+        expect(response.body.data[0]).toHaveProperty('goal_name');
+        expect(response.body.data[0]).toHaveProperty('goals');
+        expect(response.body.data[0]).toHaveProperty('goal_value');
+
+        const goalNames = response.body.data.map(
+          (d: { goal_name: string }) => d.goal_name,
+        );
+        expect(goalNames).toContain('add_to_cart');
+        expect(goalNames).toContain('checkout_start');
+        expect(goalNames).toContain('purchase');
+      });
+
+      it('returns goals grouped by channel for attribution', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metrics: ['goals', 'goal_value'],
+            dimensions: ['channel'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(response.body.data.length).toBe(3); // 3 channels
+        expect(response.body.data[0]).toHaveProperty('channel');
+
+        const channels = response.body.data.map(
+          (d: { channel: string }) => d.channel,
+        );
+        expect(channels).toContain('Paid Search');
+        expect(channels).toContain('Social');
+        expect(channels).toContain('Direct');
+      });
+
+      it('returns goals grouped by utm_source for attribution', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metrics: ['goals'],
+            dimensions: ['utm_source'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(response.body.data.length).toBe(2); // google and facebook
+        const sources = response.body.data.map(
+          (d: { utm_source: string }) => d.utm_source,
+        );
+        expect(sources).toContain('google');
+        expect(sources).toContain('facebook');
+      });
+
+      it('filters goals by goal_name', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metrics: ['goals', 'goal_value'],
+            filters: [
+              {
+                dimension: 'goal_name',
+                operator: 'equals',
+                values: ['purchase'],
+              },
+            ],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(Number(response.body.data[0].goals)).toBe(10); // 10 purchase goals
+        expect(Number(response.body.data[0].goal_value)).toBeGreaterThan(0);
+      });
+
+      it('filters goals by device', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metrics: ['goals'],
+            filters: [
+              { dimension: 'device', operator: 'equals', values: ['desktop'] },
+            ],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(Number(response.body.data[0].goals)).toBe(15); // Half are desktop
+      });
+
+      it('returns avg_goal_value metric', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metrics: ['avg_goal_value'],
+            filters: [
+              {
+                dimension: 'goal_name',
+                operator: 'equals',
+                values: ['purchase'],
+              },
+            ],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(response.body.data[0]).toHaveProperty('avg_goal_value');
+        expect(Number(response.body.data[0].avg_goal_value)).toBeGreaterThan(
+          100,
+        );
+      });
+
+      it('returns unique_sessions_with_goals metric', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metrics: ['unique_sessions_with_goals'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(response.body.data[0]).toHaveProperty(
+          'unique_sessions_with_goals',
+        );
+        // 30 goals across 15 sessions (2 goals per session)
+        expect(
+          Number(response.body.data[0].unique_sessions_with_goals),
+        ).toBeLessThanOrEqual(30);
+      });
+
+      it('returns time series with granularity for goals', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metrics: ['goals', 'goal_value'],
+            dateRange: {
+              start: '2025-12-01',
+              end: '2025-12-10',
+              granularity: 'day',
+            },
+          })
+          .expect(200);
+
+        expect(response.body.data.length).toBe(10);
+        expect(response.body.data[0]).toHaveProperty('date_day');
+      });
+
+      it('validates sessions metric not available on goals table', async () => {
+        await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metrics: ['sessions'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(400);
+      });
+
+      it('validates goals metric not available on sessions table', async () => {
+        await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'sessions',
+            metrics: ['goals'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(400);
+      });
+
+      it('validates goal_name dimension not available on sessions table', async () => {
+        await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'sessions',
+            metrics: ['sessions'],
+            dimensions: ['goal_name'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(400);
+      });
+
+      it('returns SQL with FINAL for goals table', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metrics: ['goals'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(response.body.query.sql).toContain('FROM goals FINAL');
+      });
+    });
+
+    describe('POST /api/analytics.extremes with table=goals', () => {
+      it('returns min and max goal_value by goal_name', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.extremes')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metric: 'goal_value',
+            groupBy: ['goal_name'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(response.body).toHaveProperty('min');
+        expect(response.body).toHaveProperty('max');
+        expect(response.body.meta.metric).toBe('goal_value');
+        // Only purchase goals have value > 0
+        expect(Number(response.body.max)).toBeGreaterThan(0);
+      });
+
+      it('returns extremes for goals metric', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.extremes')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metric: 'goals',
+            groupBy: ['goal_name'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        // Each goal type has 10 goals
+        expect(Number(response.body.min)).toBe(10);
+        expect(Number(response.body.max)).toBe(10);
+      });
+    });
+
+    describe('GET /api/analytics.metrics with table=goals', () => {
+      it('returns only goals metrics with table=goals', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .get('/api/analytics.metrics?table=goals')
+          .set('Authorization', `Bearer ${authToken}`)
+          .expect(200);
+
+        const metricNames = response.body.map((m: { name: string }) => m.name);
+        expect(metricNames).toContain('goals');
+        expect(metricNames).toContain('goal_value');
+        expect(metricNames).toContain('avg_goal_value');
+        expect(metricNames).toContain('unique_sessions_with_goals');
+        expect(metricNames).not.toContain('sessions');
+        expect(metricNames).not.toContain('page_count');
+      });
+    });
+
+    describe('GET /api/analytics.dimensions with table=goals', () => {
+      it('returns goals dimensions with table=goals', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .get('/api/analytics.dimensions?table=goals')
+          .set('Authorization', `Bearer ${authToken}`)
+          .expect(200);
+
+        // Goal-specific dimensions
+        expect(response.body.goal_name).toBeDefined();
+        expect(response.body.goal_path).toBeDefined();
+
+        // Session dimensions available on goals for attribution
+        expect(response.body.utm_source).toBeDefined();
+        expect(response.body.channel).toBeDefined();
+        expect(response.body.device).toBeDefined();
+        expect(response.body.country).toBeDefined();
+
+        // Page-only dimensions not available
+        expect(response.body.page_path).toBeUndefined();
+        expect(response.body.is_landing_page).toBeUndefined();
       });
     });
   });

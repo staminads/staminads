@@ -120,4 +120,30 @@ export const METRICS: Record<string, MetricDefinition> = {
     description: 'Percentage of views that are exit pages',
     tables: ['pages'],
   },
+
+  // Goal metrics
+  goals: {
+    name: 'goals',
+    sql: 'count()',
+    description: 'Total goals triggered',
+    tables: ['goals'],
+  },
+  goal_value: {
+    name: 'goal_value',
+    sql: 'sum(goal_value)',
+    description: 'Total goal value',
+    tables: ['goals'],
+  },
+  avg_goal_value: {
+    name: 'avg_goal_value',
+    sql: 'round(avg(goal_value), 2)',
+    description: 'Average goal value',
+    tables: ['goals'],
+  },
+  unique_sessions_with_goals: {
+    name: 'unique_sessions_with_goals',
+    sql: 'uniqExact(session_id)',
+    description: 'Unique sessions with goals',
+    tables: ['goals'],
+  },
 };

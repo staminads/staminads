@@ -188,7 +188,6 @@ export class TabStorage {
 // Storage keys
 export const STORAGE_KEYS = {
   SESSION: 'session',
-  VISITOR_ID: 'visitor_id',
   PENDING_QUEUE: 'pending',
   TAB_ID: 'tab_id',
   DIMENSIONS: 'dimensions',
