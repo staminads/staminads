@@ -446,6 +446,187 @@ describe('Page Duration Tracking E2E', () => {
       expect(pages[0].page_number).toBe(1);
       expect(pages[0].duration).toBe(5);
     });
+
+    it('pages table data matches source events (data integrity check)', async () => {
+      const sessionId = 'session-data-integrity';
+
+      // Use unique, traceable values to make mismatches obvious
+      const baseTime = Date.now();
+      const payload = createSessionPayload(testWorkspaceId, sessionId, {
+        actions: [
+          {
+            type: 'pageview',
+            path: '/page-alpha',
+            page_number: 1,
+            duration: 1111,
+            scroll: 11,
+            entered_at: baseTime,
+            exited_at: baseTime + 1111000,
+          },
+          {
+            type: 'pageview',
+            path: '/page-beta',
+            page_number: 2,
+            duration: 2222,
+            scroll: 22,
+            entered_at: baseTime + 1111000,
+            exited_at: baseTime + 3333000,
+          },
+          {
+            type: 'pageview',
+            path: '/page-gamma',
+            page_number: 3,
+            duration: 3333,
+            scroll: 33,
+            entered_at: baseTime + 3333000,
+            exited_at: baseTime + 6666000,
+          },
+        ],
+        attributes: { landing_page: 'https://test.com/page-alpha' },
+      });
+
+      await request(ctx.app.getHttpServer())
+        .post('/api/track')
+        .set('Authorization', `Bearer ${apiKey}`)
+        .send(payload)
+        .expect(200);
+
+      await eventBuffer.flushAll();
+      await waitForRowCount(
+        workspaceClient,
+        `SELECT count() as count FROM pages WHERE session_id = {session_id:String}`,
+        3,
+        { session_id: sessionId },
+        { timeoutMs: 5000 },
+      );
+
+      // Fetch source events
+      const eventsResult = await workspaceClient.query({
+        query: `SELECT
+                  session_id,
+                  workspace_id,
+                  path,
+                  page_number,
+                  page_duration,
+                  max_scroll,
+                  entered_at,
+                  exited_at,
+                  landing_page,
+                  _version
+                FROM events
+                WHERE session_id = {session_id:String}
+                ORDER BY page_number`,
+        query_params: { session_id: sessionId },
+        format: 'JSONEachRow',
+      });
+      const events = await eventsResult.json<
+        {
+          session_id: string;
+          workspace_id: string;
+          path: string;
+          page_number: number;
+          page_duration: number;
+          max_scroll: number;
+          entered_at: string;
+          exited_at: string;
+          landing_page: string;
+          _version: string;
+        }[]
+      >();
+
+      // Fetch pages created by MV
+      const pagesResult = await workspaceClient.query({
+        query: `SELECT
+                  page_id,
+                  session_id,
+                  workspace_id,
+                  path,
+                  full_url,
+                  page_number,
+                  duration,
+                  max_scroll,
+                  entered_at,
+                  exited_at,
+                  is_landing,
+                  is_exit,
+                  entry_type,
+                  _version
+                FROM pages
+                WHERE session_id = {session_id:String}
+                ORDER BY page_number`,
+        query_params: { session_id: sessionId },
+        format: 'JSONEachRow',
+      });
+      const pages = await pagesResult.json<
+        {
+          page_id: string;
+          session_id: string;
+          workspace_id: string;
+          path: string;
+          full_url: string;
+          page_number: number;
+          duration: number;
+          max_scroll: number;
+          entered_at: string;
+          exited_at: string;
+          is_landing: boolean;
+          is_exit: boolean;
+          entry_type: string;
+          _version: string;
+        }[]
+      >();
+
+      // Verify same number of pages as pageview events
+      expect(pages).toHaveLength(events.length);
+      expect(pages).toHaveLength(3);
+
+      // Verify each page matches its source event
+      for (let i = 0; i < events.length; i++) {
+        const event = events[i];
+        const page = pages[i];
+
+        // Identity columns
+        expect(page.page_id).toBe(`${event.session_id}_${event.page_number}`);
+        expect(page.session_id).toBe(event.session_id);
+        expect(page.workspace_id).toBe(event.workspace_id);
+
+        // Page info - CRITICAL: path must match the event's path, not previous_path
+        expect(page.path).toBe(event.path);
+        expect(page.full_url).toBe(event.landing_page);
+
+        // Engagement - CRITICAL: duration must be for THIS page
+        expect(page.duration).toBe(event.page_duration);
+        expect(page.max_scroll).toBe(event.max_scroll);
+
+        // Sequence
+        expect(page.page_number).toBe(event.page_number);
+        expect(Boolean(page.is_landing)).toBe(event.page_number === 1);
+        expect(Boolean(page.is_exit)).toBe(false); // Always false in current impl
+
+        // Entry type
+        expect(page.entry_type).toBe(event.page_number === 1 ? 'landing' : 'navigation');
+
+        // Timestamps - should match SDK timestamps
+        expect(page.entered_at).toBe(event.entered_at);
+        expect(page.exited_at).toBe(event.exited_at);
+
+        // Version tracking
+        expect(page._version).toBe(event._version);
+      }
+
+      // Additional specific value checks with traceable values
+      expect(pages[0].path).toBe('/page-alpha');
+      expect(pages[0].duration).toBe(1111);
+      expect(pages[0].max_scroll).toBe(11);
+
+      expect(pages[1].path).toBe('/page-beta');
+      expect(pages[1].duration).toBe(2222);
+      expect(pages[1].max_scroll).toBe(22);
+
+      expect(pages[2].path).toBe('/page-gamma');
+      expect(pages[2].duration).toBe(3333);
+      expect(pages[2].max_scroll).toBe(33);
+    });
   });
 
   describe('Full Flow Simulation', () => {
