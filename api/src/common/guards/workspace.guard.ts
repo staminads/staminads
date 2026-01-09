@@ -50,7 +50,7 @@ export class WorkspaceAuthGuard implements CanActivate {
       throw new BadRequestException('workspace_id is required');
     }
 
-    // API Key auth: validate workspace binding
+    // API Key auth: validate workspace binding and permissions
     if (user?.type === 'api-key') {
       const apiKeyUser = user as ApiKeyPayload;
       if (workspaceId !== apiKeyUser.workspaceId) {
@@ -58,6 +58,20 @@ export class WorkspaceAuthGuard implements CanActivate {
           'API key not authorized for this workspace',
         );
       }
+
+      // Check permission if @RequirePermission() decorator is present
+      const requiredPermission = this.reflector.getAllAndOverride<Permission>(
+        REQUIRED_PERMISSION_KEY,
+        [context.getHandler(), context.getClass()],
+      );
+
+      if (
+        requiredPermission &&
+        !hasPermission(apiKeyUser.role, requiredPermission)
+      ) {
+        throw new ForbiddenException('API key has insufficient permissions');
+      }
+
       return true;
     }
 

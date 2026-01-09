@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "copy-sdk": "node scripts/copy-sdk.cjs",
+    "test:copy-sdk": "node scripts/copy-sdk.test.cjs",
     "predev": "npm run copy-sdk",
     "dev": "vite",
     "prebuild": "npm run copy-sdk && tsr generate",

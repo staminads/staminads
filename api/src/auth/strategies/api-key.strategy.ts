@@ -2,13 +2,13 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy } from 'passport-http-bearer';
 import { ApiKeysService } from '../../api-keys/api-keys.service';
-import { ApiScope } from '../../common/entities/api-key.entity';
+import { ApiKeyRole } from '../../common/entities/api-key.entity';
 
 export interface ApiKeyPayload {
   type: 'api-key';
   keyId: string;
   workspaceId: string;
-  scopes: ApiScope[];
+  role: ApiKeyRole;
 }
 
 @Injectable()
@@ -52,7 +52,7 @@ export class ApiKeyStrategy extends PassportStrategy(Strategy, 'api-key') {
       type: 'api-key',
       keyId: apiKey.id,
       workspaceId: apiKey.workspace_id,
-      scopes: apiKey.scopes,
+      role: apiKey.role,
     };
   }
 }

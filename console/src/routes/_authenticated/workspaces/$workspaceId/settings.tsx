@@ -74,16 +74,6 @@ function Settings() {
   const queryClient = useQueryClient()
   const { data: workspace } = useSuspenseQuery(workspaceQueryOptions(workspaceId))
 
-  // Fetch SDK version for cache busting
-  const { data: sdkVersion } = useQuery({
-    queryKey: ['sdk-version'],
-    queryFn: async () => {
-      const res = await fetch('/sdk/version.json')
-      const data = await res.json()
-      return data.version as string
-    },
-    staleTime: Infinity
-  })
 
   // Fetch current user
   const { data: currentUser } = useQuery({
@@ -427,7 +417,6 @@ function Settings() {
   )
 
   // Generate the SDK snippet with workspace_id pre-filled and version for cache busting
-  const versionParam = sdkVersion ? `?v=${sdkVersion}` : ''
   const sdkSnippet = `<!-- Staminads -->
 <script>
 window.StaminadsConfig = {
@@ -435,7 +424,7 @@ window.StaminadsConfig = {
   endpoint: '${window.location.origin}'
 };
 </script>
-<script async src="${window.location.origin}/sdk/staminads.min.js${versionParam}"></script>`
+<script async src="${window.location.origin}/sdk/staminads_${__APP_VERSION__}.min.js"></script>`
 
   const sdkContent = (
     <div className="max-w-xl">

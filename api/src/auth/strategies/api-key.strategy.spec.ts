@@ -16,7 +16,7 @@ describe('ApiKeyStrategy', () => {
     workspace_id: 'ws-001',
     name: 'Test Key',
     description: '',
-    scopes: ['events.track', 'analytics.view'],
+    role: 'admin',
     status: 'active',
     expires_at: null,
     last_used_at: null,
@@ -64,7 +64,7 @@ describe('ApiKeyStrategy', () => {
         type: 'api-key',
         keyId: 'key-001',
         workspaceId: 'ws-001',
-        scopes: ['events.track', 'analytics.view'],
+        role: 'admin',
       });
     });
 
@@ -193,6 +193,18 @@ describe('ApiKeyStrategy', () => {
       const result = await strategy.validate('stam_live_test');
 
       expect(result.keyId).toBe('key-001');
+    });
+
+    it('returns correct role in payload', async () => {
+      apiKeysService.findByToken.mockResolvedValue({
+        ...mockApiKey,
+        role: 'viewer',
+      });
+      apiKeysService.updateLastUsed.mockResolvedValue(undefined);
+
+      const result = await strategy.validate('stam_live_test');
+
+      expect(result.role).toBe('viewer');
     });
   });
 });

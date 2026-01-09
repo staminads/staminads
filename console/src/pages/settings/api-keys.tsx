@@ -20,8 +20,8 @@ import {
 } from 'antd'
 import { PlusOutlined, CopyOutlined, DeleteOutlined, LoadingOutlined } from '@ant-design/icons'
 import { api } from '../../lib/api'
-import type { PublicApiKey, ApiScope, CreateApiKeyInput, ApiKeyRole } from '../../types/api-keys'
-import { API_KEY_ROLES } from '../../types/api-keys'
+import type { PublicApiKey, CreateApiKeyInput, ApiKeyRole } from '../../types/api-keys'
+import { API_KEY_ROLE_INFO } from '../../types/api-keys'
 import dayjs, { Dayjs } from 'dayjs'
 
 const roleColors: Record<ApiKeyRole, string> = {
@@ -30,7 +30,7 @@ const roleColors: Record<ApiKeyRole, string> = {
   viewer: 'default',
 }
 
-const roleOptions = Object.entries(API_KEY_ROLES).map(([value, { label, description }]) => ({
+const roleOptions = Object.entries(API_KEY_ROLE_INFO).map(([value, { label, description }]) => ({
   value,
   label: (
     <div>
@@ -39,18 +39,6 @@ const roleOptions = Object.entries(API_KEY_ROLES).map(([value, { label, descript
     </div>
   ),
 }))
-
-// Determine role from scopes (for display)
-function getRoleFromScopes(scopes: ApiScope[]): ApiKeyRole | null {
-  const scopeSet = new Set(scopes)
-  for (const [role, config] of Object.entries(API_KEY_ROLES) as [ApiKeyRole, typeof API_KEY_ROLES[ApiKeyRole]][]) {
-    const roleScopes = new Set(config.scopes)
-    if (scopeSet.size === roleScopes.size && [...scopeSet].every(s => roleScopes.has(s))) {
-      return role
-    }
-  }
-  return null // Custom scopes that don't match any role
-}
 
 const { Text } = Typography
 
@@ -116,7 +104,7 @@ export function ApiKeysPage({ workspaceId }: ApiKeysPageProps) {
       workspace_id: workspaceId,
       name: values.name,
       description: values.description,
-      scopes: API_KEY_ROLES[values.role].scopes,
+      role: values.role,
       expires_at: values.expires_at ? values.expires_at.toISOString() : undefined,
     }
 
@@ -177,20 +165,14 @@ export function ApiKeysPage({ workspaceId }: ApiKeysPageProps) {
     },
     {
       title: 'Role',
-      dataIndex: 'scopes',
+      dataIndex: 'role',
       key: 'role',
       width: 100,
-      render: (scopes: ApiScope[]) => {
-        const role = getRoleFromScopes(scopes)
-        if (role) {
-          return (
-            <Tag color={roleColors[role]}>
-              {API_KEY_ROLES[role].label}
-            </Tag>
-          )
-        }
-        return <Tag color="default">Custom</Tag>
-      },
+      render: (role: ApiKeyRole) => (
+        <Tag color={roleColors[role]}>
+          {API_KEY_ROLE_INFO[role].label}
+        </Tag>
+      ),
     },
     {
       title: 'Created',
@@ -261,7 +243,6 @@ export function ApiKeysPage({ workspaceId }: ApiKeysPageProps) {
         ) : (
           apiKeys.map((apiKey) => {
             const { status, text } = getStatusInfo(apiKey)
-            const role = getRoleFromScopes(apiKey.scopes)
             const isDisabled = apiKey.status === 'revoked'
 
             return (
@@ -274,11 +255,9 @@ export function ApiKeysPage({ workspaceId }: ApiKeysPageProps) {
                     <span className="font-medium truncate">{apiKey.name}</span>
                   </div>
                   <div className="shrink-0">
-                    {role ? (
-                      <Tag color={roleColors[role]}>{API_KEY_ROLES[role].label}</Tag>
-                    ) : (
-                      <Tag color="default">Custom</Tag>
-                    )}
+                    <Tag color={roleColors[apiKey.role]}>
+                      {API_KEY_ROLE_INFO[apiKey.role].label}
+                    </Tag>
                   </div>
                 </div>
                 <div className="text-gray-400 text-xs mt-2 space-y-1">
@@ -371,7 +350,7 @@ export function ApiKeysPage({ workspaceId }: ApiKeysPageProps) {
               optionLabelProp="label"
               optionRender={(option) => {
                 const role = option.value as ApiKeyRole
-                const config = API_KEY_ROLES[role]
+                const config = API_KEY_ROLE_INFO[role]
                 return (
                   <div className="py-1">
                     <div className="font-medium">{config.label}</div>

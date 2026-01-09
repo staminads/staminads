@@ -1,6 +1,11 @@
 # Stage 1: Build SDK
 FROM node:22-alpine AS sdk-builder
 
+WORKDIR /app
+
+# Copy API version file (needed by rollup.config.js for version injection)
+COPY api/src/version.ts ./api/src/version.ts
+
 WORKDIR /app/sdk
 
 # Copy SDK package files

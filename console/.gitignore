@@ -15,6 +15,9 @@ dist-ssr
 # TanStack Router generated files
 src/routeTree.gen.ts
 
+# SDK files (copied from sdk/dist by copy-sdk.cjs)
+public/sdk/staminads_*.min.js
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

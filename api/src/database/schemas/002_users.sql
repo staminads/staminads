@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
     workspace_id Nullable(String),
     name String,
     description String DEFAULT '',
-    scopes String,
+    role Enum8('admin' = 2, 'editor' = 3, 'viewer' = 4),
     status Enum8('active' = 1, 'revoked' = 2, 'expired' = 3) DEFAULT 'active',
     expires_at Nullable(DateTime64(3)),
     last_used_at Nullable(DateTime64(3)),

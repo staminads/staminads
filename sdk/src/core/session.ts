@@ -8,7 +8,7 @@ import { Storage, TabStorage, STORAGE_KEYS } from '../storage/storage';
 import { generateUUIDv4, generateUUIDv7 } from '../utils/uuid';
 import { parseUTMParams } from '../utils/utm';
 
-const SDK_VERSION = '5.0.0';
+const SDK_VERSION = __SDK_VERSION__;
 
 export class SessionManager {
   private storage: Storage;

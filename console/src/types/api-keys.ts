@@ -1,33 +1,19 @@
 export type ApiKeyStatus = 'active' | 'revoked' | 'expired'
 
-export const API_SCOPES = {
-  'events.track': 'Send session and event data via SDK',
-  'analytics.view': 'Query analytics data',
-  'analytics.export': 'Export analytics data',
-  'workspace.read': 'Read workspace configuration',
-  'filters.manage': 'Create and manage filters',
-  'annotations.manage': 'Create and manage annotations',
-} as const
-
-export type ApiScope = keyof typeof API_SCOPES
-
 export type ApiKeyRole = 'admin' | 'editor' | 'viewer'
 
-export const API_KEY_ROLES: Record<ApiKeyRole, { label: string; description: string; scopes: ApiScope[] }> = {
+export const API_KEY_ROLE_INFO: Record<ApiKeyRole, { label: string; description: string }> = {
   admin: {
     label: 'Admin',
     description: 'Full access to all API features',
-    scopes: ['events.track', 'analytics.view', 'analytics.export', 'workspace.read', 'filters.manage', 'annotations.manage'],
   },
   editor: {
     label: 'Editor',
-    description: 'Track events and manage analytics',
-    scopes: ['events.track', 'analytics.view', 'analytics.export', 'filters.manage', 'annotations.manage'],
+    description: 'Analytics, filters, and annotations',
   },
   viewer: {
     label: 'Viewer',
     description: 'Read-only access to analytics',
-    scopes: ['analytics.view', 'workspace.read'],
   },
 }
 
@@ -39,7 +25,7 @@ export interface ApiKey {
   workspace_id: string | null
   name: string
   description: string
-  scopes: ApiScope[]
+  role: ApiKeyRole
   status: ApiKeyStatus
   expires_at: string | null
   last_used_at: string | null
@@ -58,7 +44,7 @@ export interface CreateApiKeyInput {
   workspace_id: string
   name: string
   description?: string
-  scopes: ApiScope[]
+  role: ApiKeyRole
   expires_at?: string | null
 }
 

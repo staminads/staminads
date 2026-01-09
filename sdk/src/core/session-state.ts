@@ -19,7 +19,7 @@ import type {
 } from '../types/session-state';
 
 const STORAGE_KEY = 'stm_session_state';
-const SDK_VERSION = '6.0.0'; // Major version bump for V3 payload
+const SDK_VERSION = __SDK_VERSION__;
 const MAX_ACTIONS = 1000; // Match server limit from Phase 2
 
 export interface SessionStateConfig {

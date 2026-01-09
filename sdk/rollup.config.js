@@ -2,7 +2,18 @@ import typescript from '@rollup/plugin-typescript';
 import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import terser from '@rollup/plugin-terser';
+import replace from '@rollup/plugin-replace';
 import dts from 'rollup-plugin-dts';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Read version from api/src/version.ts (single source of truth)
+const versionContent = fs.readFileSync(path.join(__dirname, '../api/src/version.ts'), 'utf-8');
+const versionMatch = versionContent.match(/APP_VERSION\s*=\s*['"]([^'"]+)['"]/);
+const SDK_VERSION = versionMatch ? versionMatch[1] : '0.0.0';
 
 const production = !process.env.ROLLUP_WATCH;
 
@@ -18,6 +29,12 @@ export default [
       sourcemap: true,
     },
     plugins: [
+      replace({
+        preventAssignment: true,
+        values: {
+          __SDK_VERSION__: JSON.stringify(SDK_VERSION),
+        },
+      }),
       resolve({ browser: true }),
       commonjs(),
       typescript({ tsconfig: './tsconfig.json' }),
@@ -38,6 +55,12 @@ export default [
       sourcemap: true,
     },
     plugins: [
+      replace({
+        preventAssignment: true,
+        values: {
+          __SDK_VERSION__: JSON.stringify(SDK_VERSION),
+        },
+      }),
       resolve({ browser: true }),
       commonjs(),
       typescript({ tsconfig: './tsconfig.json' }),
@@ -53,6 +76,12 @@ export default [
       sourcemap: true,
     },
     plugins: [
+      replace({
+        preventAssignment: true,
+        values: {
+          __SDK_VERSION__: JSON.stringify(SDK_VERSION),
+        },
+      }),
       resolve({ browser: true }),
       commonjs(),
       typescript({ tsconfig: './tsconfig.json' }),

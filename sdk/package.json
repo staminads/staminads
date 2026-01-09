@@ -1,6 +1,6 @@
 {
   "name": "@staminads/sdk",
-  "version": "5.0.0",
+  "version": "3.0.0",
   "type": "module",
   "description": "Ultra-reliable web analytics SDK for tracking TimeScore metrics with millisecond precision",
   "main": "dist/staminads.cjs.js",
@@ -11,6 +11,8 @@
     "dist"
   ],
   "scripts": {
+    "sync-version": "node scripts/sync-version.cjs",
+    "prebuild": "npm run sync-version",
     "dev": "rollup -c -w",
     "build": "rollup -c",
     "test": "vitest run",
@@ -39,6 +41,7 @@
     "@playwright/test": "^1.57.0",
     "@rollup/plugin-commonjs": "^25.0.7",
     "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-replace": "^6.0.3",
     "@rollup/plugin-terser": "^0.4.4",
     "@rollup/plugin-typescript": "^11.1.6",
     "@types/express": "^5.0.6",

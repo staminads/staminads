@@ -330,9 +330,9 @@ export class SessionPayloadHandler {
       goal_name: action.name,
       goal_value: action.value ?? 0,
       properties: action.properties ?? {},
-      // SDK timestamps
-      entered_at: '', // Not applicable for goals
-      exited_at: '', // Not applicable for goals
+      // SDK timestamps - use goal timestamp for non-applicable fields
+      entered_at: toClickHouseDateTime(new Date(correctedTimestamp)),
+      exited_at: toClickHouseDateTime(new Date(correctedTimestamp)),
       goal_timestamp: toClickHouseDateTime(new Date(correctedTimestamp)),
     } as TrackingEvent;
   }

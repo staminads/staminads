@@ -29,7 +29,7 @@ describe('ApiKeysService', () => {
     workspace_id: 'ws-001',
     name: 'Test API Key',
     description: 'Test description',
-    scopes: ['events.track', 'analytics.view'],
+    role: 'admin',
     status: 'active',
     expires_at: null,
     last_used_at: null,
@@ -42,10 +42,10 @@ describe('ApiKeysService', () => {
     updated_at: '2025-01-01 00:00:00',
   };
 
-  // ClickHouse stores scopes as JSON string
+  // ClickHouse stores role as enum string
   const mockApiKeyRow = {
     ...mockApiKey,
-    scopes: JSON.stringify(mockApiKey.scopes),
+    role: mockApiKey.role,
   };
 
   // Mock membership for permission checks
@@ -114,7 +114,7 @@ describe('ApiKeysService', () => {
         workspace_id: 'ws-001',
         name: 'My API Key',
         description: 'For production use',
-        scopes: ['events.track'],
+        role: 'admin',
       };
 
       const result = await service.create(dto, 'user-001');
@@ -124,7 +124,7 @@ describe('ApiKeysService', () => {
       );
       expect(result.apiKey.id).toBe('key-new-001');
       expect(result.apiKey.name).toBe('My API Key');
-      expect(result.apiKey.scopes).toEqual(['events.track']);
+      expect(result.apiKey.role).toBe('admin');
       expect(result.apiKey.status).toBe('active');
       expect(result.apiKey).not.toHaveProperty('key_hash');
     });
@@ -136,7 +136,7 @@ describe('ApiKeysService', () => {
         user_id: 'user-001',
         workspace_id: 'ws-001',
         name: 'Test Key',
-        scopes: ['analytics.view'],
+        role: 'editor',
       };
 
       await service.create(dto, 'user-001');
@@ -152,7 +152,7 @@ describe('ApiKeysService', () => {
         user_id: 'user-001',
         workspace_id: 'ws-001',
         name: 'Test Key',
-        scopes: ['events.track', 'analytics.view'],
+        role: 'editor',
       };
 
       await service.create(dto, 'user-001');
@@ -167,7 +167,7 @@ describe('ApiKeysService', () => {
             user_id: 'user-001',
             workspace_id: 'ws-001',
             name: 'Test Key',
-            scopes: JSON.stringify(['events.track', 'analytics.view']),
+            role: 'editor',
             status: 'active',
           }),
         ]),
@@ -181,7 +181,7 @@ describe('ApiKeysService', () => {
         user_id: 'user-001',
         workspace_id: 'ws-001',
         name: 'Test Key',
-        scopes: ['analytics.view'],
+        role: 'viewer',
       };
 
       const result = await service.create(dto, 'user-001');
@@ -201,7 +201,7 @@ describe('ApiKeysService', () => {
         user_id: 'user-001',
         workspace_id: 'ws-001',
         name: 'Simple Key',
-        scopes: ['analytics.view'],
+        role: 'viewer',
       };
 
       const result = await service.create(dto, 'user-001');
@@ -217,7 +217,7 @@ describe('ApiKeysService', () => {
         user_id: 'user-001',
         workspace_id: 'ws-001',
         name: 'Test Key',
-        scopes: ['analytics.view'],
+        role: 'admin',
       };
 
       await service.create(dto, 'user-001');
@@ -240,7 +240,7 @@ describe('ApiKeysService', () => {
         user_id: 'user-001',
         workspace_id: 'ws-001',
         name: 'Expiring Key',
-        scopes: ['analytics.view'],
+        role: 'editor',
         expires_at: expiryDate,
       };
 
@@ -256,7 +256,7 @@ describe('ApiKeysService', () => {
         user_id: 'user-001',
         workspace_id: 'ws-001',
         name: 'Test Key',
-        scopes: ['analytics.view'],
+        role: 'admin',
       };
 
       await service.create(dto, 'admin-user-123');
@@ -278,7 +278,7 @@ describe('ApiKeysService', () => {
         user_id: 'user-001',
         workspace_id: 'ws-001',
         name: 'Test Key',
-        scopes: ['analytics.view'],
+        role: 'admin',
       };
 
       await service.create(dto, 'user-001');
@@ -304,7 +304,7 @@ describe('ApiKeysService', () => {
         user_id: 'user-001',
         workspace_id: 'ws-001',
         name: 'Test Key',
-        scopes: ['analytics.view'],
+        role: 'admin',
       };
 
       await expect(service.create(dto, 'user-001')).rejects.toThrow(
@@ -322,12 +322,68 @@ describe('ApiKeysService', () => {
         user_id: 'user-001',
         workspace_id: 'ws-001',
         name: 'Test Key',
-        scopes: ['analytics.view'],
+        role: 'viewer',
       };
 
       await expect(service.create(dto, 'user-001')).rejects.toThrow(
         ForbiddenException,
       );
+    });
+
+    it('throws ForbiddenException when requesting role higher than own', async () => {
+      membersService.getMembership.mockResolvedValue({
+        ...mockMembership,
+        role: 'editor',
+      });
+
+      const dto: CreateDto = {
+        user_id: 'user-001',
+        workspace_id: 'ws-001',
+        name: 'Test Key',
+        role: 'admin',
+      };
+
+      await expect(service.create(dto, 'user-001')).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('allows creating API key with same role level', async () => {
+      clickhouse.insertSystem.mockResolvedValue(undefined);
+      membersService.getMembership.mockResolvedValue({
+        ...mockMembership,
+        role: 'admin',
+      });
+
+      const dto: CreateDto = {
+        user_id: 'user-001',
+        workspace_id: 'ws-001',
+        name: 'Test Key',
+        role: 'admin',
+      };
+
+      const result = await service.create(dto, 'user-001');
+
+      expect(result.apiKey.role).toBe('admin');
+    });
+
+    it('allows creating API key with lower role level', async () => {
+      clickhouse.insertSystem.mockResolvedValue(undefined);
+      membersService.getMembership.mockResolvedValue({
+        ...mockMembership,
+        role: 'admin',
+      });
+
+      const dto: CreateDto = {
+        user_id: 'user-001',
+        workspace_id: 'ws-001',
+        name: 'Test Key',
+        role: 'viewer',
+      };
+
+      const result = await service.create(dto, 'user-001');
+
+      expect(result.apiKey.role).toBe('viewer');
     });
   });
 
@@ -432,13 +488,12 @@ describe('ApiKeysService', () => {
       expect(result).toEqual([]);
     });
 
-    it('parses scopes JSON correctly', async () => {
+    it('returns role correctly', async () => {
       clickhouse.querySystem.mockResolvedValue([mockApiKeyRow]);
 
       const result = await service.list();
 
-      expect(result[0].scopes).toEqual(['events.track', 'analytics.view']);
-      expect(Array.isArray(result[0].scopes)).toBe(true);
+      expect(result[0].role).toBe('admin');
     });
 
     it('excludes key_hash from returned objects', async () => {
@@ -527,13 +582,12 @@ describe('ApiKeysService', () => {
       );
     });
 
-    it('parses scopes JSON correctly', async () => {
+    it('returns role correctly', async () => {
       clickhouse.querySystem.mockResolvedValue([mockApiKeyRow]);
 
       const result = await service.get('key-test-001');
 
-      expect(result.scopes).toEqual(['events.track', 'analytics.view']);
-      expect(Array.isArray(result.scopes)).toBe(true);
+      expect(result.role).toBe('admin');
     });
 
     it('excludes key_hash from returned object', async () => {
@@ -631,7 +685,7 @@ describe('ApiKeysService', () => {
             user_id: 'user-001',
             workspace_id: 'ws-001',
             name: 'Test API Key',
-            scopes: JSON.stringify(['events.track', 'analytics.view']),
+            role: 'admin',
           }),
         ]),
       );

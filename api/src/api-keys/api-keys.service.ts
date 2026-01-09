@@ -14,18 +14,17 @@ import { CreateApiKeyResponseDto } from './dto/create-api-key-response.dto';
 import {
   ApiKey,
   PublicApiKey,
-  ApiScope,
-  SCOPE_TO_PERMISSION,
+  ApiKeyRole,
 } from '../common/entities/api-key.entity';
 import { generateId, generateApiKeyToken, hashToken } from '../common/crypto';
-import { hasPermission } from '../common/permissions';
+import { hasPermission, ROLE_HIERARCHY } from '../common/permissions';
 import {
   toClickHouseDateTime,
   isoToClickHouseDateTime,
 } from '../common/utils/datetime.util';
 
-interface ApiKeyRow extends Omit<ApiKey, 'scopes'> {
-  scopes: string; // JSON string from ClickHouse
+interface ApiKeyRow extends Omit<ApiKey, 'role'> {
+  role: string; // Enum string from ClickHouse
 }
 
 function parseApiKey(row: ApiKeyRow): ApiKey {
@@ -37,7 +36,7 @@ function parseApiKey(row: ApiKeyRow): ApiKey {
     workspace_id: row.workspace_id,
     name: row.name,
     description: row.description,
-    scopes: JSON.parse(row.scopes) as ApiScope[],
+    role: row.role as ApiKeyRole,
     status: row.status,
     expires_at: row.expires_at,
     last_used_at: row.last_used_at,
@@ -51,9 +50,7 @@ function parseApiKey(row: ApiKeyRow): ApiKey {
   };
 }
 
-function serializeApiKey(
-  apiKey: ApiKey,
-): Omit<ApiKey, 'scopes'> & { scopes: string } {
+function serializeApiKey(apiKey: ApiKey): ApiKeyRow {
   return {
     id: apiKey.id,
     key_hash: apiKey.key_hash,
@@ -62,7 +59,7 @@ function serializeApiKey(
     workspace_id: apiKey.workspace_id,
     name: apiKey.name,
     description: apiKey.description,
-    scopes: JSON.stringify(apiKey.scopes),
+    role: apiKey.role,
     status: apiKey.status,
     expires_at: isoToClickHouseDateTime(apiKey.expires_at),
     last_used_at: apiKey.last_used_at,
@@ -94,8 +91,8 @@ export class ApiKeysService {
     dto: CreateApiKeyDto & { user_id: string },
     created_by: string,
   ): Promise<CreateApiKeyResponseDto> {
-    // Validate scopes before creating
-    await this.validateScopesForUser(dto.workspace_id, created_by, dto.scopes);
+    // Validate role before creating
+    await this.validateRoleForUser(dto.workspace_id, created_by, dto.role);
 
     const now = toClickHouseDateTime();
     const { key, hash, prefix } = generateApiKeyToken();
@@ -108,7 +105,7 @@ export class ApiKeysService {
       workspace_id: dto.workspace_id ?? null,
       name: dto.name,
       description: dto.description ?? '',
-      scopes: dto.scopes,
+      role: dto.role,
       status: 'active',
       expires_at: dto.expires_at ?? null,
       last_used_at: null,
@@ -314,13 +311,13 @@ export class ApiKeysService {
   }
 
   /**
-   * Validate that the user can grant the requested scopes.
-   * Users can only grant scopes they have permission for.
+   * Validate that the user can create an API key with the requested role.
+   * Users can only create API keys with roles at or below their own role level.
    */
-  async validateScopesForUser(
+  async validateRoleForUser(
     workspaceId: string,
     userId: string,
-    scopes: ApiScope[],
+    requestedRole: ApiKeyRole,
   ): Promise<void> {
     const membership = await this.membersService.getMembership(
       workspaceId,
@@ -338,18 +335,11 @@ export class ApiKeysService {
       );
     }
 
-    // Validate each requested scope
-    for (const scope of scopes) {
-      const requiredPermission = SCOPE_TO_PERMISSION[scope];
-
-      // null means any API key creator can grant this scope
-      if (requiredPermission === null) continue;
-
-      if (!hasPermission(membership.role, requiredPermission)) {
-        throw new ForbiddenException(
-          `Cannot grant scope '${scope}': missing '${requiredPermission}' permission`,
-        );
-      }
+    // Users can only create API keys with roles at or below their own role level
+    if (ROLE_HIERARCHY[requestedRole] > ROLE_HIERARCHY[membership.role]) {
+      throw new ForbiddenException(
+        `Cannot create API key with role '${requestedRole}': exceeds your role level`,
+      );
     }
   }
 }

@@ -73,7 +73,7 @@ describe('API Keys Integration', () => {
         workspace_id: 'test_ws_1',
         name: 'Test API Key',
         description: 'For testing purposes',
-        scopes: ['analytics.view', 'analytics.export'],
+        role: 'editor',
       };
 
       const response = await request(ctx.app.getHttpServer())
@@ -91,7 +91,7 @@ describe('API Keys Integration', () => {
       expect(response.body.apiKey.description).toBe(dto.description);
       expect(response.body.apiKey.user_id).toBe(authUserId); // Uses authenticated user
       expect(response.body.apiKey.workspace_id).toBe(dto.workspace_id);
-      expect(response.body.apiKey.scopes).toEqual(dto.scopes);
+      expect(response.body.apiKey.role).toBe(dto.role);
       expect(response.body.apiKey.status).toBe('active');
       expect(response.body.apiKey.key_hash).toBeUndefined(); // Should not expose key_hash
       expect(response.body.apiKey.key_prefix).toBeDefined();
@@ -116,22 +116,14 @@ describe('API Keys Integration', () => {
       expect(rows[0].key_hash).toBeDefined();
       expect(rows[0].key_prefix).toBeDefined();
       expect(rows[0].status).toBe('active');
-      const scopes = JSON.parse(rows[0].scopes as string);
-      expect(scopes).toEqual(dto.scopes);
+      expect(rows[0].role).toBe(dto.role);
     });
 
-    it('creates API key with all scopes', async () => {
+    it('creates API key with admin role', async () => {
       const dto = {
         workspace_id: 'test_ws_2',
         name: 'Full Access Key',
-        scopes: [
-          'events.track',
-          'analytics.view',
-          'analytics.export',
-          'workspace.read',
-          'filters.manage',
-          'annotations.manage',
-        ],
+        role: 'admin',
       };
 
       const response = await request(ctx.app.getHttpServer())
@@ -140,17 +132,7 @@ describe('API Keys Integration', () => {
         .send(dto)
         .expect(201);
 
-      expect(response.body.apiKey.scopes).toHaveLength(6);
-      expect(response.body.apiKey.scopes).toEqual(
-        expect.arrayContaining([
-          'events.track',
-          'analytics.view',
-          'analytics.export',
-          'workspace.read',
-          'filters.manage',
-          'annotations.manage',
-        ]),
-      );
+      expect(response.body.apiKey.role).toBe('admin');
     });
 
     it('creates API key with expiration date', async () => {
@@ -158,7 +140,7 @@ describe('API Keys Integration', () => {
       const dto = {
         workspace_id: 'test_ws_3',
         name: 'Temporary Key',
-        scopes: ['analytics.export'],
+        role: 'viewer',
         expires_at: expirationDate.toISOString(),
       };
 
@@ -181,7 +163,7 @@ describe('API Keys Integration', () => {
       const dto = {
         // workspace_id omitted for user-level key
         name: 'User-level Key',
-        scopes: ['analytics.export'],
+        role: 'viewer',
       };
 
       const response = await request(ctx.app.getHttpServer())
@@ -198,7 +180,7 @@ describe('API Keys Integration', () => {
       const dto = {
         workspace_id: 'test_ws_4',
         name: 'No Description Key',
-        scopes: ['analytics.view'],
+        role: 'viewer',
       };
 
       const response = await request(ctx.app.getHttpServer())
@@ -214,7 +196,7 @@ describe('API Keys Integration', () => {
       const dto = {
         workspace_id: 'test_ws_5',
         name: 'Unauthorized Key',
-        scopes: ['analytics.export'],
+        role: 'viewer',
       };
 
       await request(ctx.app.getHttpServer())
@@ -225,7 +207,7 @@ describe('API Keys Integration', () => {
 
     it('rejects creation with missing required fields', async () => {
       const dto = {
-        // missing name and scopes (user_id is optional - comes from JWT)
+        // missing name and role (user_id is optional - comes from JWT)
         workspace_id: 'test_ws_missing',
       };
 
@@ -238,16 +220,16 @@ describe('API Keys Integration', () => {
       expect(response.body.message).toEqual(
         expect.arrayContaining([
           expect.stringContaining('name'),
-          expect.stringContaining('scopes'),
+          expect.stringContaining('role'),
         ]),
       );
     });
 
-    it('rejects creation with empty scopes array', async () => {
+    it('rejects creation with invalid role', async () => {
       const dto = {
         workspace_id: 'test_ws_6',
-        name: 'No Scopes Key',
-        scopes: [],
+        name: 'Invalid Role Key',
+        role: 'invalid_role',
       };
 
       await request(ctx.app.getHttpServer())
@@ -261,7 +243,7 @@ describe('API Keys Integration', () => {
       const dto = {
         workspace_id: 'test_ws_7',
         name: 'A'.repeat(101), // Max length is 100
-        scopes: ['analytics.export'],
+        role: 'viewer',
       };
 
       await request(ctx.app.getHttpServer())
@@ -277,7 +259,7 @@ describe('API Keys Integration', () => {
         workspace_id: 'test_ws_frontend',
         name: 'Frontend Created Key',
         description: 'Created without explicit user_id',
-        scopes: ['analytics.export'],
+        role: 'editor',
       };
 
       const response = await request(ctx.app.getHttpServer())
@@ -313,7 +295,7 @@ describe('API Keys Integration', () => {
           workspace_id: 'workspace_1',
           name: 'Key 1',
           description: 'First key',
-          scopes: JSON.stringify(['analytics.export']),
+          role: 'editor',
           status: 'active',
           expires_at: null,
           last_used_at: null,
@@ -333,7 +315,7 @@ describe('API Keys Integration', () => {
           workspace_id: 'workspace_2',
           name: 'Key 2',
           description: 'Second key',
-          scopes: JSON.stringify(['analytics.view']),
+          role: 'viewer',
           status: 'active',
           expires_at: null,
           last_used_at: null,
@@ -353,7 +335,7 @@ describe('API Keys Integration', () => {
           workspace_id: 'workspace_1',
           name: 'Key 3',
           description: 'Third key',
-          scopes: JSON.stringify(['workspace.read']),
+          role: 'admin',
           status: 'revoked',
           expires_at: null,
           last_used_at: null,
@@ -486,7 +468,7 @@ describe('API Keys Integration', () => {
         workspace_id: 'workspace_get_test',
         name: 'Get Test Key',
         description: 'For get endpoint testing',
-        scopes: JSON.stringify(['analytics.export', 'workspace.read']),
+        role: 'editor',
         status: 'active',
         expires_at: null,
         last_used_at: null,
@@ -520,10 +502,7 @@ describe('API Keys Integration', () => {
       expect(response.body.workspace_id).toBe('workspace_get_test');
       expect(response.body.key_hash).toBeUndefined(); // Should not expose key_hash
       expect(response.body.key_prefix).toBe('sk_live_gettest');
-      expect(response.body.scopes).toEqual([
-        'analytics.export',
-        'workspace.read',
-      ]);
+      expect(response.body.role).toBe('editor');
       expect(response.body.status).toBe('active');
     });
 
@@ -558,7 +537,7 @@ describe('API Keys Integration', () => {
         workspace_id: 'workspace_revoke_test',
         name: 'Revoke Test Key',
         description: 'For revoke endpoint testing',
-        scopes: JSON.stringify(['analytics.view']),
+        role: 'viewer',
         status: 'active',
         expires_at: null,
         last_used_at: null,
@@ -663,7 +642,7 @@ describe('API Keys Integration', () => {
       const dto = {
         workspace_id: 'test_ws_expired',
         name: 'Expired Key',
-        scopes: ['analytics.export'],
+        role: 'viewer',
         expires_at: pastDate.toISOString(),
       };
 
@@ -689,7 +668,7 @@ describe('API Keys Integration', () => {
         workspace_id: 'workspace_exp',
         name: 'Expired Key',
         description: '',
-        scopes: JSON.stringify(['analytics.export']),
+        role: 'viewer',
         status: 'expired',
         expires_at: toClickHouseDateTime(
           new Date(Date.now() - 24 * 60 * 60 * 1000),
@@ -729,7 +708,7 @@ describe('API Keys Integration', () => {
         workspace_id: 'workspace_metadata',
         name: 'Metadata Test Key',
         description: 'Full metadata test',
-        scopes: ['analytics.view', 'analytics.export'],
+        role: 'editor',
         expires_at: new Date(
           Date.now() + 365 * 24 * 60 * 60 * 1000,
         ).toISOString(), // 1 year
@@ -758,7 +737,7 @@ describe('API Keys Integration', () => {
         workspace_id: dto.workspace_id,
         name: dto.name,
         description: dto.description,
-        scopes: dto.scopes,
+        role: dto.role,
         status: 'active',
         last_used_at: null,
         failed_attempts_count: 0,
@@ -791,7 +770,7 @@ describe('API Keys Integration', () => {
       expect(columnMap['workspace_id']).toMatch(/Nullable\(String\)/);
       expect(columnMap['name']).toBe('String');
       expect(columnMap['description']).toBe('String');
-      expect(columnMap['scopes']).toBe('String');
+      expect(columnMap['role']).toMatch(/Enum8/);
       expect(columnMap['status']).toMatch(/Enum8/);
       expect(columnMap['expires_at']).toMatch(/Nullable\(DateTime64/);
       expect(columnMap['last_used_at']).toMatch(/Nullable\(DateTime64/);

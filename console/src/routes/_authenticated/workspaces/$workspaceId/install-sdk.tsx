@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useQueryClient, useQuery } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { Button, Spin, Alert } from 'antd'
 import { CheckCircleFilled, LoadingOutlined } from '@ant-design/icons'
 import { api } from '../../../../lib/api'
@@ -14,17 +14,6 @@ function InstallSDK() {
   const { workspaceId } = Route.useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-
-  // Fetch SDK version for cache busting
-  const { data: sdkVersion } = useQuery({
-    queryKey: ['sdk-version'],
-    queryFn: async () => {
-      const res = await fetch('/sdk/version.json')
-      const data = await res.json()
-      return data.version as string
-    },
-    staleTime: Infinity
-  })
 
   const [eventDetected, setEventDetected] = useState(false)
   const [skipping, setSkipping] = useState(false)
@@ -80,8 +69,7 @@ function InstallSDK() {
     navigate({ to: '/workspaces/$workspaceId', params: { workspaceId } })
   }
 
-  // Generate the SDK snippet with workspace_id pre-filled and version for cache busting
-  const versionParam = sdkVersion ? `?v=${sdkVersion}` : ''
+  // Generate the SDK snippet with workspace_id pre-filled
   const sdkSnippet = `<!-- Staminads -->
 <script>
 window.StaminadsConfig = {
@@ -89,7 +77,7 @@ window.StaminadsConfig = {
   endpoint: '${window.location.origin}'
 };
 </script>
-<script async src="${window.location.origin}/sdk/staminads.min.js${versionParam}"></script>`
+<script async src="${window.location.origin}/sdk/staminads_${__APP_VERSION__}.min.js"></script>`
 
   return (
     <div className="flex-1 p-6">

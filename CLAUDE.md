@@ -125,10 +125,23 @@ This ensures CLI linting catches the same errors as your IDE.
 
 ## Versioning
 
-Version is defined in `api/src/version.ts` and used by both API and console.
+Version is defined in `api/src/version.ts` and used by API, console, and SDK.
 
 - **Major (X.0.0)**: Database schema changes (requires migration)
 - **Minor (0.X.0)**: Features and fixes without schema changes
+
+### Version Synchronization
+
+All components share the same version from `api/src/version.ts`:
+- **API**: Imports directly
+- **Console**: Injected via Vite (`__APP_VERSION__`)
+- **SDK**: Injected via Rollup (`__SDK_VERSION__`)
+- **SDK package.json**: Synced by `npm run sync-version` (runs on prebuild)
+
+When updating the version:
+1. Edit `api/src/version.ts`
+2. Rebuild SDK: `cd sdk && npm run build`
+3. Copy SDK: `cd console && npm run copy-sdk`
 
 ## Release Process
 

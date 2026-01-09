@@ -558,8 +558,8 @@ function generateSessionEvents(
       _version: version,
       goal_name: '',
       goal_value: 0,
-      entered_at: '',
-      exited_at: '',
+      entered_at: toClickHouseDateTime(scrollTime),
+      exited_at: toClickHouseDateTime(scrollTime),
       goal_timestamp: null,
     });
   }
@@ -616,8 +616,8 @@ function generateSessionEvents(
       _version: version,
       goal_name: '',
       goal_value: 0,
-      entered_at: '',
-      exited_at: '',
+      entered_at: toClickHouseDateTime(endTime),
+      exited_at: toClickHouseDateTime(endTime),
       goal_timestamp: null,
     });
   }

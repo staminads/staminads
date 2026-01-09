@@ -2,12 +2,17 @@ const fs = require('fs');
 const path = require('path');
 
 const sdkSource = path.join(__dirname, '../../sdk/dist/staminads.min.js');
-const sdkPackageJson = path.join(__dirname, '../../sdk/package.json');
-const sdkDest = path.join(__dirname, '../public/sdk/staminads.min.js');
-const versionDest = path.join(__dirname, '../public/sdk/version.json');
+const sdkDir = path.join(__dirname, '../public/sdk');
+
+// Read version from api/src/version.ts (source of truth)
+const versionFile = path.join(__dirname, '../../api/src/version.ts');
+const versionContent = fs.readFileSync(versionFile, 'utf-8');
+const match = versionContent.match(/APP_VERSION\s*=\s*['"]([^'"]+)['"]/);
+const version = match ? match[1] : '0.0.0';
+
+const sdkDest = path.join(sdkDir, `staminads_${version}.min.js`);
 
 // Create sdk directory if it doesn't exist
-const sdkDir = path.dirname(sdkDest);
 if (!fs.existsSync(sdkDir)) {
   fs.mkdirSync(sdkDir, { recursive: true });
 }
@@ -19,14 +24,15 @@ if (!fs.existsSync(sdkSource)) {
   process.exit(1);
 }
 
-// Read SDK version from package.json
-const sdkPackage = JSON.parse(fs.readFileSync(sdkPackageJson, 'utf-8'));
-const version = sdkPackage.version;
+// Remove old versioned SDK files
+const existingFiles = fs.readdirSync(sdkDir);
+for (const file of existingFiles) {
+  if (file.match(/^staminads_[\d.]+\.min\.js$/)) {
+    fs.unlinkSync(path.join(sdkDir, file));
+    console.log(`Removed old SDK: ${file}`);
+  }
+}
 
-// Copy the SDK file
+// Copy the SDK file with versioned name
 fs.copyFileSync(sdkSource, sdkDest);
-console.log('SDK copied to public/sdk/staminads.min.js');
-
-// Write version file
-fs.writeFileSync(versionDest, JSON.stringify({ version }));
-console.log(`SDK version ${version} written to public/sdk/version.json`);
+console.log(`SDK copied to public/sdk/staminads_${version}.min.js`);

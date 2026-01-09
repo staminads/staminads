@@ -22,5 +22,6 @@ A source of traffic can be any dimensions or combination of dimensions such as:
 
 - docs
 - whitelist domains
-- put api keys roles like users
+- cross domain tracking (decorate urls?)
+- detect old sdk usage
 - list annotations matching date range in explore view
