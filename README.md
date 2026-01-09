@@ -22,6 +22,5 @@ A source of traffic can be any dimensions or combination of dimensions such as:
 
 - docs
 - whitelist domains
-- clean anonymizeIP in interface
-- remove trackEvent() from sdk?
+- put api keys roles like users
 - list annotations matching date range in explore view

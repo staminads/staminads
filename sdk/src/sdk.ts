@@ -45,7 +45,6 @@ const DEFAULT_CONFIG: Omit<InternalConfig, 'workspace_id' | 'endpoint'> = {
   sessionTimeout: 30 * 60 * 1000, // 30 minutes
   heartbeatInterval: 10000, // 10 seconds (legacy, used as fallback)
   adClickIds: DEFAULT_AD_CLICK_IDS,
-  anonymizeIP: false,
   trackSPA: true,
   trackScroll: true,
   trackClicks: false,
@@ -817,14 +816,6 @@ export class StaminadsSDK {
 
     // Persist state
     this.sessionState.persist();
-  }
-
-  /**
-   * Track custom event - DEPRECATED, use trackGoal instead
-   */
-  async trackEvent(name: string, properties?: Record<string, string>): Promise<void> {
-    console.warn('[Staminads] trackEvent is deprecated, use trackGoal instead');
-    await this.trackGoal({ action: name, properties });
   }
 
   /**

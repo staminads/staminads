@@ -33,7 +33,7 @@ describe('Staminads SDK - Global Config Pattern', () => {
       const { default: Staminads } = await import('./index');
 
       // Verify SDK exports the API
-      expect(typeof Staminads.trackEvent).toBe('function');
+      expect(typeof Staminads.trackGoal).toBe('function');
       expect(typeof Staminads.getSessionId).toBe('function');
       expect(typeof Staminads.debug).toBe('function');
     });
@@ -45,7 +45,7 @@ describe('Staminads SDK - Global Config Pattern', () => {
       // Should not throw on import
       const { default: Staminads } = await import('./index');
 
-      expect(typeof Staminads.trackEvent).toBe('function');
+      expect(typeof Staminads.trackGoal).toBe('function');
     });
 
     it('should have init method on public API', async () => {
@@ -97,12 +97,12 @@ describe('Staminads SDK - Global Config Pattern', () => {
       );
     });
 
-    it('should throw for trackEvent without config', async () => {
+    it('should throw for trackGoal without config', async () => {
       delete window.StaminadsConfig;
 
       const { default: Staminads } = await import('./index');
 
-      await expect(Staminads.trackEvent('test')).rejects.toThrow(
+      await expect(Staminads.trackGoal({ action: 'test' })).rejects.toThrow(
         'Staminads not configured'
       );
     });
@@ -141,7 +141,7 @@ describe('Staminads SDK - Global Config Pattern', () => {
       expect(result).toBeInstanceOf(Promise);
     });
 
-    it('should return Promise from trackEvent', async () => {
+    it('should return Promise from trackGoal', async () => {
       window.StaminadsConfig = {
         workspace_id: 'test-ws',
         endpoint: 'https://test.com',
@@ -149,7 +149,7 @@ describe('Staminads SDK - Global Config Pattern', () => {
 
       const { default: Staminads } = await import('./index');
 
-      const result = Staminads.trackEvent('test');
+      const result = Staminads.trackGoal({ action: 'test' });
       expect(result).toBeInstanceOf(Promise);
     });
 

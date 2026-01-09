@@ -47,8 +47,6 @@ const Staminads: StaminadsAPI = {
   getFocusDuration: () => sdk.getFocusDuration(),
   getTotalDuration: () => sdk.getTotalDuration(),
   trackPageView: (url?: string) => sdk.trackPageView(url),
-  trackEvent: (name: string, properties?: Record<string, string>) =>
-    sdk.trackEvent(name, properties),
   trackGoal: (data: GoalData) => sdk.trackGoal(data),
   setDimension: (index: number, value: string) => sdk.setDimension(index, value),
   setDimensions: (dimensions: Record<number, string>) => sdk.setDimensions(dimensions),

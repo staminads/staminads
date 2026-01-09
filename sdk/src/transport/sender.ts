@@ -44,6 +44,17 @@ export class Sender {
   }
 
   /**
+   * Stringify payload with sent_at timestamp injected at send time.
+   * CRITICAL: Call this at every HTTP send point, not when building/caching payload.
+   */
+  private stringifyWithSentAt(payload: SessionPayload): string {
+    return JSON.stringify({
+      ...payload,
+      sent_at: Date.now(),
+    });
+  }
+
+  /**
    * Check if browser is offline
    */
   private isOffline(): boolean {
@@ -138,7 +149,7 @@ export class Sender {
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: this.stringifyWithSentAt(payload), // Fresh sent_at at send time
         keepalive: true,
       });
 
@@ -183,7 +194,7 @@ export class Sender {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload),
+        body: this.stringifyWithSentAt(payload), // Fresh sent_at at send time
         keepalive: true,
         signal: controller.signal,
       });
@@ -229,6 +240,7 @@ export class Sender {
 
   /**
    * Send session payload via sendBeacon (for unload)
+   * IMPORTANT: sent_at is set fresh at each send attempt, not cached.
    */
   sendSessionBeacon(payload: SessionPayload): boolean {
     // Queue if offline
@@ -238,7 +250,6 @@ export class Sender {
     }
 
     const url = `${this.endpoint}/api/track`;
-    const body = JSON.stringify(payload);
 
     if (this.debug) {
       console.log('[Staminads] Sending session beacon:', payload);
@@ -250,7 +261,7 @@ export class Sender {
         fetchLater(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body,
+          body: this.stringifyWithSentAt(payload), // Fresh sent_at
           activateAfter: 0,
         });
         if (this.debug) {
@@ -265,12 +276,13 @@ export class Sender {
     // Safari beacon limit is 64KB, but older versions had 16KB
     // Use 15KB threshold for safety
     const MAX_BEACON_SIZE = 15 * 1024;
-    const useBeacon = body.length <= MAX_BEACON_SIZE;
+    const bodyForBeacon = this.stringifyWithSentAt(payload); // Fresh sent_at
+    const useBeacon = bodyForBeacon.length <= MAX_BEACON_SIZE;
 
     // 2. Try sendBeacon (if payload is small enough)
     if (useBeacon && navigator.sendBeacon) {
       try {
-        const blob = new Blob([body], { type: 'application/json' });
+        const blob = new Blob([bodyForBeacon], { type: 'application/json' });
         const success = navigator.sendBeacon(url, blob);
         if (success) {
           if (this.debug) {
@@ -290,7 +302,7 @@ export class Sender {
         headers: {
           'Content-Type': 'application/json',
         },
-        body,
+        body: this.stringifyWithSentAt(payload), // Fresh sent_at
         keepalive: true,
       });
       if (this.debug) {

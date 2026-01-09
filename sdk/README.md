@@ -54,7 +54,7 @@ window.StaminadsConfig = {
 import Staminads from '@staminads/sdk';
 
 // SDK is auto-initialized, ready to use
-await Staminads.trackEvent('my_event');
+await Staminads.trackGoal({ action: 'signup' });
 ```
 
 ## API
@@ -74,7 +74,6 @@ Staminads.debug();                    // Get debug info
 
 // Manual tracking (async)
 await Staminads.trackPageView(url?);  // Track SPA navigation
-await Staminads.trackEvent(name, properties?);
 await Staminads.trackGoal({ action, value?, currency?, properties? });
 
 // Custom Dimensions (async)

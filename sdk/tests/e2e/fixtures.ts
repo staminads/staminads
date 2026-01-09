@@ -71,6 +71,7 @@ export interface SessionPayload {
   created_at: number;
   updated_at: number;
   sdk_version: string;
+  sent_at?: number; // Set at HTTP send time for clock skew detection
 }
 
 export interface CapturedPayload {
@@ -96,7 +97,6 @@ export interface StaminadsAPI {
   getFocusDuration(): Promise<number>;
   getTotalDuration(): Promise<number>;
   trackPageView(url?: string): Promise<void>;
-  trackEvent(name: string, properties?: Record<string, string>): Promise<void>;
   trackGoal(data: GoalData): Promise<void>;
   setDimension(index: number, value: string): Promise<void>;
   setDimensions(dimensions: Record<number, string>): Promise<void>;

@@ -52,9 +52,6 @@ export interface StaminadsConfig {
   heartbeatInterval?: number;
   adClickIds?: string[];
 
-  // Privacy
-  anonymizeIP?: boolean;
-
   // Features
   trackSPA?: boolean;
   trackScroll?: boolean;
@@ -140,7 +137,6 @@ export interface StaminadsAPI {
   getFocusDuration(): Promise<number>;
   getTotalDuration(): Promise<number>;
   trackPageView(url?: string): Promise<void>;
-  trackEvent(name: string, properties?: Record<string, string>): Promise<void>;
   trackGoal(data: GoalData): Promise<void>;
   setDimension(index: number, value: string): Promise<void>;
   setDimensions(dimensions: Record<number, string>): Promise<void>;

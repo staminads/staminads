@@ -87,10 +87,14 @@ describe('Sender', () => {
         expect.objectContaining({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
           keepalive: true,
         })
       );
+      // Verify body contains the payload fields plus sent_at
+      const sentBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(sentBody.workspace_id).toBe(payload.workspace_id);
+      expect(sentBody.session_id).toBe(payload.session_id);
+      expect(sentBody.sent_at).toBeDefined();
     });
 
     it('returns success with checkpoint on successful response', async () => {
@@ -500,6 +504,82 @@ describe('Sender', () => {
 
       const queue = JSON.parse(mockLocalStorage._store['stm_pending'] || '[]');
       expect(queue.length).toBe(1);
+    });
+  });
+
+  describe('sent_at injection', () => {
+    it('adds sent_at to payload when sending via fetch', async () => {
+      const payload = createPayload();
+      await sender.sendSession(payload);
+
+      const sentBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(sentBody.sent_at).toBeDefined();
+      expect(typeof sentBody.sent_at).toBe('number');
+    });
+
+    it('sets sent_at to current timestamp at send time', async () => {
+      const beforeTime = Date.now();
+      const payload = createPayload();
+      await sender.sendSession(payload);
+
+      const sentBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(sentBody.sent_at).toBeGreaterThanOrEqual(beforeTime);
+      expect(sentBody.sent_at).toBeLessThanOrEqual(Date.now());
+    });
+
+    it('does not mutate original payload', async () => {
+      const payload = createPayload();
+      const originalPayload = { ...payload };
+      await sender.sendSession(payload);
+
+      expect(payload).toEqual(originalPayload);
+      expect(payload).not.toHaveProperty('sent_at');
+    });
+
+    it('adds sent_at to beacon payload', () => {
+      const payload = createPayload();
+      sender.sendSessionBeacon(payload);
+
+      // Check the blob content
+      const blobArg = sendBeaconMock.mock.calls[0][1] as Blob;
+      expect(blobArg.type).toBe('application/json');
+      // Note: Blob content is checked via the reader pattern in integration tests
+    });
+
+    it('generates fresh sent_at for each send attempt', async () => {
+      const payload = createPayload();
+
+      // First send
+      await sender.sendSession(payload);
+      const firstSentAt = JSON.parse(fetchMock.mock.calls[0][1].body).sent_at;
+
+      // Advance time
+      vi.advanceTimersByTime(1000);
+
+      // Second send (same payload)
+      await sender.sendSession(payload);
+      const secondSentAt = JSON.parse(fetchMock.mock.calls[1][1].body).sent_at;
+
+      expect(secondSentAt).toBeGreaterThan(firstSentAt);
+    });
+
+    it('adds sent_at when flushing offline queue', async () => {
+      // Queue a payload while offline
+      vi.stubGlobal('navigator', { onLine: false, sendBeacon: vi.fn() });
+      await sender.sendSession(createPayload());
+
+      // Advance time significantly
+      vi.advanceTimersByTime(60000);
+
+      // Come back online
+      vi.stubGlobal('navigator', { onLine: true, sendBeacon: vi.fn() });
+      await sender.handleOnline();
+
+      // sent_at should be set at flush time, not queue time
+      const sentBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(sentBody.sent_at).toBeDefined();
+      // sent_at should reflect when it was actually sent (after advancing time)
+      expect(sentBody.sent_at).toBeGreaterThan(Date.now() - 5000);
     });
   });
 

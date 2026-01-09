@@ -113,7 +113,7 @@ The following items need to be implemented per `05-sdk-implementation.md`:
 □ Add buildAttributes() helper
 □ Update trackPageView() - use SessionState
 □ Update trackGoal() - use SessionState with immediate send
-□ Deprecate trackEvent()
+✓ Remove trackEvent()
 □ Remove sendEvent() method
 □ Remove onScrollMilestone() callback
 □ Remove DurationTracker entirely

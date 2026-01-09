@@ -93,6 +93,6 @@ export interface TrackingEvent {
   entered_at: string; // When user entered the page (ClickHouse DateTime)
   exited_at: string; // When user exited the page (ClickHouse DateTime)
 
-  // Goal timestamp (from SDK)
-  goal_timestamp: string; // When goal was triggered (ClickHouse DateTime)
+  // Goal timestamp (from SDK, null for pageviews)
+  goal_timestamp: string | null;
 }

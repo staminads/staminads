@@ -83,7 +83,6 @@ describe('SessionManager', () => {
       sessionTimeout: 30 * 60 * 1000, // 30 minutes
       heartbeatInterval: 10000,
       adClickIds: ['gclid', 'fbclid'],
-      anonymizeIP: false,
       trackSPA: true,
       trackScroll: true,
       trackClicks: false,

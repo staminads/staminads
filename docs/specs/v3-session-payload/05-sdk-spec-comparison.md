@@ -91,7 +91,7 @@ The new spec explicitly removes these (original spec kept them for dual-mode):
 |--------|--------------|----------|------------|
 | `trackPageView()` | Modify | Modify | Use SessionState.addPageview() |
 | `trackGoal()` | Modify | Modify | Use SessionState.addGoal() |
-| `trackEvent()` | Not mentioned | Deprecate | Convert to trackGoal() with warning |
+| `trackEvent()` | Not mentioned | Removed | Use trackGoal() instead |
 | `getFocusDuration()` | Not mentioned | ⚠️ Needs decision | See below |
 | `debug()` | Not mentioned | Update | Remove focusState, add actionsCount |
 

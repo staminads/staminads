@@ -244,6 +244,10 @@ export class SessionPayloadDto {
   @IsOptional()
   @IsString()
   sdk_version?: string;
+
+  @IsOptional()
+  @IsNumber()
+  sent_at?: number;
 }
 
 // === Type Guards ===

@@ -442,14 +442,7 @@ async trackGoal(data: GoalData): Promise<void> {
   this.sessionState.persist();
 }
 
-/**
- * Track custom event - DEPRECATED, use trackGoal instead
- * Kept for backward compatibility but converts to goal
- */
-async trackEvent(name: string, properties?: Record<string, string>): Promise<void> {
-  console.warn('[Staminads] trackEvent is deprecated, use trackGoal instead');
-  await this.trackGoal({ action: name, properties });
-}
+// trackEvent() has been REMOVED - use trackGoal() instead
 ```
 
 #### 1.10 Methods to Remove
@@ -834,7 +827,7 @@ The legacy queue with retry logic is removed because:
 
 1. **No more individual events**: The SDK no longer sends `screen_view`, `ping`, `scroll`, or `goal` events individually. Everything goes through `/api/track.session`.
 
-2. **trackEvent() deprecated**: Use `trackGoal()` instead. `trackEvent()` is kept but logs a deprecation warning and converts to a goal.
+2. **trackEvent() removed**: Use `trackGoal()` instead.
 
 3. **No offline queue**: The old event queue with retry logic is removed. SessionState persistence provides recovery on page reload.
 

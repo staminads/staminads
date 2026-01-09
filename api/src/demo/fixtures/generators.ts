@@ -534,7 +534,7 @@ function generateSessionEvents(
     goal_value: 0,
     entered_at: toClickHouseDateTime(sessionStart),
     exited_at: toClickHouseDateTime(sessionStart),
-    goal_timestamp: '',
+    goal_timestamp: null,
   });
 
   // Event 2: scroll (50% chance, happens after some time)
@@ -560,7 +560,7 @@ function generateSessionEvents(
       goal_value: 0,
       entered_at: '',
       exited_at: '',
-      goal_timestamp: '',
+      goal_timestamp: null,
     });
   }
 
@@ -592,7 +592,7 @@ function generateSessionEvents(
       goal_value: 0,
       entered_at: toClickHouseDateTime(firstPageExitTime),
       exited_at: toClickHouseDateTime(secondPageTime),
-      goal_timestamp: '',
+      goal_timestamp: null,
     });
   }
 
@@ -618,7 +618,7 @@ function generateSessionEvents(
       goal_value: 0,
       entered_at: '',
       exited_at: '',
-      goal_timestamp: '',
+      goal_timestamp: null,
     });
   }
 

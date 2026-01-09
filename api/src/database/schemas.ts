@@ -244,8 +244,8 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
       -- SDK timestamps (pageview)
       entered_at DateTime64(3),
       exited_at DateTime64(3),
-      -- SDK timestamp (goal)
-      goal_timestamp DateTime64(3),
+      -- SDK timestamp (goal, null for pageviews)
+      goal_timestamp Nullable(DateTime64(3)),
       INDEX idx_name name TYPE bloom_filter(0.01) GRANULARITY 1,
       INDEX idx_browser_type browser_type TYPE set(10) GRANULARITY 1
     ) ENGINE = MergeTree()
@@ -442,20 +442,20 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
     TO {database}.pages AS
     SELECT
       generateUUIDv4() as id,
-      concat(e.session_id, '_', toString(e.page_number)) as page_id,
+      concat(e.session_id, '_', toString(e.page_number - 1)) as page_id,
       e.session_id,
       e.workspace_id,
-      e.path,
+      e.previous_path as path,
       e.landing_page as full_url,
       -- Use actual SDK timestamps instead of calculated approximations
       e.entered_at as entered_at,
       e.exited_at as exited_at,
       e.page_duration as duration,
       e.max_scroll,
-      e.page_number,
-      e.path = e.landing_path as is_landing,
+      toUInt16(e.page_number - 1) as page_number,
+      e.previous_path = e.landing_path as is_landing,
       0 as is_exit,
-      if(e.path = e.landing_path, 'landing', 'navigation') as entry_type,
+      if(e.previous_path = e.landing_path, 'landing', 'navigation') as entry_type,
       now64(3) as received_at,
       e._version
     FROM {database}.events e

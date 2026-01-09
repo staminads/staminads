@@ -660,6 +660,294 @@ describe('SessionPayloadHandler', () => {
     });
   });
 
+  // === Clock Skew Detection Tests ===
+  describe('Clock Skew Detection', () => {
+    const THRESHOLD_MS = 5000; // 5 seconds
+
+    describe('skew calculation', () => {
+      it('does not correct when sent_at is undefined (legacy SDK)', async () => {
+        const now = Date.now();
+        const payload = createPayload({
+          actions: [
+            createPageviewAction({
+              page_number: 1,
+              entered_at: now - 5000,
+              exited_at: now,
+            }),
+          ],
+          created_at: now - 10000,
+          updated_at: now,
+          // No sent_at - legacy SDK
+          attributes: { landing_page: 'https://example.com/' },
+        });
+
+        await handler.handle(payload, null);
+
+        const events = bufferService.addBatch.mock.calls[0][0];
+        // Timestamps should NOT be corrected
+        expect(events[0].created_at).toContain(
+          new Date(now - 10000).toISOString().slice(0, 10),
+        );
+      });
+
+      it('does not correct when skew is within threshold (< 5s)', async () => {
+        const now = Date.now();
+        const payload = createPayload({
+          actions: [
+            createPageviewAction({
+              page_number: 1,
+              entered_at: now - 5000,
+              exited_at: now,
+            }),
+          ],
+          created_at: now - 10000,
+          updated_at: now,
+          sent_at: now - 2000, // 2s skew - within threshold
+          attributes: { landing_page: 'https://example.com/' },
+        }) as SessionPayloadDto & { sent_at: number };
+
+        await handler.handle(payload, null);
+
+        const events = bufferService.addBatch.mock.calls[0][0];
+        // Timestamps should NOT be corrected (skew within threshold)
+        const createdDate = new Date(now - 10000);
+        expect(events[0].created_at).toContain(
+          createdDate.toISOString().slice(0, 10),
+        );
+      });
+
+      it('corrects when client clock is ahead (negative skew > threshold)', async () => {
+        const serverNow = Date.now();
+        const clientNow = serverNow + 3600000; // Client is 1 hour ahead
+
+        const payload = createPayload({
+          actions: [
+            createPageviewAction({
+              page_number: 1,
+              entered_at: clientNow - 5000,
+              exited_at: clientNow,
+            }),
+          ],
+          created_at: clientNow - 10000,
+          updated_at: clientNow,
+          sent_at: clientNow, // Client thinks it's 1 hour ahead
+          attributes: { landing_page: 'https://example.com/' },
+        }) as SessionPayloadDto & { sent_at: number };
+
+        await handler.handle(payload, null);
+
+        const events = bufferService.addBatch.mock.calls[0][0];
+        // Timestamps should be corrected backwards by ~1 hour
+        const correctedCreatedAt = new Date(
+          events[0].created_at.replace(' ', 'T') + 'Z',
+        ).getTime();
+        // Should be close to serverNow - 10000, not clientNow - 10000
+        expect(Math.abs(correctedCreatedAt - (serverNow - 10000))).toBeLessThan(
+          THRESHOLD_MS,
+        );
+      });
+
+      it('corrects when client clock is behind (positive skew > threshold)', async () => {
+        const serverNow = Date.now();
+        const clientNow = serverNow - 3600000; // Client is 1 hour behind
+
+        const payload = createPayload({
+          actions: [
+            createPageviewAction({
+              page_number: 1,
+              entered_at: clientNow - 5000,
+              exited_at: clientNow,
+            }),
+          ],
+          created_at: clientNow - 10000,
+          updated_at: clientNow,
+          sent_at: clientNow, // Client thinks it's 1 hour behind
+          attributes: { landing_page: 'https://example.com/' },
+        }) as SessionPayloadDto & { sent_at: number };
+
+        await handler.handle(payload, null);
+
+        const events = bufferService.addBatch.mock.calls[0][0];
+        // Timestamps should be corrected forward by ~1 hour
+        const correctedCreatedAt = new Date(
+          events[0].created_at.replace(' ', 'T') + 'Z',
+        ).getTime();
+        expect(Math.abs(correctedCreatedAt - (serverNow - 10000))).toBeLessThan(
+          THRESHOLD_MS,
+        );
+      });
+    });
+
+    describe('timestamp correction', () => {
+      it('corrects created_at when skew detected', async () => {
+        const serverNow = Date.now();
+        const clientNow = serverNow + 60000; // Client 1 minute ahead
+
+        const payload = createPayload({
+          actions: [createPageviewAction({ page_number: 1 })],
+          created_at: clientNow - 10000,
+          updated_at: clientNow,
+          sent_at: clientNow,
+          attributes: { landing_page: 'https://example.com/' },
+        }) as SessionPayloadDto & { sent_at: number };
+
+        await handler.handle(payload, null);
+
+        const events = bufferService.addBatch.mock.calls[0][0];
+        const correctedCreatedAt = new Date(
+          events[0].created_at.replace(' ', 'T') + 'Z',
+        ).getTime();
+        // Should be corrected to ~serverNow - 10000
+        expect(Math.abs(correctedCreatedAt - (serverNow - 10000))).toBeLessThan(
+          THRESHOLD_MS,
+        );
+      });
+
+      it('corrects updated_at when skew detected', async () => {
+        const serverNow = Date.now();
+        const clientNow = serverNow + 60000; // Client 1 minute ahead
+
+        const payload = createPayload({
+          actions: [createPageviewAction({ page_number: 1 })],
+          created_at: clientNow - 10000,
+          updated_at: clientNow,
+          sent_at: clientNow,
+          attributes: { landing_page: 'https://example.com/' },
+        }) as SessionPayloadDto & { sent_at: number };
+
+        await handler.handle(payload, null);
+
+        const events = bufferService.addBatch.mock.calls[0][0];
+        const correctedUpdatedAt = new Date(
+          events[0].updated_at.replace(' ', 'T') + 'Z',
+        ).getTime();
+        expect(Math.abs(correctedUpdatedAt - serverNow)).toBeLessThan(
+          THRESHOLD_MS,
+        );
+      });
+
+      it('corrects pageview entered_at and exited_at when skew detected', async () => {
+        const serverNow = Date.now();
+        const clientNow = serverNow + 60000; // Client 1 minute ahead
+
+        const payload = createPayload({
+          actions: [
+            createPageviewAction({
+              page_number: 1,
+              entered_at: clientNow - 5000,
+              exited_at: clientNow,
+            }),
+          ],
+          created_at: clientNow - 10000,
+          updated_at: clientNow,
+          sent_at: clientNow,
+          attributes: { landing_page: 'https://example.com/' },
+        }) as SessionPayloadDto & { sent_at: number };
+
+        await handler.handle(payload, null);
+
+        const events = bufferService.addBatch.mock.calls[0][0];
+        const correctedEnteredAt = new Date(
+          events[0].entered_at.replace(' ', 'T') + 'Z',
+        ).getTime();
+        const correctedExitedAt = new Date(
+          events[0].exited_at.replace(' ', 'T') + 'Z',
+        ).getTime();
+
+        expect(Math.abs(correctedEnteredAt - (serverNow - 5000))).toBeLessThan(
+          THRESHOLD_MS,
+        );
+        expect(Math.abs(correctedExitedAt - serverNow)).toBeLessThan(
+          THRESHOLD_MS,
+        );
+      });
+
+      it('corrects goal timestamp when skew detected', async () => {
+        const serverNow = Date.now();
+        const clientNow = serverNow + 60000; // Client 1 minute ahead
+
+        const payload = createPayload({
+          actions: [
+            createGoalAction({
+              name: 'purchase',
+              timestamp: clientNow - 1000,
+            }),
+          ],
+          created_at: clientNow - 10000,
+          updated_at: clientNow,
+          sent_at: clientNow,
+          attributes: { landing_page: 'https://example.com/' },
+        }) as SessionPayloadDto & { sent_at: number };
+
+        await handler.handle(payload, null);
+
+        const events = bufferService.addBatch.mock.calls[0][0];
+        const correctedGoalTimestamp = new Date(
+          events[0].goal_timestamp.replace(' ', 'T') + 'Z',
+        ).getTime();
+
+        expect(
+          Math.abs(correctedGoalTimestamp - (serverNow - 1000)),
+        ).toBeLessThan(THRESHOLD_MS);
+      });
+
+      it('does NOT correct duration (relative time)', async () => {
+        const serverNow = Date.now();
+        const clientNow = serverNow + 60000; // Client 1 minute ahead
+
+        const payload = createPayload({
+          actions: [
+            createPageviewAction({
+              page_number: 1,
+              duration: 5000, // 5 seconds
+              entered_at: clientNow - 5000,
+              exited_at: clientNow,
+            }),
+          ],
+          created_at: clientNow - 10000,
+          updated_at: clientNow,
+          sent_at: clientNow,
+          attributes: { landing_page: 'https://example.com/' },
+        }) as SessionPayloadDto & { sent_at: number };
+
+        await handler.handle(payload, null);
+
+        const events = bufferService.addBatch.mock.calls[0][0];
+        // Duration should remain unchanged (relative time, not absolute)
+        expect(events[0].duration).toBe(5000);
+        expect(events[0].page_duration).toBe(5000);
+      });
+
+      it('keeps original timestamp in dedup_token for goals', async () => {
+        const serverNow = Date.now();
+        const clientNow = serverNow + 60000; // Client 1 minute ahead
+        const originalTimestamp = clientNow - 1000;
+
+        const payload = createPayload({
+          session_id: 'sess-test',
+          actions: [
+            createGoalAction({
+              name: 'purchase',
+              timestamp: originalTimestamp,
+            }),
+          ],
+          created_at: clientNow - 10000,
+          updated_at: clientNow,
+          sent_at: clientNow,
+          attributes: { landing_page: 'https://example.com/' },
+        }) as SessionPayloadDto & { sent_at: number };
+
+        await handler.handle(payload, null);
+
+        const events = bufferService.addBatch.mock.calls[0][0];
+        // dedup_token should use ORIGINAL timestamp for consistency
+        expect(events[0].dedup_token).toBe(
+          `sess-test_goal_purchase_${originalTimestamp}`,
+        );
+      });
+    });
+  });
+
   // === Cross-Phase Tests ===
   describe('Cross-phase validation - action processing', () => {
     it('preserves action order in payload', async () => {

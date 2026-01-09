@@ -56,6 +56,7 @@ interface SessionPayload {
   created_at: number;
   updated_at: number;
   sdk_version: string;
+  sent_at?: number; // Set at HTTP send time for clock skew detection
 }
 
 // Store captured session payloads
