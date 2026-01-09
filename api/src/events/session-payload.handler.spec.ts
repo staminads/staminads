@@ -314,7 +314,7 @@ describe('SessionPayloadHandler', () => {
           createPageviewAction({ path: '/page3', page_number: 3 }), // index 2
           createGoalAction({ name: 'signup' }), // index 3
         ],
-        checkpoint: 1, // Skip indices 0 and 1
+        checkpoint: 2, // Skip indices 0 and 1
         attributes: { landing_page: 'https://example.com/' },
       });
 
@@ -373,7 +373,7 @@ describe('SessionPayloadHandler', () => {
           createPageviewAction({ path: '/page2', page_number: 2 }), // index 1 - skipped
           createPageviewAction({ path: '/page3', page_number: 3 }), // index 2 - processed
         ],
-        checkpoint: 1, // Skip indices 0 and 1
+        checkpoint: 2, // Skip indices 0 and 1
         attributes: { landing_page: 'https://example.com/' },
       });
 
