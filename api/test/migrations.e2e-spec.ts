@@ -62,6 +62,20 @@ describe('Migrations E2E', () => {
     } catch {
       // Ignore errors if table doesn't exist
     }
+
+    // Restore setup_completed flag for other tests
+    await systemClient.insert({
+      table: 'system_settings',
+      values: [
+        {
+          key: 'setup_completed',
+          value: 'true',
+          updated_at: toClickHouseDateTime(),
+        },
+      ],
+      format: 'JSONEachRow',
+    });
+    await waitForClickHouse();
   });
 
   describe('Fresh Install Detection', () => {

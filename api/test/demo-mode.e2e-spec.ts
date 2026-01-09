@@ -39,6 +39,19 @@ describe('Demo Mode Restrictions', () => {
       'api_keys',
     ]);
 
+    // Ensure setup_completed flag exists (may have been cleared by other tests)
+    await ctx.systemClient.insert({
+      table: 'system_settings',
+      values: [
+        {
+          key: 'setup_completed',
+          value: 'true',
+          updated_at: toClickHouseDateTime(),
+        },
+      ],
+      format: 'JSONEachRow',
+    });
+
     // Create test user with super admin privileges
     const { token } = await createUserWithToken(
       ctx.app,
