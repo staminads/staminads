@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { Alert } from 'antd'
+import dayjs from 'dayjs'
 import { workspaceQueryOptions, analyticsQueryOptions } from '../../../../lib/queries'
 import { useExploreParams } from '../../../../hooks/useExploreParams'
 import { useAssistant } from '../../../../hooks/useAssistant'
@@ -25,6 +26,7 @@ import {
   insertChildrenIntoTree,
   setRowLoading,
 } from '../../../../lib/explore-utils'
+import { computeDateRange } from '../../../../lib/date-utils'
 import { api } from '../../../../lib/api'
 import type { ExploreRow, ExploreTotals } from '../../../../types/explore'
 import type { DatePreset, Filter } from '../../../../types/analytics'
@@ -74,6 +76,29 @@ function Explore() {
       ? { start: customStart, end: customEnd }
       : { preset: period as DatePreset }
   }, [period, customStart, customEnd])
+
+  // Filter annotations by date range
+  const filteredAnnotations = useMemo(() => {
+    const annotations = workspace.settings.annotations || []
+    if (annotations.length === 0) return []
+
+    // Resolve the date range to actual dates
+    const resolvedRange = computeDateRange(
+      period as DatePreset,
+      timezone,
+      period === 'custom' && customStart && customEnd
+        ? { start: customStart, end: customEnd }
+        : undefined
+    )
+
+    // Filter annotations that fall within the date range
+    return annotations.filter(annotation => {
+      const annotationDate = dayjs(annotation.date)
+      // Compare dates only (ignore time for range check)
+      return !annotationDate.isBefore(resolvedRange.start, 'day')
+          && !annotationDate.isAfter(resolvedRange.end, 'day')
+    })
+  }, [workspace.settings.annotations, period, timezone, customStart, customEnd])
 
   // Breakdown drawer state
   const {
@@ -516,6 +541,7 @@ function Explore() {
         timescoreReference={workspace.settings.timescore_reference ?? 60}
         maxDimensionValues={extremesData?.maxDimensionValues}
         customDimensionLabels={workspace.settings.custom_dimensions}
+        annotations={filteredAnnotations}
       />
 
       <div className="rounded-md overflow-hidden">

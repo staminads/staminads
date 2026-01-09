@@ -1,7 +1,7 @@
 import { Statistic, Skeleton, Popover, Divider } from 'antd'
 import { ArrowUpOutlined, ArrowDownOutlined, MinusOutlined } from '@ant-design/icons'
 import type { ExploreTotals } from '../../types/explore'
-import type { CustomDimensionLabels } from '../../types/workspace'
+import type { CustomDimensionLabels, Annotation } from '../../types/workspace'
 import { formatNumber } from '../../lib/chart-utils'
 import { getHeatMapColor, getDimensionLabel } from '../../lib/explore-utils'
 import { DaysOfWeek } from '../../lib/dictionaries'
@@ -15,6 +15,7 @@ interface ExploreSummaryProps {
   timescoreReference?: number
   maxDimensionValues?: Record<string, string | number | null>
   customDimensionLabels?: CustomDimensionLabels | null
+  annotations?: Annotation[]
 }
 
 function formatDuration(seconds: number): string {
@@ -66,6 +67,7 @@ export function ExploreSummary({
   timescoreReference,
   maxDimensionValues,
   customDimensionLabels,
+  annotations,
 }: ExploreSummaryProps) {
   if (loading || !totals) {
     return (
@@ -200,7 +202,7 @@ export function ExploreSummary({
     />,
     <Statistic
       key="scroll"
-      title={<span className="md:pr-[70px]">Median Scroll Depth</span>}
+      title={<span className={annotations && annotations.length > 0 ? '' : 'md:pr-[70px]'}>Median Scroll Depth</span>}
       value={totals.median_scroll.toFixed(1)}
       valueStyle={valueStyle}
       suffix={
@@ -213,6 +215,52 @@ export function ExploreSummary({
         </>
       }
     />,
+    ...(annotations && annotations.length > 0 ? [
+      <Popover
+        key="annotations"
+        content={
+          <div className="text-sm max-w-xs">
+            <div className="font-medium mb-2">Annotations in this period:</div>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {annotations.map((annotation) => (
+                <div key={annotation.id} className="flex gap-2 items-start">
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      backgroundColor: annotation.color || '#7763f1',
+                      marginTop: 6,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <div>
+                    <div className="font-medium">{annotation.title}</div>
+                    <div className="text-gray-500 text-xs">
+                      {annotation.date} at {annotation.time} in {annotation.timezone}
+                    </div>
+                    {annotation.description && (
+                      <div className="text-gray-600 text-xs mt-1">{annotation.description}</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        }
+        title={null}
+        trigger="hover"
+      >
+        <div style={{ cursor: 'pointer' }}>
+          <Statistic
+            title={<span className="md:pr-[70px]">Annotations</span>}
+            value={annotations.length}
+            valueStyle={valueStyle}
+          />
+        </div>
+      </Popover>
+    ] : []),
   ]
 
   return (

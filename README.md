@@ -20,8 +20,7 @@ A source of traffic can be any dimensions or combination of dimensions such as:
 
 ## Roadmap
 
-- docs
 - whitelist domains
 - cross domain tracking (decorate urls?)
-- detect old sdk usage
-- list annotations matching date range in explore view
+- detect old sdk usage if new sdk version is available
+- detect stm_1 ...10 custom dimensions from URLs and map them to custom dimensions in sdk
