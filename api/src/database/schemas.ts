@@ -506,6 +506,37 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
       city String DEFAULT '',
       language String DEFAULT '',
 
+      -- Additional device info (aligned with sessions)
+      browser_type String DEFAULT '',
+      screen_width UInt16 DEFAULT 0,
+      screen_height UInt16 DEFAULT 0,
+      viewport_width UInt16 DEFAULT 0,
+      viewport_height UInt16 DEFAULT 0,
+      user_agent String DEFAULT '',
+      connection_type String DEFAULT '',
+
+      -- Additional traffic (aligned with sessions)
+      referrer_path String DEFAULT '',
+      landing_domain String DEFAULT '',
+
+      -- Additional UTM (aligned with sessions)
+      utm_id String DEFAULT '',
+      utm_id_from String DEFAULT '',
+
+      -- Additional geo (aligned with sessions)
+      timezone String DEFAULT '',
+      latitude Nullable(Float32),
+      longitude Nullable(Float32),
+
+      -- Time dimensions (computed from goal_timestamp)
+      year UInt16,
+      month UInt8,
+      day UInt8,
+      day_of_week UInt8,
+      week_number UInt8,
+      hour UInt8,
+      is_weekend Bool,
+
       -- Technical
       _version UInt64 DEFAULT 0,
       INDEX idx_goal_timestamp goal_timestamp TYPE minmax GRANULARITY 1
@@ -556,6 +587,38 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
       e.region,
       e.city,
       e.language,
+
+      -- Additional device info
+      e.browser_type,
+      e.screen_width,
+      e.screen_height,
+      e.viewport_width,
+      e.viewport_height,
+      e.user_agent,
+      e.connection_type,
+
+      -- Additional traffic
+      e.referrer_path,
+      e.landing_domain,
+
+      -- Additional UTM
+      e.utm_id,
+      e.utm_id_from,
+
+      -- Additional geo
+      e.timezone,
+      e.latitude,
+      e.longitude,
+
+      -- Computed time dimensions
+      toYear(assumeNotNull(e.goal_timestamp)) as year,
+      toMonth(assumeNotNull(e.goal_timestamp)) as month,
+      toDayOfMonth(assumeNotNull(e.goal_timestamp)) as day,
+      toDayOfWeek(assumeNotNull(e.goal_timestamp)) as day_of_week,
+      toWeek(assumeNotNull(e.goal_timestamp)) as week_number,
+      toHour(assumeNotNull(e.goal_timestamp)) as hour,
+      toDayOfWeek(assumeNotNull(e.goal_timestamp)) IN (6, 7) as is_weekend,
+
       e._version
     FROM {database}.events e
     WHERE e.name = 'goal'

@@ -220,6 +220,28 @@ describe('Analytics E2E', () => {
         region: 'CA',
         city: 'San Francisco',
         language: 'en-US',
+        // New aligned columns
+        browser_type: 'browser',
+        screen_width: 1920,
+        screen_height: 1080,
+        viewport_width: 1920,
+        viewport_height: 900,
+        user_agent: 'Mozilla/5.0',
+        connection_type: 'wifi',
+        referrer_path: '/',
+        landing_domain: 'test.com',
+        utm_id: '',
+        utm_id_from: '',
+        timezone: 'America/New_York',
+        latitude: null,
+        longitude: null,
+        year: date.getFullYear(),
+        month: date.getMonth() + 1,
+        day: date.getDate(),
+        day_of_week: date.getDay() || 7,
+        week_number: 1,
+        hour: date.getHours(),
+        is_weekend: date.getDay() === 0 || date.getDay() === 6,
         _version: 1,
       });
     }
@@ -1597,6 +1619,201 @@ describe('Analytics E2E', () => {
         // Page-only dimensions not available
         expect(response.body.page_path).toBeUndefined();
         expect(response.body.is_landing_page).toBeUndefined();
+      });
+
+      it('returns new aligned dimensions for goals table', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .get('/api/analytics.dimensions?table=goals')
+          .set('Authorization', `Bearer ${authToken}`)
+          .expect(200);
+
+        // Time dimensions (now available on goals)
+        expect(response.body.year).toBeDefined();
+        expect(response.body.month).toBeDefined();
+        expect(response.body.day).toBeDefined();
+        expect(response.body.hour).toBeDefined();
+        expect(response.body.day_of_week).toBeDefined();
+        expect(response.body.week_number).toBeDefined();
+        expect(response.body.is_weekend).toBeDefined();
+
+        // Device dimensions (now available on goals)
+        expect(response.body.browser_type).toBeDefined();
+        expect(response.body.screen_width).toBeDefined();
+        expect(response.body.screen_height).toBeDefined();
+        expect(response.body.viewport_width).toBeDefined();
+        expect(response.body.viewport_height).toBeDefined();
+        expect(response.body.connection_type).toBeDefined();
+
+        // Traffic/geo dimensions (now available on goals)
+        expect(response.body.referrer_path).toBeDefined();
+        expect(response.body.landing_domain).toBeDefined();
+        expect(response.body.timezone).toBeDefined();
+      });
+    });
+
+    describe('Goals grouped by new dimensions', () => {
+      it('groups goals by hour with correct values', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metrics: ['goals'],
+            dimensions: ['hour'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(response.body.data.length).toBeGreaterThan(0);
+        // Verify hour is a valid number between 0-23
+        const hours = response.body.data.map((d: { hour: number }) => d.hour);
+        hours.forEach((h: number) => {
+          expect(h).toBeGreaterThanOrEqual(0);
+          expect(h).toBeLessThanOrEqual(23);
+        });
+        // All 30 goals should be accounted for
+        const totalGoals = response.body.data.reduce(
+          (sum: number, d: { goals: string }) => sum + Number(d.goals),
+          0,
+        );
+        expect(totalGoals).toBe(30);
+      });
+
+      it('groups goals by browser_type with correct values', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metrics: ['goals'],
+            dimensions: ['browser_type'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(response.body.data.length).toBe(1);
+        expect(response.body.data[0].browser_type).toBe('browser');
+        expect(Number(response.body.data[0].goals)).toBe(30);
+      });
+
+      it('groups goals by timezone with correct values', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metrics: ['goals'],
+            dimensions: ['timezone'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(response.body.data.length).toBe(1);
+        expect(response.body.data[0].timezone).toBe('America/New_York');
+        expect(Number(response.body.data[0].goals)).toBe(30);
+      });
+
+      it('groups goals by screen_width with correct values', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metrics: ['goals'],
+            dimensions: ['screen_width'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(response.body.data.length).toBe(1);
+        expect(Number(response.body.data[0].screen_width)).toBe(1920);
+        expect(Number(response.body.data[0].goals)).toBe(30);
+      });
+
+      it('groups goals by landing_domain with correct values', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metrics: ['goals'],
+            dimensions: ['landing_domain'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(response.body.data.length).toBe(1);
+        expect(response.body.data[0].landing_domain).toBe('test.com');
+        expect(Number(response.body.data[0].goals)).toBe(30);
+      });
+
+      it('groups goals by connection_type with correct values', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metrics: ['goals'],
+            dimensions: ['connection_type'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(response.body.data.length).toBe(1);
+        expect(response.body.data[0].connection_type).toBe('wifi');
+        expect(Number(response.body.data[0].goals)).toBe(30);
+      });
+
+      it('filters goals by is_weekend with correct counts', async () => {
+        // baseDate is 2025-12-01 which is a Monday, goals span multiple days
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metrics: ['goals'],
+            dimensions: ['is_weekend'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        // Should have both weekend and weekday goals
+        expect(response.body.data.length).toBeGreaterThanOrEqual(1);
+        const totalGoals = response.body.data.reduce(
+          (sum: number, d: { goals: string }) => sum + Number(d.goals),
+          0,
+        );
+        expect(totalGoals).toBe(30);
+      });
+
+      it('groups goals by year/month/day with correct values', async () => {
+        const response = await request(ctx.app.getHttpServer())
+          .post('/api/analytics.query')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            workspace_id: workspaceId,
+            table: 'goals',
+            metrics: ['goals'],
+            dimensions: ['year', 'month', 'day'],
+            dateRange: { start: '2025-12-01', end: '2025-12-31' },
+          })
+          .expect(200);
+
+        expect(response.body.data.length).toBeGreaterThan(0);
+        // First goal is on 2025-12-01
+        const dec1 = response.body.data.find(
+          (d: { year: number; month: number; day: number }) =>
+            d.year === 2025 && d.month === 12 && d.day === 1,
+        );
+        expect(dec1).toBeDefined();
+        expect(Number(dec1.goals)).toBeGreaterThan(0);
       });
     });
   });

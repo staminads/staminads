@@ -302,12 +302,17 @@ export function createMetricChartOption(
         const deltaColor = (metric.invertTrend ? delta <= 0 : delta >= 0) ? '#10b981' : '#ef4444'
 
         return `
-          <div style="font-weight: 500; margin-bottom: 4px;">${p[0].axisValue}</div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="color: ${metric.color};">${metric.label}:</span>
+          <div style="font-weight: 500; margin-bottom: 8px;">${p[0].axisValue}</div>
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${metric.color};"></span>
+            <span>${currentLabel}:</span>
             <span style="font-weight: 600;">${formatValue(currentVal, metric.format)}</span>
-            <span style="color: #9ca3af;">vs ${formatValue(previousVal, metric.format)}</span>
-            <span style="color: ${deltaColor}; font-weight: 500;">(${sign}${delta.toFixed(1)}%)</span>
+            <span style="color: ${deltaColor}; font-weight: 500;">${sign}${delta.toFixed(1)}%</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #9ca3af;"></span>
+            <span>${previousLabel}:</span>
+            <span style="font-weight: 600; color: #6b7280;">${formatValue(previousVal, metric.format)}</span>
           </div>
         `
       }

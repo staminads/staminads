@@ -29,7 +29,7 @@ export const DIMENSIONS: Record<string, DimensionDefinition> = {
     column: 'referrer_path',
     type: 'string',
     category: 'Traffic',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   is_direct: {
     name: 'is_direct',
@@ -105,7 +105,7 @@ export const DIMENSIONS: Record<string, DimensionDefinition> = {
     column: 'landing_domain',
     type: 'string',
     category: 'Session Pages',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   landing_path: {
     name: 'landing_path',
@@ -179,7 +179,7 @@ export const DIMENSIONS: Record<string, DimensionDefinition> = {
     column: 'browser_type',
     type: 'string',
     category: 'Device',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   os: {
     name: 'os',
@@ -193,35 +193,35 @@ export const DIMENSIONS: Record<string, DimensionDefinition> = {
     column: 'screen_width',
     type: 'number',
     category: 'Device',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   screen_height: {
     name: 'screen_height',
     column: 'screen_height',
     type: 'number',
     category: 'Device',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   viewport_width: {
     name: 'viewport_width',
     column: 'viewport_width',
     type: 'number',
     category: 'Device',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   viewport_height: {
     name: 'viewport_height',
     column: 'viewport_height',
     type: 'number',
     category: 'Device',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   connection_type: {
     name: 'connection_type',
     column: 'connection_type',
     type: 'string',
     category: 'Device',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
 
   // Session (sessions only)
@@ -240,58 +240,58 @@ export const DIMENSIONS: Record<string, DimensionDefinition> = {
     tables: ['sessions'],
   },
 
-  // Time (sessions only)
+  // Time (sessions and goals)
   year: {
     name: 'year',
     column: 'year',
     type: 'number',
     category: 'Time',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   month: {
     name: 'month',
     column: 'month',
     type: 'number',
     category: 'Time',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   day: {
     name: 'day',
     column: 'day',
     type: 'number',
     category: 'Time',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   day_of_week: {
     name: 'day_of_week',
     column: 'day_of_week',
     type: 'number',
     category: 'Time',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   week_number: {
     name: 'week_number',
     column: 'week_number',
     type: 'number',
     category: 'Time',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   hour: {
     name: 'hour',
     column: 'hour',
     type: 'number',
     category: 'Time',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   is_weekend: {
     name: 'is_weekend',
     column: 'is_weekend',
     type: 'boolean',
     category: 'Time',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
 
-  // Geo (sessions and some on goals)
+  // Geo (sessions and goals)
   country: {
     name: 'country',
     column: 'country',
@@ -318,14 +318,14 @@ export const DIMENSIONS: Record<string, DimensionDefinition> = {
     column: 'latitude',
     type: 'number',
     category: 'Geo',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   longitude: {
     name: 'longitude',
     column: 'longitude',
     type: 'number',
     category: 'Geo',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
   language: {
     name: 'language',
@@ -339,7 +339,7 @@ export const DIMENSIONS: Record<string, DimensionDefinition> = {
     column: 'timezone',
     type: 'string',
     category: 'Geo',
-    tables: ['sessions'],
+    tables: ['sessions', 'goals'],
   },
 
   // Custom Dimensions (sessions and goals)
