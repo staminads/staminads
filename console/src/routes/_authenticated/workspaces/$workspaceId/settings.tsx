@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useSuspenseQuery, useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
-import { Form, Input, InputNumber, Button, Select, message, Table, Tag, Modal, Avatar, Spin, Tooltip } from 'antd'
+import { Form, Input, InputNumber, Button, Select, message, Table, Tag, Modal, Avatar, Spin, Tooltip, Switch } from 'antd'
 import { SearchOutlined, EditOutlined, LoadingOutlined, PlusOutlined, InfoCircleOutlined } from '@ant-design/icons'
 import { api } from '../../../../lib/api'
 import { workspaceQueryOptions } from '../../../../lib/queries'
@@ -14,7 +14,7 @@ import { ApiKeysPage } from '../../../../pages/settings/api-keys'
 import { z } from 'zod'
 
 const settingsSearchSchema = z.object({
-  section: z.enum(['workspace', 'dimensions', 'team', 'integrations', 'smtp', 'api-keys', 'sdk']).optional().default('workspace'),
+  section: z.enum(['workspace', 'dimensions', 'team', 'integrations', 'smtp', 'api-keys', 'privacy', 'sdk']).optional().default('workspace'),
 })
 
 export const Route = createFileRoute('/_authenticated/workspaces/$workspaceId/settings')({
@@ -55,7 +55,7 @@ const currencyOptions = [
   { value: 'BRL', label: 'BRL - Brazilian Real' },
 ]
 
-type SettingsSection = 'workspace' | 'dimensions' | 'team' | 'integrations' | 'smtp' | 'api-keys' | 'sdk'
+type SettingsSection = 'workspace' | 'dimensions' | 'team' | 'integrations' | 'smtp' | 'api-keys' | 'privacy' | 'sdk'
 
 const menuItems: { key: SettingsSection; label: string }[] = [
   { key: 'workspace', label: 'Workspace' },
@@ -64,6 +64,7 @@ const menuItems: { key: SettingsSection; label: string }[] = [
   { key: 'integrations', label: 'Integrations' },
   { key: 'smtp', label: 'Email (SMTP)' },
   { key: 'api-keys', label: 'API Keys' },
+  { key: 'privacy', label: 'Privacy' },
   { key: 'sdk', label: 'Install SDK' },
 ]
 
@@ -119,6 +120,10 @@ function Settings() {
   const [newLabel, setNewLabel] = useState('')
   const [allowedDomains, setAllowedDomains] = useState<string[]>(workspace.settings.allowed_domains || [])
   const [domainInput, setDomainInput] = useState('')
+  const [geoEnabled, setGeoEnabled] = useState(workspace.settings.geo_enabled ?? true)
+  const [geoStoreCity, setGeoStoreCity] = useState(workspace.settings.geo_store_city ?? true)
+  const [geoStoreRegion, setGeoStoreRegion] = useState(workspace.settings.geo_store_region ?? true)
+  const [geoCoordinatesPrecision, setGeoCoordinatesPrecision] = useState(workspace.settings.geo_coordinates_precision ?? 2)
 
   const updateWorkspaceMutation = useMutation({
     mutationFn: api.workspaces.update,
@@ -240,6 +245,19 @@ function Settings() {
 
   const handleRemoveDomain = (domain: string) => {
     setAllowedDomains(allowedDomains.filter(d => d !== domain))
+  }
+
+  const savePrivacySettings = () => {
+    updateWorkspaceMutation.mutate({
+      id: workspaceId,
+      settings: {
+        ...workspace.settings,
+        geo_enabled: geoEnabled,
+        geo_store_city: geoStoreCity,
+        geo_store_region: geoStoreRegion,
+        geo_coordinates_precision: geoCoordinatesPrecision,
+      },
+    })
   }
 
   const workspaceContent = (
@@ -516,6 +534,71 @@ window.StaminadsConfig = {
     </div>
   )
 
+  const privacyContent = (
+    <div className="bg-white p-6 rounded-lg shadow-sm max-w-xl">
+      <h3 className="text-lg font-medium mb-4">Geographic Data Collection</h3>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-medium">Enable geo-location tracking</div>
+            <div className="text-sm text-gray-500">Track visitor country, region, city, and coordinates</div>
+          </div>
+          <Switch checked={geoEnabled} onChange={setGeoEnabled} />
+        </div>
+
+        {geoEnabled && (
+          <div className="ml-6 border-l-2 border-gray-100 pl-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-medium">Store city name</div>
+                <div className="text-sm text-gray-500">Record the city of visitors</div>
+              </div>
+              <Switch checked={geoStoreCity} onChange={setGeoStoreCity} />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-medium">Store region/state name</div>
+                <div className="text-sm text-gray-500">Record the region or state of visitors</div>
+              </div>
+              <Switch checked={geoStoreRegion} onChange={setGeoStoreRegion} />
+            </div>
+
+            <div>
+              <div className="font-medium mb-1">Coordinates precision</div>
+              <div className="text-sm text-gray-500 mb-2">Lower precision = more privacy</div>
+              <Select
+                value={geoCoordinatesPrecision}
+                onChange={setGeoCoordinatesPrecision}
+                style={{ width: '100%' }}
+                options={[
+                  { value: 0, label: 'Country level (~111km precision)' },
+                  { value: 1, label: 'Regional (~11km precision)' },
+                  { value: 2, label: 'City level (~1km precision)' },
+                ]}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-6 p-3 bg-blue-50 rounded text-sm text-blue-700">
+        IP addresses are never stored — only used for geo lookup. Country is always included when geo tracking is enabled.
+      </div>
+
+      <div className="mt-6">
+        <Button
+          type="primary"
+          onClick={savePrivacySettings}
+          loading={updateWorkspaceMutation.isPending}
+        >
+          Save Changes
+        </Button>
+      </div>
+    </div>
+  )
+
   return (
     <div className="flex-1 p-6">
       <h1 className="hidden md:block text-2xl font-light text-gray-800 mb-6">Settings</h1>
@@ -551,6 +634,7 @@ window.StaminadsConfig = {
           {section === 'integrations' && <IntegrationsSettings workspace={workspace} />}
           {section === 'smtp' && <SmtpPage workspaceId={workspaceId} />}
           {section === 'api-keys' && <ApiKeysPage workspaceId={workspaceId} />}
+          {section === 'privacy' && privacyContent}
           {section === 'sdk' && sdkContent}
         </div>
       </div>

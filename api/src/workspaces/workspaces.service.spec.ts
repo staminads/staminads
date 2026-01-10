@@ -315,6 +315,11 @@ describe('WorkspacesService', () => {
 
       expect(result.settings.timescore_reference).toBe(180);
       expect(result.settings.bounce_threshold).toBe(10); // unchanged
+      // Geo settings should be preserved
+      expect(result.settings.geo_enabled).toBe(true);
+      expect(result.settings.geo_store_city).toBe(true);
+      expect(result.settings.geo_store_region).toBe(true);
+      expect(result.settings.geo_coordinates_precision).toBe(2);
     });
 
     it('preserves annotations when updating other settings', async () => {

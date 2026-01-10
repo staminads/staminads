@@ -16,6 +16,8 @@ import {
 import { Integration } from './entities/integration.entity';
 import { encryptApiKey, generateId } from '../common/crypto';
 import { toClickHouseDateTime } from '../common/utils/datetime.util';
+import { getDefaultFilters } from './fixtures/default-filters';
+import { BackfillTask } from '../filters/backfill/backfill-task.entity';
 
 interface CurrentUser {
   id: string;
@@ -133,6 +135,11 @@ export class WorkspacesService {
       ...(dto.settings || {}),
     };
 
+    // Apply default filters if none provided
+    if (!settings.filters || settings.filters.length === 0) {
+      settings.filters = getDefaultFilters();
+    }
+
     const workspace: Workspace = {
       id: dto.id,
       name: dto.name,
@@ -168,6 +175,32 @@ export class WorkspacesService {
         updated_at: now,
       },
     ]);
+
+    // 4. Create completed backfill task to mark default filters as synced
+    // This prevents the "Filters out of sync" warning in the UI
+    if (settings.filters && settings.filters.length > 0) {
+      const backfillTask: BackfillTask = {
+        id: generateId(),
+        workspace_id: dto.id,
+        status: 'completed',
+        lookback_days: 0,
+        chunk_size_days: 1,
+        batch_size: 1000,
+        total_sessions: 0,
+        processed_sessions: 0,
+        total_events: 0,
+        processed_events: 0,
+        current_date_chunk: null,
+        created_at: now,
+        updated_at: now,
+        started_at: now,
+        completed_at: now,
+        error_message: null,
+        retry_count: 0,
+        filters_snapshot: JSON.stringify(settings.filters),
+      };
+      await this.clickhouse.insertSystem('backfill_tasks', [backfillTask]);
+    }
 
     // Status remains 'initializing' until first event is received
     return workspace;

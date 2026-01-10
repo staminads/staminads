@@ -5,6 +5,12 @@ import { Link } from '@tanstack/react-router'
 import { analyticsQueryOptions } from '../../lib/queries'
 import type { AnalyticsQuery, AnalyticsResponse } from '../../types/analytics'
 
+/** Extract major version number from semver string (e.g., "3.2.0" -> 3) */
+function getMajorVersion(version: string): number | null {
+  const match = version.match(/^(\d+)\./)
+  return match ? parseInt(match[1], 10) : null
+}
+
 interface SdkVersionWarningProps {
   workspaceId: string
   timezone: string
@@ -41,12 +47,13 @@ export function SdkVersionWarning({ workspaceId, timezone }: SdkVersionWarningPr
   // If no versions found, no sessions have been tracked
   if (versions.length === 0) return null
 
-  // Check if current app version exists in the results
+  // Only warn on major version mismatch (not minor/patch)
   const currentVersion = __APP_VERSION__
-  const hasCurrentVersion = versions.includes(currentVersion)
+  const currentMajor = getMajorVersion(currentVersion)
+  const hasMatchingMajor = versions.some(v => getMajorVersion(v) === currentMajor)
 
-  // If current version is found, no warning needed
-  if (hasCurrentVersion) return null
+  // If any tracked version has the same major version, no warning needed
+  if (hasMatchingMajor) return null
 
   return (
     <Alert

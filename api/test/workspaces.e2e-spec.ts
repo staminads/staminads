@@ -537,6 +537,11 @@ describe('Workspaces Integration', () => {
       expect(response.body.currency).toBe('JPY');
       // Updated field should apply
       expect(response.body.settings.timescore_reference).toBe(120);
+      // Geo settings should be preserved (defaults)
+      expect(response.body.settings.geo_enabled).toBe(true);
+      expect(response.body.settings.geo_store_city).toBe(true);
+      expect(response.body.settings.geo_store_region).toBe(true);
+      expect(response.body.settings.geo_coordinates_precision).toBe(2);
     });
 
     it('updates bounce_threshold', async () => {
