@@ -587,16 +587,15 @@ describe('V3 Session Payload E2E', () => {
       // First payload WITH attributes (simulates SDK session init)
       const payload1 = createSessionPayload({
         session_id: sessionId,
-        actions: [
-          createPageviewAction({ path: '/page1', page_number: 1 }),
-        ],
+        actions: [createPageviewAction({ path: '/page1', page_number: 1 })],
         attributes: {
           landing_page: 'https://example.com/',
           device: 'desktop',
           browser: 'Chrome',
           browser_type: 'browser',
           os: 'Windows',
-          user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
+          user_agent:
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
           connection_type: '4g',
           language: 'en-US',
           timezone: 'America/New_York',

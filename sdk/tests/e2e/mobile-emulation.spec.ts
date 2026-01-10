@@ -83,9 +83,10 @@ test.describe('Mobile Emulation', () => {
     const payloadWithGoal = payloads.find((p) => hasGoal(p, 'scroll_check'));
     expect(payloadWithGoal).toBeTruthy();
 
-    // Check current_page exists (scroll may be 0 if page isn't tall enough)
-    expect(payloadWithGoal?.current_page).toBeDefined();
-    expect(typeof payloadWithGoal?.current_page?.scroll).toBe('number');
+    // V3: Current page is in actions[] (no more current_page field)
+    const pageviewActions = payloadWithGoal?.actions.filter((a) => a.type === 'pageview') || [];
+    expect(pageviewActions.length).toBeGreaterThan(0);
+    expect(typeof pageviewActions[0].scroll).toBe('number');
   });
 
   test('uses shorter heartbeat interval on mobile (7s)', async ({ page }) => {
@@ -286,9 +287,10 @@ test.describe('Mobile Emulation', () => {
     const payloadWithGoal = payloads.find((p) => hasGoal(p, 'scroll_final'));
     expect(payloadWithGoal).toBeTruthy();
 
-    // Check current_page exists (scroll tracking depends on page being scrollable)
-    expect(payloadWithGoal?.current_page).toBeDefined();
-    expect(typeof payloadWithGoal?.current_page?.scroll).toBe('number');
+    // V3: Current page is in actions[] (no more current_page field)
+    const pageviewActions = payloadWithGoal?.actions.filter((a) => a.type === 'pageview') || [];
+    expect(pageviewActions.length).toBeGreaterThan(0);
+    expect(typeof pageviewActions[0].scroll).toBe('number');
   });
 
   test('mobile user agent is detected', async ({ page }) => {

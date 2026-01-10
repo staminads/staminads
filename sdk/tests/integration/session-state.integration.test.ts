@@ -60,21 +60,30 @@ describe('SessionState', () => {
       expect(sessionState.getActions()).toEqual([]);
     });
 
-    it('starts with null currentPage', () => {
+    it('starts with null currentPage (no page being viewed)', () => {
       expect(sessionState.getCurrentPage()).toBeNull();
-    });
-
-    it('starts with checkpoint -1 (no checkpoint)', () => {
-      expect(sessionState.getCheckpoint()).toBe(-1);
-    });
-
-    it('starts with attributesSent false', () => {
-      expect(sessionState.hasAttributesSent()).toBe(false);
     });
   });
 
   describe('addPageview - first page', () => {
-    it('sets currentPage when no previous page', () => {
+    it('adds page to actions array immediately with duration=0', () => {
+      sessionState.addPageview('/home');
+
+      // Page should be in actions immediately (not waiting for navigation)
+      const actions = sessionState.getActions();
+      expect(actions).toHaveLength(1);
+      expect(actions[0].type).toBe('pageview');
+
+      const pageview = actions[0] as PageviewAction;
+      expect(pageview.path).toBe('/home');
+      expect(pageview.page_number).toBe(1);
+      expect(pageview.scroll).toBe(0);
+      expect(pageview.duration).toBe(0); // Initial duration is 0
+      expect(pageview.entered_at).toBeGreaterThan(0);
+      expect(pageview.exited_at).toBe(pageview.entered_at); // Not exited yet
+    });
+
+    it('getCurrentPage returns current page info derived from actions', () => {
       sessionState.addPageview('/home');
 
       const currentPage = sessionState.getCurrentPage();
@@ -84,35 +93,40 @@ describe('SessionState', () => {
       expect(currentPage?.scroll).toBe(0);
       expect(currentPage?.entered_at).toBeGreaterThan(0);
     });
-
-    it('does not add to actions array (page not completed)', () => {
-      sessionState.addPageview('/home');
-
-      expect(sessionState.getActions()).toHaveLength(0);
-    });
   });
 
   describe('addPageview - navigation', () => {
     beforeEach(() => {
+      // First page added to actions with duration=0
       sessionState.addPageview('/home');
-      // Simulate time on page
+      // Simulate time on page (for focus time tracking)
       vi.advanceTimersByTime(5000);
       sessionState.updateScroll(75);
     });
 
-    it('finalizes previous page into actions array', () => {
+    it('finalizes previous page and adds new page to actions', () => {
+      // Set up focus time getter to return 5000ms (simulating focus time)
+      sessionState.setFocusTimeGetter(() => 5000);
+
       sessionState.addPageview('/about');
 
       const actions = sessionState.getActions();
-      expect(actions).toHaveLength(1);
-      expect(actions[0].type).toBe('pageview');
+      // Both pages should be in actions: home (finalized) + about (new)
+      expect(actions).toHaveLength(2);
 
-      const pageview = actions[0] as PageviewAction;
-      expect(pageview.path).toBe('/home');
-      expect(pageview.page_number).toBe(1);
-      expect(pageview.scroll).toBe(75);
-      expect(pageview.duration).toBeGreaterThanOrEqual(5000);
-      expect(pageview.exited_at).toBeGreaterThan(pageview.entered_at);
+      // First page (home) should have final duration
+      const homePage = actions[0] as PageviewAction;
+      expect(homePage.path).toBe('/home');
+      expect(homePage.page_number).toBe(1);
+      expect(homePage.scroll).toBe(75);
+      expect(homePage.duration).toBe(5000); // Focus time from getter
+      expect(homePage.exited_at).toBeGreaterThan(homePage.entered_at);
+
+      // Second page (about) should have duration=0
+      const aboutPage = actions[1] as PageviewAction;
+      expect(aboutPage.path).toBe('/about');
+      expect(aboutPage.page_number).toBe(2);
+      expect(aboutPage.duration).toBe(0); // Just started
     });
 
     it('sets new currentPage with incremented page_number', () => {
@@ -125,14 +139,16 @@ describe('SessionState', () => {
     });
 
     it('increments page_number for each navigation', () => {
-      sessionState.addPageview('/about'); // page 2
-      sessionState.addPageview('/contact'); // page 3
-      sessionState.addPageview('/pricing'); // page 4
+      sessionState.addPageview('/about'); // page 2 added
+      sessionState.addPageview('/contact'); // page 3 added
+      sessionState.addPageview('/pricing'); // page 4 added
 
       const actions = sessionState.getActions();
-      expect(actions.map((a) => (a as PageviewAction).page_number)).toEqual([
-        1, 2, 3,
-      ]);
+      // All 4 pages should be in actions
+      const pageviews = actions.filter(
+        (a) => a.type === 'pageview',
+      ) as PageviewAction[];
+      expect(pageviews.map((p) => p.page_number)).toEqual([1, 2, 3, 4]);
 
       expect(sessionState.getCurrentPage()?.page_number).toBe(4);
     });
@@ -140,17 +156,20 @@ describe('SessionState', () => {
 
   describe('addGoal', () => {
     beforeEach(() => {
+      // addPageview now adds page to actions immediately
       sessionState.addPageview('/checkout');
     });
 
-    it('adds goal action to actions array', () => {
+    it('adds goal action to actions array after pageview', () => {
       sessionState.addGoal('purchase', 99.99);
 
       const actions = sessionState.getActions();
-      expect(actions).toHaveLength(1);
-      expect(actions[0].type).toBe('goal');
+      // actions[0] = pageview (checkout), actions[1] = goal
+      expect(actions).toHaveLength(2);
+      expect(actions[0].type).toBe('pageview');
+      expect(actions[1].type).toBe('goal');
 
-      const goal = actions[0] as GoalAction;
+      const goal = actions[1] as GoalAction;
       expect(goal.name).toBe('purchase');
       expect(goal.value).toBe(99.99);
       expect(goal.path).toBe('/checkout');
@@ -161,18 +180,20 @@ describe('SessionState', () => {
     it('adds goal with optional properties', () => {
       sessionState.addGoal('signup', undefined, { plan: 'premium' });
 
-      const goal = sessionState.getActions()[0] as GoalAction;
+      // Goal is second action after pageview
+      const goal = sessionState.getActions()[1] as GoalAction;
       expect(goal.properties).toEqual({ plan: 'premium' });
       expect(goal.value).toBeUndefined();
     });
 
-    it('goal does not finalize currentPage', () => {
+    it('goal does not affect currentPage index', () => {
       sessionState.addGoal('add_to_cart', 50);
 
-      // currentPage should still be active
+      // currentPage should still point to checkout
       expect(sessionState.getCurrentPage()?.path).toBe('/checkout');
-      // Only goal in actions, no pageview
-      expect(sessionState.getActions()[0].type).toBe('goal');
+      // actions = [pageview, goal]
+      expect(sessionState.getActions()[0].type).toBe('pageview');
+      expect(sessionState.getActions()[1].type).toBe('goal');
     });
 
     it('multiple goals on same page have same page_number', () => {
@@ -180,7 +201,11 @@ describe('SessionState', () => {
       sessionState.addGoal('add_to_cart', 50);
       sessionState.addGoal('begin_checkout');
 
-      const goals = sessionState.getActions() as GoalAction[];
+      // actions = [pageview, goal, goal, goal]
+      const goals = sessionState
+        .getActions()
+        .filter((a) => a.type === 'goal') as GoalAction[];
+      expect(goals).toHaveLength(3);
       expect(goals.every((g) => g.page_number === 1)).toBe(true);
     });
   });
@@ -231,7 +256,7 @@ describe('SessionState', () => {
       browser: 'Chrome',
     };
 
-    it('includes all actions in payload', () => {
+    it('includes all actions in payload (pages added immediately)', () => {
       sessionState.addPageview('/home');
       sessionState.addGoal('signup');
       sessionState.addPageview('/dashboard');
@@ -239,25 +264,31 @@ describe('SessionState', () => {
       const payload = sessionState.buildPayload(mockAttributes);
 
       // Actions are added in order:
-      // 1. Goal added while on /home
-      // 2. Navigation to /dashboard finalizes /home pageview
-      expect(payload.actions).toHaveLength(2);
-      expect(payload.actions[0].type).toBe('goal'); // signup goal added first
-      expect(payload.actions[1].type).toBe('pageview'); // home pageview finalized on navigation
+      // 1. /home pageview (with duration=0 initially)
+      // 2. signup goal
+      // 3. /dashboard pageview (when navigation happens, home is finalized)
+      expect(payload.actions).toHaveLength(3);
+      expect(payload.actions[0].type).toBe('pageview'); // home
+      expect(payload.actions[1].type).toBe('goal'); // signup
+      expect(payload.actions[2].type).toBe('pageview'); // dashboard
     });
 
-    it('includes current_page if present', () => {
+    it('does NOT include current_page field (page is in actions)', () => {
       sessionState.addPageview('/current');
       sessionState.updateScroll(30);
 
       const payload = sessionState.buildPayload(mockAttributes);
 
-      expect(payload.current_page).toBeDefined();
-      expect(payload.current_page?.path).toBe('/current');
-      expect(payload.current_page?.scroll).toBe(30);
+      // No more current_page field - page is in actions[]
+      expect(payload.current_page).toBeUndefined();
+
+      // Current page should be in actions with scroll
+      const pageview = payload.actions[0] as PageviewAction;
+      expect(pageview.path).toBe('/current');
+      expect(pageview.scroll).toBe(30);
     });
 
-    it('includes attributes on first send only', () => {
+    it('includes attributes in EVERY payload (no attributesSent optimization)', () => {
       sessionState.addPageview('/home');
 
       // First payload - includes attributes
@@ -265,20 +296,19 @@ describe('SessionState', () => {
       expect(payload1.attributes).toBeDefined();
       expect(payload1.attributes?.landing_page).toBe('https://example.com/home');
 
-      sessionState.markAttributesSent();
-
-      // Second payload - no attributes
+      // Second payload - STILL includes attributes (no optimization)
       const payload2 = sessionState.buildPayload(mockAttributes);
-      expect(payload2.attributes).toBeUndefined();
+      expect(payload2.attributes).toBeDefined();
+      expect(payload2.attributes?.landing_page).toBe('https://example.com/home');
     });
 
-    it('includes checkpoint if set', () => {
+    it('does NOT include checkpoint field (removed)', () => {
       sessionState.addPageview('/home');
-      sessionState.applyCheckpoint(0);
 
       const payload = sessionState.buildPayload(mockAttributes);
 
-      expect(payload.checkpoint).toBe(0);
+      // No checkpoint field in V3 format
+      expect(payload.checkpoint).toBeUndefined();
     });
 
     it('includes session metadata', () => {
@@ -294,71 +324,16 @@ describe('SessionState', () => {
     });
   });
 
-  describe('checkpoint', () => {
-    it('applyCheckpoint updates checkpoint value', () => {
-      sessionState.addPageview('/home');
-      sessionState.addGoal('signup');
-      sessionState.applyCheckpoint(1);
-
-      expect(sessionState.getCheckpoint()).toBe(1);
-    });
-
-    it('applyCheckpoint only increases (never decreases)', () => {
-      sessionState.applyCheckpoint(5);
-      sessionState.applyCheckpoint(3); // Lower value, should be ignored
-
-      expect(sessionState.getCheckpoint()).toBe(5);
-    });
-
-    it('payload includes checkpoint for server-side filtering', () => {
-      // Cumulative payload approach:
-      // - SDK always sends ALL actions (cumulative)
-      // - Checkpoint tells server which actions to skip (index <= checkpoint)
-      // - Server processes only actions with index > checkpoint
-
-      sessionState.addPageview('/page1'); // Will become action 0
-      sessionState.addPageview('/page2'); // action 0 finalized, becomes action[0]
-      // At this point: actions = [page1], currentPage = page2
-
-      // Server responds with checkpoint = 0 (acked action[0])
-      sessionState.applyCheckpoint(0);
-
-      sessionState.addPageview('/page3'); // page2 finalized, becomes action[1]
-      // At this point: actions = [page1, page2], currentPage = page3
-
-      const payload = sessionState.buildPayload({
-        landing_page: 'https://example.com',
-      });
-
-      // Payload includes ALL actions (cumulative)
-      expect(payload.actions).toHaveLength(2); // page1 + page2 (page3 is currentPage)
-
-      // Checkpoint tells server to skip actions[0] (already processed)
-      expect(payload.checkpoint).toBe(0);
-
-      // Server will only process actions[1] (page2)
-    });
-
-    it('no checkpoint in payload when none acknowledged', () => {
-      sessionState.addPageview('/home');
-
-      const payload = sessionState.buildPayload({
-        landing_page: 'https://example.com',
-      });
-
-      // No checkpoint yet (first send)
-      expect(payload.checkpoint).toBeUndefined();
-    });
-  });
-
   describe('finalizeForUnload', () => {
-    it('converts currentPage to action', () => {
+    it('updates duration on current page action and clears currentPageIndex', () => {
+      // Set up focus time getter
+      sessionState.setFocusTimeGetter(() => 10000);
       sessionState.addPageview('/article');
-      vi.advanceTimersByTime(10000);
       sessionState.updateScroll(80);
 
       sessionState.finalizeForUnload();
 
+      // Page was already in actions, just updated
       const actions = sessionState.getActions();
       expect(actions).toHaveLength(1);
       expect(actions[0].type).toBe('pageview');
@@ -366,7 +341,7 @@ describe('SessionState', () => {
       const pageview = actions[0] as PageviewAction;
       expect(pageview.path).toBe('/article');
       expect(pageview.scroll).toBe(80);
-      expect(pageview.duration).toBeGreaterThanOrEqual(10000);
+      expect(pageview.duration).toBe(10000); // Focus time from getter
     });
 
     it('clears currentPage after finalize', () => {
@@ -399,7 +374,6 @@ describe('SessionState', () => {
     it('persist saves state to sessionStorage', () => {
       sessionState.addPageview('/home');
       sessionState.addGoal('test');
-      sessionState.applyCheckpoint(0);
 
       sessionState.persist();
 
@@ -407,24 +381,23 @@ describe('SessionState', () => {
       expect(stored).not.toBeNull();
 
       const parsed = JSON.parse(stored!);
-      expect(parsed.actions).toHaveLength(1); // Only goal, home not finalized
-      expect(parsed.checkpoint).toBe(0);
-      expect(parsed.currentPage).toBeDefined();
+      // Both pageview and goal in actions (page added immediately)
+      expect(parsed.actions).toHaveLength(2);
+      expect(parsed.currentPageIndex).toBe(0); // Points to pageview
     });
 
     it('restore loads state from sessionStorage', () => {
       // Setup initial state
       sessionState.addPageview('/home');
       sessionState.addGoal('signup');
-      sessionState.applyCheckpoint(0);
       sessionState.persist();
 
       // Create new instance and restore
       const newState = new SessionState(mockConfig);
       newState.restore();
 
-      expect(newState.getActions()).toHaveLength(1);
-      expect(newState.getCheckpoint()).toBe(0);
+      // Both pageview and goal restored
+      expect(newState.getActions()).toHaveLength(2);
       expect(newState.getCurrentPage()?.path).toBe('/home');
     });
 
@@ -445,9 +418,9 @@ describe('SessionState', () => {
     });
 
     it('restore validates session_id matches', () => {
-      // Store state with actual data (goal in actions[])
+      // Store state with actual data
       sessionState.addPageview('/home');
-      sessionState.addGoal('test_goal'); // This adds to actions[]
+      sessionState.addGoal('test_goal');
       sessionState.persist();
 
       // Create state for different session
@@ -513,17 +486,21 @@ describe('SessionState', () => {
       consoleSpy.mockRestore();
     });
 
-    it('pageview navigations are not blocked by MAX_ACTIONS', () => {
+    it('pageview navigations are blocked by MAX_ACTIONS', () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
       // Fill up with goals
       for (let i = 0; i < MAX_ACTIONS; i++) {
         sessionState.addGoal(`goal_${i}`);
       }
 
-      // Navigation should still work (triggers checkpoint/send)
+      // addPageview should NOT work when at limit (pageviews now count toward limit)
       sessionState.addPageview('/important');
 
-      // currentPage should be set
-      expect(sessionState.getCurrentPage()?.path).toBe('/important');
+      // currentPage should NOT be set (blocked)
+      expect(sessionState.getCurrentPage()).toBeNull();
+
+      consoleSpy.mockRestore();
     });
 
     it('addGoal returns true when under limit, false when at limit', () => {
@@ -537,6 +514,65 @@ describe('SessionState', () => {
 
       // Should return false when at limit
       expect(sessionState.addGoal('over_limit')).toBe(false);
+    });
+  });
+
+  describe('focus time via callback', () => {
+    it('buildPayload uses focusTimeGetter for current page duration', () => {
+      sessionState.setFocusTimeGetter(() => 5000); // 5 seconds focus time
+      sessionState.addPageview('/home');
+
+      const payload = sessionState.buildPayload({
+        landing_page: 'https://example.com',
+      });
+
+      // Current page should have duration from focus time getter
+      expect(payload.actions[0].type).toBe('pageview');
+      expect((payload.actions[0] as PageviewAction).duration).toBe(5000);
+    });
+
+    it('navigation uses focusTimeGetter for previous page final duration', () => {
+      sessionState.setFocusTimeGetter(() => 3000);
+      sessionState.addPageview('/home');
+
+      // Simulate time passing, update focus getter
+      sessionState.setFocusTimeGetter(() => 7000);
+      sessionState.addPageview('/about');
+
+      // Previous page (home) should have final duration from getter
+      const homePage = sessionState.getActions()[0] as PageviewAction;
+      expect(homePage.duration).toBe(7000);
+
+      // New page (about) should start with duration=0
+      const aboutPage = sessionState.getActions()[1] as PageviewAction;
+      expect(aboutPage.duration).toBe(0);
+    });
+
+    it('updates exited_at when building payload', () => {
+      const initialTime = Date.now();
+      sessionState.setFocusTimeGetter(() => 1000);
+      sessionState.addPageview('/test');
+
+      vi.advanceTimersByTime(5000); // Advance time by 5 seconds
+
+      const payload = sessionState.buildPayload({
+        landing_page: 'https://example.com',
+      });
+
+      const pageview = payload.actions[0] as PageviewAction;
+      // exited_at should be updated to current time
+      expect(pageview.exited_at).toBeGreaterThan(initialTime);
+    });
+
+    it('without focusTimeGetter, uses 0 for duration', () => {
+      // No setter called - should default to 0
+      sessionState.addPageview('/home');
+
+      const payload = sessionState.buildPayload({
+        landing_page: 'https://example.com',
+      });
+
+      expect((payload.actions[0] as PageviewAction).duration).toBe(0);
     });
   });
 });

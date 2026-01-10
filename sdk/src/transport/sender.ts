@@ -160,8 +160,9 @@ export class Sender {
         };
       }
 
-      const data = await response.json();
-      return { success: true, checkpoint: data.checkpoint };
+      // V3: Server returns success, no checkpoint needed
+      await response.json();
+      return { success: true };
     } catch (error) {
       return {
         success: false,
@@ -208,16 +209,14 @@ export class Sender {
         };
       }
 
+      // V3: Server returns success, no checkpoint needed
       const data = await response.json();
 
       if (this.debug) {
         console.log('[Staminads] Session response:', data);
       }
 
-      return {
-        success: true,
-        checkpoint: data.checkpoint,
-      };
+      return { success: true };
     } catch (error) {
       clearTimeout(timeoutId);
 

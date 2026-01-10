@@ -166,6 +166,6 @@ export interface SessionDebugInfo {
   config: InternalConfig | null;
   isTracking: boolean;
   actionsCount: number;
-  checkpoint: number;
   currentPage: string | null;
+  pageActiveMs: number; // V3: Focus time for current page
 }

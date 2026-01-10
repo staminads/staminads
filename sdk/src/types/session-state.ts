@@ -75,14 +75,18 @@ export interface SessionAttributes {
 
 /**
  * Full session payload sent to /api/track
+ *
+ * V3 format: No current_page or checkpoint fields.
+ * Current page is included in actions[] with duration updated on each send.
+ * Server uses ReplacingMergeTree to deduplicate events.
  */
 export interface SessionPayload {
   workspace_id: string;
   session_id: string;
   actions: Action[];
-  current_page?: CurrentPage;
-  checkpoint?: number;
-  attributes?: SessionAttributes;
+  // current_page removed - page is now in actions[] with duration updating
+  // checkpoint removed - always send all actions, server deduplicates
+  attributes?: SessionAttributes; // Always included (no optimization)
   created_at: number;
   updated_at: number;
   sdk_version: string;
@@ -93,9 +97,9 @@ export interface SessionPayload {
  */
 export interface SessionStateSnapshot {
   actions: Action[];
-  currentPage: CurrentPage | null;
-  checkpoint: number;
-  attributesSent: boolean;
+  currentPageIndex: number | null; // Index into actions[] for current page
+  // checkpoint removed
+  // attributesSent removed - always send attributes
 }
 
 /**
@@ -103,7 +107,7 @@ export interface SessionStateSnapshot {
  */
 export interface SendResult {
   success: boolean;
-  checkpoint?: number; // Server's acknowledged checkpoint
+  // checkpoint removed - server uses ReplacingMergeTree for dedup
   error?: string;
   queued?: boolean; // Payload was queued for later (offline/timeout)
 }

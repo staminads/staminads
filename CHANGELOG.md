@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [4.0.0] - 2026-01-10
+
+### Breaking Changes
+
+**Complete data reset required.** V4 introduces a new SDK payload format and events table schema. There is no backward compatibility from V3 - all existing data will be deleted during migration.
+
+- New SDK V3 payload format: `actions[]` array replaces `current_page` and checkpoint-based syncing
+- New events table schema with updated field structure
+- Simplified SDK state management (no more `attributesSent` flag)
+- Attributes always sent with every payload for reliability
+
+### Migration
+
+When upgrading from V3 to V4:
+1. All workspace databases will be dropped
+2. All system database tables will be cleared (except migration settings)
+3. Fresh tables will be created on startup
+4. All analytics data will be lost - export before upgrading if needed
+
 ## [3.3.0] - 2026-01-10
 
 - Add Privacy settings tab with geo privacy controls (enable/disable geo tracking, city/region storage, coordinates precision)

@@ -97,16 +97,15 @@ describe('Sender', () => {
       expect(sentBody.sent_at).toBeDefined();
     });
 
-    it('returns success with checkpoint on successful response', async () => {
+    it('returns success on successful response', async () => {
       fetchMock.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({ success: true, checkpoint: 5 }),
+        json: () => Promise.resolve({ success: true }),
       });
 
       const result = await sender.sendSession(createPayload());
 
       expect(result.success).toBe(true);
-      expect(result.checkpoint).toBe(5);
     });
 
     it('returns error on HTTP failure', async () => {

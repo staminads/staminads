@@ -2,10 +2,14 @@
  * SessionState - Manages cumulative actions[] array for V3 session payload
  *
  * Key concepts:
- * - actions[]: Array of completed pageviews and goals
- * - currentPage: The page user is currently viewing (duration/scroll updating)
- * - checkpoint: Last acknowledged action index from server (for delta sending)
- * - attributesSent: Whether session attributes have been sent
+ * - actions[]: Array of pageviews and goals (pages added immediately with duration=0)
+ * - currentPageIndex: Index into actions[] for the page user is currently viewing
+ * - Focus time: Duration is tracked via callback to SDK's heartbeatState.pageActiveMs
+ *
+ * Changes in V3:
+ * - No separate currentPage field - page is in actions[] from the start
+ * - No checkpoint - always send all actions, server uses ReplacingMergeTree
+ * - No attributesSent optimization - always include attributes
  */
 
 import type {
@@ -30,9 +34,8 @@ export interface SessionStateConfig {
 
 export class SessionState {
   private actions: Action[] = [];
-  private currentPage: CurrentPage | null = null;
-  private checkpoint: number = -1; // -1 means no checkpoint
-  private attributesSent: boolean = false;
+  private currentPageIndex: number | null = null;
+  private getPageFocusMs: (() => number) | null = null;
 
   private readonly workspaceId: string;
   private readonly sessionId: string;
@@ -44,53 +47,93 @@ export class SessionState {
     this.createdAt = config.created_at;
   }
 
+  // === Focus Time Callback ===
+
+  /**
+   * Set the callback to get current page focus time from SDK's heartbeatState.
+   * This is used to track accurate page duration (visible time only).
+   */
+  setFocusTimeGetter(getter: () => number): void {
+    this.getPageFocusMs = getter;
+  }
+
   // === Getters ===
 
   getActions(): Action[] {
     return [...this.actions];
   }
 
+  /**
+   * Get current page info derived from actions[currentPageIndex].
+   * Returns null if no current page.
+   */
   getCurrentPage(): CurrentPage | null {
-    return this.currentPage ? { ...this.currentPage } : null;
-  }
+    if (this.currentPageIndex === null) return null;
+    const action = this.actions[this.currentPageIndex];
+    if (!action || action.type !== 'pageview') return null;
 
-  getCheckpoint(): number {
-    return this.checkpoint;
-  }
-
-  hasAttributesSent(): boolean {
-    return this.attributesSent;
+    return {
+      path: action.path,
+      page_number: action.page_number,
+      entered_at: action.entered_at,
+      scroll: action.scroll,
+    };
   }
 
   // === Page Tracking ===
 
   addPageview(path: string): void {
-    const now = Date.now();
-
-    // Finalize previous page if exists
-    if (this.currentPage) {
-      this.finalizeCurrentPage(now);
+    // Check MAX_ACTIONS limit (pageviews now consume action slots)
+    if (this.actions.length >= MAX_ACTIONS) {
+      console.warn(
+        `[SessionState] MAX_ACTIONS (${MAX_ACTIONS}) reached, pageview not added`,
+      );
+      return;
     }
 
-    // Start new page
+    const now = Date.now();
+
+    // Finalize previous page if exists (update its duration)
+    if (this.currentPageIndex !== null) {
+      this.finalizeCurrentPageDuration(now);
+    }
+
+    // Create new page action with duration=0
     const pageNumber = this.getNextPageNumber();
-    this.currentPage = {
+    const pageview: PageviewAction = {
+      type: 'pageview',
       path,
       page_number: pageNumber,
-      entered_at: now,
+      duration: 0, // Initial duration, updated on each send
       scroll: 0,
+      entered_at: now,
+      exited_at: now, // Will be updated on each send
     };
+
+    // Add to actions and set as current
+    this.actions.push(pageview);
+    this.currentPageIndex = this.actions.length - 1;
+
+    // Warn if approaching limit
+    if (this.actions.length >= MAX_ACTIONS * 0.9) {
+      console.warn(
+        `[SessionState] Approaching MAX_ACTIONS limit (${this.actions.length}/${MAX_ACTIONS})`,
+      );
+    }
   }
 
   updateScroll(scrollPercent: number): void {
-    if (!this.currentPage) return;
+    if (this.currentPageIndex === null) return;
+
+    const action = this.actions[this.currentPageIndex];
+    if (!action || action.type !== 'pageview') return;
 
     // Clamp to 0-100
     const clamped = Math.max(0, Math.min(100, scrollPercent));
 
     // Only update if higher (track max)
-    if (clamped > this.currentPage.scroll) {
-      this.currentPage.scroll = clamped;
+    if (clamped > action.scroll) {
+      action.scroll = clamped;
     }
   }
 
@@ -109,11 +152,17 @@ export class SessionState {
       return false;
     }
 
+    // Get current page info from actions
+    const currentPage =
+      this.currentPageIndex !== null
+        ? (this.actions[this.currentPageIndex] as PageviewAction)
+        : null;
+
     const goal: GoalAction = {
       type: 'goal',
       name,
-      path: this.currentPage?.path || '/',
-      page_number: this.currentPage?.page_number || 1,
+      path: currentPage?.path || '/',
+      page_number: currentPage?.page_number || 1,
       timestamp: Date.now(),
     };
 
@@ -140,52 +189,44 @@ export class SessionState {
   // === Payload Building ===
 
   buildPayload(attributes: SessionAttributes): SessionPayload {
+    // Update current page's duration and exited_at before building payload
+    if (this.currentPageIndex !== null) {
+      const action = this.actions[this.currentPageIndex];
+      if (action && action.type === 'pageview') {
+        // Get focus time from SDK (or 0 if no getter set)
+        action.duration = this.getPageFocusMs ? this.getPageFocusMs() : 0;
+        action.exited_at = Date.now();
+      }
+    }
+
     const payload: SessionPayload = {
       workspace_id: this.workspaceId,
       session_id: this.sessionId,
       actions: [...this.actions],
+      // Always include attributes (no optimization)
+      attributes,
       created_at: this.createdAt,
       updated_at: Date.now(),
       sdk_version: SDK_VERSION,
     };
 
-    // Include current page if present
-    if (this.currentPage) {
-      payload.current_page = { ...this.currentPage };
-    }
-
-    // Include checkpoint if set
-    if (this.checkpoint >= 0) {
-      payload.checkpoint = this.checkpoint;
-    }
-
-    // Include attributes only on first send
-    if (!this.attributesSent) {
-      payload.attributes = attributes;
-    }
-
     return payload;
-  }
-
-  // === Checkpoint Management ===
-
-  applyCheckpoint(newCheckpoint: number): void {
-    if (newCheckpoint > this.checkpoint) {
-      this.checkpoint = newCheckpoint;
-    }
-  }
-
-  markAttributesSent(): void {
-    this.attributesSent = true;
   }
 
   // === Unload Handling ===
 
   finalizeForUnload(): void {
-    if (!this.currentPage) return;
+    if (this.currentPageIndex === null) return;
 
-    this.finalizeCurrentPage(Date.now());
-    this.currentPage = null;
+    const action = this.actions[this.currentPageIndex];
+    if (action && action.type === 'pageview') {
+      // Update final duration and exit time
+      action.duration = this.getPageFocusMs ? this.getPageFocusMs() : 0;
+      action.exited_at = Date.now();
+    }
+
+    // Clear current page index
+    this.currentPageIndex = null;
   }
 
   // === Persistence ===
@@ -194,9 +235,7 @@ export class SessionState {
     try {
       const snapshot: SessionStateSnapshot = {
         actions: this.actions,
-        currentPage: this.currentPage,
-        checkpoint: this.checkpoint,
-        attributesSent: this.attributesSent,
+        currentPageIndex: this.currentPageIndex,
       };
 
       // Include session ID for validation on restore
@@ -228,9 +267,7 @@ export class SessionState {
 
       // Restore state
       this.actions = data.actions || [];
-      this.currentPage = data.currentPage || null;
-      this.checkpoint = data.checkpoint ?? -1;
-      this.attributesSent = data.attributesSent ?? false;
+      this.currentPageIndex = data.currentPageIndex ?? null;
     } catch (e) {
       // Corrupted data, ignore
       console.warn('[SessionState] Failed to restore:', e);
@@ -240,22 +277,19 @@ export class SessionState {
 
   // === Private Helpers ===
 
-  private finalizeCurrentPage(exitTime: number): void {
-    if (!this.currentPage) return;
+  /**
+   * Update the current page's duration when navigating away.
+   * Uses focus time from SDK's heartbeatState via callback.
+   */
+  private finalizeCurrentPageDuration(exitTime: number): void {
+    if (this.currentPageIndex === null) return;
 
-    const duration = exitTime - this.currentPage.entered_at;
+    const action = this.actions[this.currentPageIndex];
+    if (!action || action.type !== 'pageview') return;
 
-    const pageview: PageviewAction = {
-      type: 'pageview',
-      path: this.currentPage.path,
-      page_number: this.currentPage.page_number,
-      duration,
-      scroll: this.currentPage.scroll,
-      entered_at: this.currentPage.entered_at,
-      exited_at: exitTime,
-    };
-
-    this.actions.push(pageview);
+    // Get focus time from SDK (or 0 if no getter set)
+    action.duration = this.getPageFocusMs ? this.getPageFocusMs() : 0;
+    action.exited_at = exitTime;
   }
 
   private getNextPageNumber(): number {
@@ -266,11 +300,6 @@ export class SessionState {
       if (action.page_number > maxPageNumber) {
         maxPageNumber = action.page_number;
       }
-    }
-
-    // Current page would be next
-    if (this.currentPage && this.currentPage.page_number > maxPageNumber) {
-      maxPageNumber = this.currentPage.page_number;
     }
 
     return maxPageNumber + 1;

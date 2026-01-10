@@ -224,6 +224,9 @@ export class StaminadsSDK {
     this.sessionState = new SessionState(sessionStateConfig);
     this.sessionState.restore(); // Restore from sessionStorage if available
 
+    // Wire up focus time getter for accurate page duration tracking
+    this.sessionState.setFocusTimeGetter(() => this.getPageActiveMs());
+
     // Add initial pageview
     this.sessionState.addPageview(window.location.pathname);
 
@@ -674,6 +677,20 @@ export class StaminadsSDK {
   }
 
   /**
+   * Get current page's accumulated focus time in milliseconds.
+   * This only counts time when the tab is visible/focused.
+   * Used by SessionState to set accurate page duration.
+   */
+  private getPageActiveMs(): number {
+    let total = this.heartbeatState.pageActiveMs;
+    if (this.heartbeatState.isActive) {
+      // Add time since last focus start
+      total += Date.now() - this.heartbeatState.pageStartTime;
+    }
+    return total;
+  }
+
+  /**
    * Validate and normalize heartbeat tiers
    */
   private validateTiers(tiers: HeartbeatTier[]): HeartbeatTier[] {
@@ -723,6 +740,8 @@ export class StaminadsSDK {
 
   /**
    * Send session payload to server
+   * V3: Always sends all actions, always includes attributes.
+   * Server uses ReplacingMergeTree to deduplicate events.
    */
   private async sendPayload(): Promise<void> {
     if (!this.sessionState || !this.sender) return;
@@ -733,17 +752,7 @@ export class StaminadsSDK {
     const result = await this.sender.sendSession(payload);
 
     if (result.success) {
-      // Mark attributes as sent after first successful send
-      if (!this.sessionState.hasAttributesSent()) {
-        this.sessionState.markAttributesSent();
-      }
-
-      // Apply checkpoint from server
-      if (result.checkpoint !== undefined) {
-        this.sessionState.applyCheckpoint(result.checkpoint);
-      }
-
-      // Persist updated state
+      // Persist state after successful send
       this.sessionState.persist();
     }
   }
@@ -792,25 +801,30 @@ export class StaminadsSDK {
 
   /**
    * Get focus duration in milliseconds
-   * In V3, this is calculated from completed pageview durations + current page time
+   * In V3, this is calculated from pageview durations in actions[].
+   * Current page uses live focus time from heartbeatState.
    */
   async getFocusDuration(): Promise<number> {
     await this.ensureInitialized();
     if (!this.sessionState) return 0;
 
-    // Sum completed pageview durations
+    // Sum all pageview durations from actions
     const actions = this.sessionState.getActions();
     let total = 0;
-    for (const action of actions) {
-      if (action.type === 'pageview') {
+    const currentPage = this.sessionState.getCurrentPage();
+
+    for (let i = 0; i < actions.length; i++) {
+      const action = actions[i];
+      if (action.type !== 'pageview') continue;
+
+      // Check if this is the current page (by page_number match)
+      if (currentPage && action.page_number === currentPage.page_number) {
+        // Current page: use live focus time from heartbeatState
+        total += this.getPageActiveMs();
+      } else {
+        // Completed page: use stored duration
         total += action.duration;
       }
-    }
-
-    // Add current page time
-    const currentPage = this.sessionState.getCurrentPage();
-    if (currentPage) {
-      total += Date.now() - currentPage.entered_at;
     }
 
     return total;
@@ -948,6 +962,10 @@ export class StaminadsSDK {
       created_at: session.created_at,
     };
     this.sessionState = new SessionState(sessionStateConfig);
+
+    // Wire up focus time getter for accurate page duration tracking
+    this.sessionState.setFocusTimeGetter(() => this.getPageActiveMs());
+
     this.sessionState.addPageview(window.location.pathname);
 
     // Reset scroll and heartbeat
@@ -976,8 +994,8 @@ export class StaminadsSDK {
       config: this.config,
       isTracking: this.isTracking,
       actionsCount: this.sessionState?.getActions().length || 0,
-      checkpoint: this.sessionState?.getCheckpoint() || -1,
       currentPage: this.sessionState?.getCurrentPage()?.path || null,
+      pageActiveMs: this.getPageActiveMs(),
     };
   }
 

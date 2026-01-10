@@ -248,9 +248,9 @@ export const WORKSPACE_SCHEMAS: Record<string, string> = {
       goal_timestamp Nullable(DateTime64(3)),
       INDEX idx_name name TYPE bloom_filter(0.01) GRANULARITY 1,
       INDEX idx_browser_type browser_type TYPE set(10) GRANULARITY 1
-    ) ENGINE = MergeTree()
+    ) ENGINE = ReplacingMergeTree(_version)
     PARTITION BY toYYYYMMDD(received_at)
-    ORDER BY (session_id, received_at)
+    ORDER BY (session_id, dedup_token)
     TTL toDateTime(received_at) + INTERVAL 7 DAY
   `,
 

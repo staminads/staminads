@@ -411,7 +411,7 @@ test.describe('Device Info', () => {
     expect(payloads[0].attributes).toBeTruthy();
   });
 
-  test('BUG: pre-populated sessionStorage with attributesSent=true causes missing attributes', async ({
+  test('V3 FIX: attributes always sent regardless of sessionStorage state', async ({
     page,
   }) => {
     // Capture payloads via request interception
@@ -429,9 +429,6 @@ test.describe('Device Info', () => {
       await route.continue();
     });
 
-    // This simulates the bug: sessionStorage has stale data from a previous session
-    // that matches the current session ID (from localStorage)
-
     // First, visit the page normally to get the session ID
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
@@ -441,9 +438,8 @@ test.describe('Device Info', () => {
     // Get the session ID that was created
     const sessionId = await page.evaluate(() => Staminads.getSessionId());
 
-    // Now simulate stale sessionStorage with attributesSent=true
-    // This mimics what happens after a page reload where the previous
-    // instance had already sent attributes
+    // Simulate stale sessionStorage (old V2 format with attributesSent=true)
+    // V3 should ignore these fields and still send attributes
     await page.evaluate((sid) => {
       sessionStorage.setItem(
         'stm_session_state',
@@ -452,7 +448,7 @@ test.describe('Device Info', () => {
           actions: [],
           currentPage: null,
           checkpoint: 0,
-          attributesSent: true, // THIS IS THE BUG - restored as true
+          attributesSent: true, // V3 ignores this
         })
       );
     }, sessionId);
@@ -470,15 +466,15 @@ test.describe('Device Info', () => {
 
     const payload = payloads[0];
 
-    console.log('=== Payload after restore with attributesSent=true ===');
+    console.log('=== Payload after restore (V3) ===');
     console.log(JSON.stringify(payload, null, 2));
 
-    // BUG: checkpoint is restored (0) but attributes are missing!
-    // This is exactly what the user is seeing
-    expect(payload.checkpoint).toBe(0);
+    // V3: No checkpoint field
+    expect(payload.checkpoint).toBeUndefined();
 
-    // This assertion will FAIL - demonstrating the bug
-    // The SDK incorrectly skips attributes because attributesSent was restored as true
+    // V3 FIX: Attributes are ALWAYS sent (no attributesSent flag)
     expect(payload.attributes).toBeTruthy();
+    expect(payload.attributes?.device).toBeTruthy();
+    expect(payload.attributes?.browser).toBeTruthy();
   });
 });
