@@ -76,7 +76,7 @@ export interface WorkspaceSettings {
 export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   timescore_reference: 60,
   bounce_threshold: 10,
-  custom_dimensions: { '1': 'Channel Group', '2': 'Channel' },
+  custom_dimensions: {},
   filters: [],
   integrations: [],
   geo_enabled: true,
