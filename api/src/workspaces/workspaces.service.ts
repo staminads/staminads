@@ -220,15 +220,15 @@ export class WorkspacesService {
         );
       }
 
+      // Filter out undefined values from dto.settings to prevent overwriting
+      // existing values. class-transformer adds undefined for all optional DTO fields.
+      const definedSettings = Object.fromEntries(
+        Object.entries(dto.settings).filter(([, v]) => v !== undefined),
+      ) as Partial<WorkspaceSettings>;
+
       updatedSettings = {
         ...workspace.settings,
-        ...dto.settings,
-        // Explicitly preserve fields that have dedicated management endpoints
-        // These should only be modified through their own APIs (filters.*, etc.)
-        filters: dto.settings.filters ?? workspace.settings.filters,
-        integrations:
-          dto.settings.integrations ?? workspace.settings.integrations,
-        annotations: dto.settings.annotations ?? workspace.settings.annotations,
+        ...definedSettings,
       };
     }
 

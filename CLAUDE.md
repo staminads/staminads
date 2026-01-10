@@ -252,6 +252,16 @@ Step-by-step migration instructions.
 
 Do NOT include "Generated with Claude Code" or "Co-Authored-By" footers in commit messages. Use simple, clean commit messages.
 
+### Git Safety Rules
+
+Before pushing to main:
+1. **Only stage files you modified** - avoid `git add -A` or `git add .`
+2. **Run the FULL test suite** (including E2E):
+   ```bash
+   cd api && npm run lint && npm test && npm run test:e2e
+   cd console && npm run lint && npm run build
+   ```
+
 ### Running the API Server
 
 **Do not start the API server unless explicitly required.** For most tasks (code changes, builds, unit tests), starting the server is unnecessary.
