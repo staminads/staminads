@@ -66,6 +66,9 @@ COPY --from=api-builder /app/api/dist ./dist
 # Copy built frontend to API public folder
 COPY --from=frontend-builder /app/console/dist ./dist/public
 
+# Copy GeoIP database (optional - mount as volume if not bundled)
+COPY api/data/GeoLite2-City.mmdb ./data/GeoLite2-City.mmdb
+
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nestjs -u 1001 -G nodejs
