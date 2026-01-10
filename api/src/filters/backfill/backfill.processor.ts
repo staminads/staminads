@@ -310,14 +310,15 @@ export class FilterBackfillProcessor {
     startDate.setDate(startDate.getDate() - task.lookback_days);
 
     // Query workspace database for counts
+    // Use explicit UTC timezone to ensure correct filtering regardless of ClickHouse server timezone
     const result = await this.clickhouse.queryWorkspace<{
       total_sessions: string;
       total_events: string;
     }>(
       task.workspace_id,
       `SELECT
-         (SELECT count() FROM sessions WHERE created_at >= toDateTime64({start_date:String}, 3)) as total_sessions,
-         (SELECT count() FROM events WHERE created_at >= toDateTime64({start_date:String}, 3)) as total_events`,
+         (SELECT count() FROM sessions WHERE created_at >= toDateTime64({start_date:String}, 3, 'UTC')) as total_sessions,
+         (SELECT count() FROM events WHERE created_at >= toDateTime64({start_date:String}, 3, 'UTC')) as total_events`,
       {
         start_date: toClickHouseDateTime(startDate),
       },

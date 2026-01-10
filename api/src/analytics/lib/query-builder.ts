@@ -147,10 +147,11 @@ export function buildAnalyticsQuery(
   const limitClause = `LIMIT ${Math.min(query.limit || 1000, 10000)}`;
 
   // Note: workspace_id filter removed since each workspace has its own database
+  // Explicitly use UTC to ensure correct filtering regardless of ClickHouse server timezone
   const dateCol = tableConfig.dateColumn;
   const whereConditions = [
-    `${dateCol} >= toDateTime64({date_start:String}, 3)`,
-    `${dateCol} <= toDateTime64({date_end:String}, 3)`,
+    `${dateCol} >= toDateTime64({date_start:String}, 3, 'UTC')`,
+    `${dateCol} <= toDateTime64({date_end:String}, 3, 'UTC')`,
   ];
   if (filterSql) {
     whereConditions.push(filterSql);
@@ -217,10 +218,11 @@ export function buildExtremesQuery(
   );
 
   // WHERE conditions
+  // Explicitly use UTC to ensure correct filtering regardless of ClickHouse server timezone
   const dateCol = tableConfig.dateColumn;
   const whereConditions = [
-    `${dateCol} >= toDateTime64({date_start:String}, 3)`,
-    `${dateCol} <= toDateTime64({date_end:String}, 3)`,
+    `${dateCol} >= toDateTime64({date_start:String}, 3, 'UTC')`,
+    `${dateCol} <= toDateTime64({date_end:String}, 3, 'UTC')`,
   ];
   if (filterSql) {
     whereConditions.push(filterSql);

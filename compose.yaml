@@ -7,6 +7,7 @@ services:
       - clickhouse_data:/var/lib/clickhouse
       - ./clickhouse-users.xml:/etc/clickhouse-server/users.d/users.xml:ro
     environment:
+      TZ: UTC
       CLICKHOUSE_DB: staminads_system
       CLICKHOUSE_USER: default
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
@@ -21,6 +22,7 @@ services:
     ports:
       - "3000:3000"
     environment:
+      TZ: UTC
       PORT: 3000
       JWT_EXPIRES_IN: 7d
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-change-me-32-chars-in-production!}

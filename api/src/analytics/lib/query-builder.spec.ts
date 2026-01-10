@@ -336,9 +336,11 @@ describe('buildAnalyticsQuery', () => {
         metrics: ['page_count'],
       });
       expect(sql).toContain(
-        'entered_at >= toDateTime64({date_start:String}, 3)',
+        "entered_at >= toDateTime64({date_start:String}, 3, 'UTC')",
       );
-      expect(sql).toContain('entered_at <= toDateTime64({date_end:String}, 3)');
+      expect(sql).toContain(
+        "entered_at <= toDateTime64({date_end:String}, 3, 'UTC')",
+      );
     });
 
     it('uses created_at for sessions table date filtering', () => {
@@ -347,9 +349,11 @@ describe('buildAnalyticsQuery', () => {
         table: 'sessions',
       });
       expect(sql).toContain(
-        'created_at >= toDateTime64({date_start:String}, 3)',
+        "created_at >= toDateTime64({date_start:String}, 3, 'UTC')",
       );
-      expect(sql).toContain('created_at <= toDateTime64({date_end:String}, 3)');
+      expect(sql).toContain(
+        "created_at <= toDateTime64({date_end:String}, 3, 'UTC')",
+      );
     });
 
     it('applies granularity with correct date column for pages', () => {
@@ -598,9 +602,11 @@ describe('buildExtremesQuery', () => {
         groupBy: ['page_path'],
       });
       expect(sql).toContain(
-        'entered_at >= toDateTime64({date_start:String}, 3)',
+        "entered_at >= toDateTime64({date_start:String}, 3, 'UTC')",
       );
-      expect(sql).toContain('entered_at <= toDateTime64({date_end:String}, 3)');
+      expect(sql).toContain(
+        "entered_at <= toDateTime64({date_end:String}, 3, 'UTC')",
+      );
     });
 
     it('throws for sessions metric on pages table', () => {
