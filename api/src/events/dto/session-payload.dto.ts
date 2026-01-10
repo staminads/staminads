@@ -85,26 +85,6 @@ export class GoalActionDto {
   properties?: Record<string, string>;
 }
 
-// === Current Page DTO ===
-
-export class CurrentPageDto {
-  @IsString()
-  @MaxLength(MAX_PATH_LENGTH)
-  path: string;
-
-  @IsNumber()
-  @Min(1)
-  page_number: number;
-
-  @IsNumber()
-  entered_at: number;
-
-  @IsNumber()
-  @Min(0)
-  @Max(100)
-  scroll: number;
-}
-
 // === Session Attributes DTO ===
 
 export class SessionAttributesDto {
@@ -217,16 +197,6 @@ export class SessionPayloadDto {
     keepDiscriminatorProperty: true,
   })
   actions: (PageviewActionDto | GoalActionDto)[];
-
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => CurrentPageDto)
-  current_page?: CurrentPageDto;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  checkpoint?: number;
 
   @IsOptional()
   @ValidateNested()

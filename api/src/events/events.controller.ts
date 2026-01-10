@@ -19,8 +19,7 @@ export class EventsController {
     summary: 'Track session with cumulative actions array',
     description:
       'Processes a session payload containing pageview and goal actions. ' +
-      'Actions are processed incrementally using checkpoint-based delta sending. ' +
-      'The server skips actions at indices <= checkpoint and processes only new actions.',
+      'Actions are deduplicated server-side using dedup_token.',
   })
   @ApiBody({ type: SessionPayloadDto })
   @ApiResponse({
@@ -30,11 +29,6 @@ export class EventsController {
       type: 'object',
       properties: {
         success: { type: 'boolean', example: true },
-        checkpoint: {
-          type: 'number',
-          description: 'Index of the last processed action',
-          example: 5,
-        },
       },
     },
   })

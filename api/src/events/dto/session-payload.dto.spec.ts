@@ -185,31 +185,6 @@ describe('SessionPayloadDto', () => {
     expect(errors).toHaveLength(0);
   });
 
-  it('accepts payload with current_page', async () => {
-    const dto = plainToInstance(SessionPayloadDto, {
-      ...validPayload,
-      current_page: {
-        path: '/about',
-        page_number: 2,
-        entered_at: Date.now(),
-        scroll: 25,
-      },
-    });
-    const errors = await validate(dto);
-
-    expect(errors).toHaveLength(0);
-  });
-
-  it('accepts payload with checkpoint', async () => {
-    const dto = plainToInstance(SessionPayloadDto, {
-      ...validPayload,
-      checkpoint: 5,
-    });
-    const errors = await validate(dto);
-
-    expect(errors).toHaveLength(0);
-  });
-
   it('rejects payload without workspace_id', async () => {
     const { workspace_id, ...payloadWithoutWorkspace } = validPayload;
     const dto = plainToInstance(SessionPayloadDto, payloadWithoutWorkspace);

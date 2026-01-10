@@ -305,108 +305,6 @@ describe('SessionPayloadHandler', () => {
     });
   });
 
-  describe('checkpoint handling', () => {
-    it('skips actions at or before checkpoint', async () => {
-      const payload = createPayload({
-        actions: [
-          createPageviewAction({ path: '/page1', page_number: 1 }), // index 0
-          createPageviewAction({ path: '/page2', page_number: 2 }), // index 1
-          createPageviewAction({ path: '/page3', page_number: 3 }), // index 2
-          createGoalAction({ name: 'signup' }), // index 3
-        ],
-        checkpoint: 2, // Skip indices 0 and 1
-        attributes: { landing_page: 'https://example.com/' },
-      });
-
-      await handler.handle(payload, null);
-
-      const events = bufferService.addBatch.mock.calls[0][0];
-      expect(events).toHaveLength(2); // Only page3 and signup
-      expect(events[0].path).toBe('/page3');
-      expect(events[1].name).toBe('goal');
-    });
-
-    it('returns new checkpoint equal to actions length', async () => {
-      const payload = createPayload({
-        actions: [
-          createPageviewAction({ page_number: 1 }),
-          createPageviewAction({ page_number: 2 }),
-          createGoalAction({ name: 'signup' }),
-        ],
-        attributes: { landing_page: 'https://example.com/' },
-      });
-
-      const result = await handler.handle(payload, null);
-
-      expect(result.checkpoint).toBe(3); // Total actions processed
-    });
-
-    it('returns checkpoint 0 for empty actions', async () => {
-      const payload = createPayload({ actions: [] });
-
-      const result = await handler.handle(payload, null);
-
-      expect(result.checkpoint).toBe(0);
-      expect(bufferService.addBatch).not.toHaveBeenCalled();
-    });
-
-    it('handles checkpoint equal to actions length (no new actions)', async () => {
-      const payload = createPayload({
-        actions: [
-          createPageviewAction({ page_number: 1 }),
-          createPageviewAction({ page_number: 2 }),
-        ],
-        checkpoint: 2, // All actions already processed
-        attributes: { landing_page: 'https://example.com/' },
-      });
-
-      const result = await handler.handle(payload, null);
-
-      expect(result.checkpoint).toBe(2);
-      expect(bufferService.addBatch).not.toHaveBeenCalled();
-    });
-
-    it('builds previous_path chain from all actions including skipped', async () => {
-      const payload = createPayload({
-        actions: [
-          createPageviewAction({ path: '/page1', page_number: 1 }), // index 0 - skipped
-          createPageviewAction({ path: '/page2', page_number: 2 }), // index 1 - skipped
-          createPageviewAction({ path: '/page3', page_number: 3 }), // index 2 - processed
-        ],
-        checkpoint: 2, // Skip indices 0 and 1
-        attributes: { landing_page: 'https://example.com/' },
-      });
-
-      await handler.handle(payload, null);
-
-      const events = bufferService.addBatch.mock.calls[0][0];
-      expect(events).toHaveLength(1);
-      // previous_path should be /page2 (from skipped action at index 1)
-      expect(events[0].previous_path).toBe('/page2');
-    });
-  });
-
-  describe('current_page handling', () => {
-    it('ignores current_page (not finalized)', async () => {
-      const payload = createPayload({
-        actions: [createPageviewAction({ page_number: 1 })],
-        current_page: {
-          path: '/in-progress',
-          page_number: 2,
-          entered_at: Date.now(),
-          scroll: 25,
-        },
-        attributes: { landing_page: 'https://example.com/' },
-      });
-
-      await handler.handle(payload, null);
-
-      const events = bufferService.addBatch.mock.calls[0][0];
-      expect(events).toHaveLength(1); // Only the action, not current_page
-      expect(events[0].path).toBe('/home'); // From the action, not /in-progress
-    });
-  });
-
   describe('session attributes', () => {
     it('applies session attributes to all events', async () => {
       const payload = createPayload({
@@ -1004,7 +902,6 @@ describe('SessionPayloadHandler', () => {
       const result = await handler.handle(payload, null);
 
       expect(result.success).toBe(true);
-      expect(result.checkpoint).toBe(0);
       expect(bufferService.addBatch).not.toHaveBeenCalled();
     });
 
@@ -1112,7 +1009,6 @@ describe('SessionPayloadHandler', () => {
       );
 
       expect(result.success).toBe(true); // Silent rejection
-      expect(result.checkpoint).toBe(1); // Checkpoint advances
       expect(bufferService.addBatch).not.toHaveBeenCalled();
     });
 

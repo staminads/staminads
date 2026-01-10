@@ -21,7 +21,6 @@ import {
 
 export interface HandleResult {
   success: boolean;
-  checkpoint: number;
 }
 
 // Workspace cache (same pattern as EventsService)
@@ -61,20 +60,15 @@ export class SessionPayloadHandler {
       this.logger.debug(
         `Domain rejected: ${requestDomain} for workspace ${workspace.id}`,
       );
-      return { success: true, checkpoint: payload.actions.length };
+      return { success: true };
     }
 
-    // 3. Filter actions by checkpoint
-    // checkpoint = number of actions already processed
-    // e.g., checkpoint=2 means indices 0,1 are done, start at index 2
-    const startIndex = payload.checkpoint ?? 0;
-    const actionsToProcess = payload.actions.slice(startIndex);
-
-    if (actionsToProcess.length === 0) {
-      return { success: true, checkpoint: payload.actions.length };
+    // 3. Check for empty actions
+    if (payload.actions.length === 0) {
+      return { success: true };
     }
 
-    // 3. Perform geo lookup once
+    // 4. Perform geo lookup once
     const geo = this.geoService.lookupWithSettings(clientIp, {
       geo_enabled: workspace.settings.geo_enabled,
       geo_store_city: workspace.settings.geo_store_city,
@@ -82,16 +76,16 @@ export class SessionPayloadHandler {
       geo_coordinates_precision: workspace.settings.geo_coordinates_precision,
     });
 
-    // 4. Set _version for all events (same timestamp for entire payload)
+    // 5. Set _version for all events (same timestamp for entire payload)
     const version = Date.now();
 
-    // 5. Calculate clock skew
+    // 6. Calculate clock skew
     const { skewMs, needsCorrection } = this.calculateClockSkew(
       payload.sent_at,
       version,
     );
 
-    // 6. Build base event from session attributes (with skew correction)
+    // 7. Build base event from session attributes (with skew correction)
     const baseEvent = this.buildBaseEvent(
       payload,
       geo,
@@ -99,19 +93,11 @@ export class SessionPayloadHandler {
       needsCorrection ? skewMs : 0,
     );
 
-    // 7. Deserialize actions to events
+    // 8. Deserialize actions to events
     const events: TrackingEvent[] = [];
     let previousPath = '';
 
-    // Build previous_path chain from already-processed actions
-    for (let i = 0; i < startIndex; i++) {
-      const action = payload.actions[i];
-      if (isPageviewAction(action)) {
-        previousPath = action.path;
-      }
-    }
-
-    for (const action of actionsToProcess) {
+    for (const action of payload.actions) {
       const event = this.deserializeAction(
         action,
         baseEvent,
@@ -127,7 +113,7 @@ export class SessionPayloadHandler {
       }
     }
 
-    // 8. Apply filters if configured
+    // 9. Apply filters if configured
     const filters = workspace.settings.filters ?? [];
     if (filters.length > 0) {
       for (const event of events) {
@@ -135,10 +121,10 @@ export class SessionPayloadHandler {
       }
     }
 
-    // 9. Add to buffer
+    // 10. Add to buffer
     await this.buffer.addBatch(events);
 
-    return { success: true, checkpoint: payload.actions.length };
+    return { success: true };
   }
 
   private async getWorkspace(workspaceId: string): Promise<Workspace> {
