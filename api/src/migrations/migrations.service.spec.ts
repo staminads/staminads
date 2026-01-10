@@ -308,9 +308,13 @@ describe('MigrationsRunner', () => {
     });
 
     describe('lock behavior', () => {
+      // Helper to format date as ClickHouse DateTime64 (YYYY-MM-DD HH:MM:SS.SSS)
+      const toClickHouseFormat = (date: Date) =>
+        date.toISOString().replace('T', ' ').slice(0, -1);
+
       it('returns true when lock is held by another instance', async () => {
         // Lock check - lock held by another instance (recent)
-        const recentTime = new Date().toISOString();
+        const recentTime = toClickHouseFormat(new Date());
         mockQuery.mockResolvedValueOnce(
           createQueryResult([
             { value: 'other-host-123', updated_at: recentTime },
@@ -327,7 +331,9 @@ describe('MigrationsRunner', () => {
 
       it('acquires expired lock and proceeds with migration', async () => {
         // Lock check - lock exists but expired (6 minutes ago)
-        const expiredTime = new Date(Date.now() - 6 * 60 * 1000).toISOString();
+        const expiredTime = toClickHouseFormat(
+          new Date(Date.now() - 6 * 60 * 1000),
+        );
         mockQuery.mockResolvedValueOnce(
           createQueryResult([
             { value: 'other-host-123', updated_at: expiredTime },

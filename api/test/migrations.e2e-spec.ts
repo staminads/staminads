@@ -4,7 +4,11 @@ setupTestEnv();
 
 import { createClient, ClickHouseClient } from '@clickhouse/client';
 import { MajorMigration } from '../src/migrations/migration.interface';
-import { waitForClickHouse, waitForMutations } from './helpers/wait.helper';
+import {
+  waitForClickHouse,
+  waitForMutations,
+  waitForData,
+} from './helpers/wait.helper';
 import { truncateSystemTables } from './helpers/cleanup.helper';
 import { toClickHouseDateTime, createTestWorkspace } from './helpers';
 
@@ -479,7 +483,12 @@ describe('Migrations E2E', () => {
         ],
         format: 'JSONEachRow',
       });
-      await waitForClickHouse();
+      // Wait for the lock to be visible in ClickHouse (FINAL requires merge)
+      await waitForData(
+        systemClient,
+        'system_settings',
+        "key = 'migration_lock'",
+      );
 
       mockMajorVersion = 2;
       mockMigrations = [];

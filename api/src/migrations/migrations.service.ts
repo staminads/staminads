@@ -147,7 +147,10 @@ export class MigrationsRunner {
     const rows = await result.json<SettingsRow>();
 
     if (rows.length > 0) {
-      const lockTime = new Date(rows[0].updated_at).getTime();
+      // Parse as UTC (ClickHouse returns UTC without 'Z' suffix)
+      const lockTime = new Date(
+        rows[0].updated_at.replace(' ', 'T') + 'Z',
+      ).getTime();
       const lockAge = (Date.now() - lockTime) / 1000;
 
       if (lockAge < this.lockTimeout) {
