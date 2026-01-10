@@ -3,16 +3,38 @@
  *
  * Tests that duration tracking is accurate during focus/blur and visibility changes.
  * Updated for V3 SessionPayload format - duration is tracked per-page in actions[].
+ * Now uses request interception instead of mock server.
  */
 
-import { test, expect, CapturedPayload, getPageviews, getTotalPageviewDuration } from './fixtures';
+import {
+  test,
+  expect,
+  SessionPayload,
+  getPageviews,
+  truncateEvents,
+} from './fixtures';
 
 test.describe('Duration Accuracy', () => {
-  test.beforeEach(async ({ request }) => {
-    await request.post('/api/test/reset');
+  test.beforeEach(async () => {
+    await truncateEvents();
   });
 
-  test('current_page tracks time while focused', async ({ page, request }) => {
+  test('current_page tracks time while focused', async ({ page }) => {
+    // Capture payloads
+    const payloads: SessionPayload[] = [];
+    await page.route('**/api/track', async (route) => {
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          payloads.push(JSON.parse(postData));
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
+
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
@@ -29,13 +51,10 @@ test.describe('Duration Accuracy', () => {
     await page.evaluate(() => Staminads.trackGoal({ action: 'duration_check' }));
     await page.waitForTimeout(500);
 
-    const response = await request.get('/api/test/events');
-    const events: CapturedPayload[] = await response.json();
-
-    expect(events.length).toBeGreaterThanOrEqual(1);
+    expect(payloads.length).toBeGreaterThanOrEqual(1);
 
     // Get the latest payload
-    const latestPayload = events[events.length - 1].payload;
+    const latestPayload = payloads[payloads.length - 1];
 
     // In V3, duration is tracked via current_page.entered_at
     // The SDK calculates focus duration from pageview durations + current page time
@@ -47,7 +66,22 @@ test.describe('Duration Accuracy', () => {
     expect(currentPageDuration).toBeGreaterThan(elapsed - 1000);
   });
 
-  test('duration pauses when page becomes hidden', async ({ page, request }) => {
+  test('duration pauses when page becomes hidden', async ({ page }) => {
+    // Capture payloads
+    const payloads: SessionPayload[] = [];
+    await page.route('**/api/track', async (route) => {
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          payloads.push(JSON.parse(postData));
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
+
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
@@ -72,14 +106,26 @@ test.describe('Duration Accuracy', () => {
     await page.waitForTimeout(500);
 
     // Check that SDK properly handled visibility
-    const response = await request.get('/api/test/events');
-    const events: CapturedPayload[] = await response.json();
-
     // Events should have been sent (on visibilitychange hidden)
-    expect(events.length).toBeGreaterThanOrEqual(1);
+    expect(payloads.length).toBeGreaterThanOrEqual(1);
   });
 
-  test('heartbeat continues when page visible', async ({ page, request }) => {
+  test('heartbeat continues when page visible', async ({ page }) => {
+    // Capture payloads
+    const payloads: SessionPayload[] = [];
+    await page.route('**/api/track', async (route) => {
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          payloads.push(JSON.parse(postData));
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
+
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
@@ -87,14 +133,26 @@ test.describe('Duration Accuracy', () => {
     // Wait for heartbeat (10s on desktop)
     await page.waitForTimeout(11000);
 
-    const response = await request.get('/api/test/events');
-    const events: CapturedPayload[] = await response.json();
-
     // Should have received multiple payloads (initial + at least 1 heartbeat)
-    expect(events.length).toBeGreaterThanOrEqual(2);
+    expect(payloads.length).toBeGreaterThanOrEqual(2);
   });
 
-  test('duration tracked per page in SPA', async ({ page, request }) => {
+  test('duration tracked per page in SPA', async ({ page }) => {
+    // Capture payloads
+    const payloads: SessionPayload[] = [];
+    await page.route('**/api/track', async (route) => {
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          payloads.push(JSON.parse(postData));
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
+
     await page.goto('/spa-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
@@ -110,11 +168,8 @@ test.describe('Duration Accuracy', () => {
     await page.click('text=About');
     await page.waitForTimeout(500);
 
-    const response = await request.get('/api/test/events');
-    const events: CapturedPayload[] = await response.json();
-
     // Get the latest payload
-    const latestPayload = events[events.length - 1].payload;
+    const latestPayload = payloads[payloads.length - 1];
 
     // Should have completed pageview actions with duration
     const pageviews = getPageviews(latestPayload);
@@ -127,7 +182,22 @@ test.describe('Duration Accuracy', () => {
     }
   });
 
-  test('duration pauses on window blur', async ({ page, request }) => {
+  test('duration pauses on window blur', async ({ page }) => {
+    // Capture payloads
+    const payloads: SessionPayload[] = [];
+    await page.route('**/api/track', async (route) => {
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          payloads.push(JSON.parse(postData));
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
+
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
@@ -143,15 +213,26 @@ test.describe('Duration Accuracy', () => {
     // Wait while blurred
     await page.waitForTimeout(1500);
 
-    // Check events sent
-    const response = await request.get('/api/test/events');
-    const events: CapturedPayload[] = await response.json();
-
     // Should have sent events on blur
-    expect(events.length).toBeGreaterThanOrEqual(1);
+    expect(payloads.length).toBeGreaterThanOrEqual(1);
   });
 
-  test('duration resumes on window focus', async ({ page, request }) => {
+  test('duration resumes on window focus', async ({ page }) => {
+    // Capture payloads
+    const payloads: SessionPayload[] = [];
+    await page.route('**/api/track', async (route) => {
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          payloads.push(JSON.parse(postData));
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
+
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
@@ -170,14 +251,26 @@ test.describe('Duration Accuracy', () => {
     await page.evaluate(() => Staminads.trackGoal({ action: 'focus_check' }));
     await page.waitForTimeout(500);
 
-    const response = await request.get('/api/test/events');
-    const events: CapturedPayload[] = await response.json();
-
     // SDK should have resumed and sent more events
-    expect(events.length).toBeGreaterThanOrEqual(2);
+    expect(payloads.length).toBeGreaterThanOrEqual(2);
   });
 
-  test('handles rapid focus/blur correctly', async ({ page, request }) => {
+  test('handles rapid focus/blur correctly', async ({ page }) => {
+    // Capture payloads
+    const payloads: SessionPayload[] = [];
+    await page.route('**/api/track', async (route) => {
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          payloads.push(JSON.parse(postData));
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
+
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
@@ -193,11 +286,8 @@ test.describe('Duration Accuracy', () => {
     await page.evaluate(() => Staminads.trackGoal({ action: 'rapid_check' }));
     await page.waitForTimeout(500);
 
-    const response = await request.get('/api/test/events');
-    const events: CapturedPayload[] = await response.json();
-
     // SDK should handle rapid changes without crashing
-    expect(events.length).toBeGreaterThanOrEqual(1);
+    expect(payloads.length).toBeGreaterThanOrEqual(1);
   });
 
   test('getFocusDuration returns accumulated time', async ({ page }) => {
@@ -235,7 +325,22 @@ test.describe('Duration Accuracy', () => {
     expect(totalDuration).toBeLessThan(expectedDuration + 1000);
   });
 
-  test('pageview duration is in milliseconds', async ({ page, request }) => {
+  test('pageview duration is in milliseconds', async ({ page }) => {
+    // Capture payloads
+    const payloads: SessionPayload[] = [];
+    await page.route('**/api/track', async (route) => {
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          payloads.push(JSON.parse(postData));
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
+
     await page.goto('/spa-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
@@ -247,13 +352,10 @@ test.describe('Duration Accuracy', () => {
     await page.click('text=Products');
     await page.waitForTimeout(500);
 
-    const response = await request.get('/api/test/events');
-    const events: CapturedPayload[] = await response.json();
-
     // Find payload with completed pageview
     let foundPageview = false;
-    for (const event of events) {
-      const pageviews = getPageviews(event.payload);
+    for (const payload of payloads) {
+      const pageviews = getPageviews(payload);
       if (pageviews.length > 0) {
         // Duration should be in milliseconds (> 1000 for 1+ seconds)
         expect(pageviews[0].duration).toBeGreaterThan(1000);
@@ -263,5 +365,28 @@ test.describe('Duration Accuracy', () => {
     }
 
     expect(foundPageview).toBe(true);
+  });
+
+  test('focus duration is less than or equal to total duration', async ({ page }) => {
+    await page.goto('/test-page.html');
+    await page.waitForFunction(() => window.SDK_INITIALIZED);
+    await page.evaluate(() => window.SDK_READY);
+
+    // Spend time focused
+    await page.waitForTimeout(1000);
+
+    // Blur (unfocus)
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+    await page.waitForTimeout(1000);
+
+    // Focus again
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await page.waitForTimeout(500);
+
+    const focusDuration = await page.evaluate(() => Staminads.getFocusDuration());
+    const totalDuration = await page.evaluate(() => Staminads.getTotalDuration());
+
+    // Focus duration should be less since we spent 1s blurred
+    expect(focusDuration).toBeLessThan(totalDuration);
   });
 });

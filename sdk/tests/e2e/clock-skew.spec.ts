@@ -5,6 +5,7 @@
  * and can be used by the server for clock skew detection.
  *
  * Updated for V3 SessionPayload format.
+ * Now uses request interception instead of mock server.
  *
  * Clock skew = received_at - sent_at
  *   - Positive skew: client clock is behind server (or network latency)
@@ -13,74 +14,87 @@
  * Note: sent_at is set at HTTP send time (not when payload is built/queued)
  */
 
-import { test, expect, CapturedPayload } from './fixtures';
-import type { APIRequestContext } from '@playwright/test';
-
-// Helper to wait for events with retry
-async function waitForEvents(
-  request: APIRequestContext,
-  minCount: number = 1,
-  maxWaitMs: number = 5000
-): Promise<CapturedPayload[]> {
-  const startTime = Date.now();
-  while (Date.now() - startTime < maxWaitMs) {
-    const response = await request.get('/api/test/events');
-    const events: CapturedPayload[] = await response.json();
-    if (events.length >= minCount) {
-      return events;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  // Return whatever we have
-  const response = await request.get('/api/test/events');
-  return response.json();
-}
+import { test, expect, SessionPayload, truncateEvents } from './fixtures';
 
 test.describe('Clock Skew Detection', () => {
-  test.beforeEach(async ({ request }) => {
-    await request.post('/api/test/reset');
-    // Small delay to ensure reset is complete
-    await new Promise((resolve) => setTimeout(resolve, 100));
+  test.beforeEach(async () => {
+    await truncateEvents();
   });
 
-  test('all payloads include sent_at timestamp', async ({ page, request }) => {
+  test('all payloads include sent_at timestamp', async ({ page }) => {
+    // Capture payloads via request interception
+    const payloads: SessionPayload[] = [];
+    await page.route('**/api/track', async (route) => {
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          payloads.push(JSON.parse(postData));
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
+
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
 
-    const events = await waitForEvents(request, 1);
-    expect(events.length).toBeGreaterThanOrEqual(1);
+    // Wait for initial payload
+    await page.waitForTimeout(1000);
+
+    expect(payloads.length).toBeGreaterThanOrEqual(1);
 
     // All payloads should have sent_at (set at HTTP send time)
-    for (const event of events) {
-      expect(event.payload.sent_at).toBeDefined();
-      expect(typeof event.payload.sent_at).toBe('number');
-      expect(event.payload.sent_at).toBeGreaterThan(0);
+    for (const payload of payloads) {
+      expect(payload.sent_at).toBeDefined();
+      expect(typeof payload.sent_at).toBe('number');
+      expect(payload.sent_at).toBeGreaterThan(0);
 
       // Also verify created_at and updated_at still exist
-      expect(event.payload.created_at).toBeDefined();
-      expect(event.payload.updated_at).toBeDefined();
+      expect(payload.created_at).toBeDefined();
+      expect(payload.updated_at).toBeDefined();
     }
   });
 
-  test('normal conditions: skew is minimal (< 5s)', async ({ page, request }) => {
+  test('sent_at is close to actual send time (< 100ms diff)', async ({ page }) => {
+    // Capture payloads with receive time
+    const captures: { payload: SessionPayload; receivedAt: number }[] = [];
+    await page.route('**/api/track', async (route) => {
+      const receivedAt = Date.now();
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          captures.push({ payload: JSON.parse(postData), receivedAt });
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
+
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
 
-    const events = await waitForEvents(request, 1);
-    expect(events.length).toBeGreaterThanOrEqual(1);
+    await page.waitForTimeout(1000);
 
-    // Check skew for each payload using sent_at
-    for (const event of events) {
-      expect(event.payload.sent_at).toBeDefined();
-      const skewMs = event._received_at - event.payload.sent_at!;
-      // Normal latency should be well under 5 seconds
-      expect(Math.abs(skewMs)).toBeLessThan(5000);
+    expect(captures.length).toBeGreaterThanOrEqual(1);
+
+    // sent_at should be very close to when we received it (accounting for processing)
+    for (const capture of captures) {
+      const diff = capture.receivedAt - capture.payload.sent_at!;
+      // Should be < 100ms difference (same machine, no real network latency)
+      expect(Math.abs(diff)).toBeLessThan(100);
     }
   });
 
-  test('detects client clock 1 hour ahead (negative skew)', async ({ page, request }) => {
+  test('detects client clock 1 hour ahead (negative skew)', async ({ page }) => {
+    // Capture payloads with receive time
+    const captures: { payload: SessionPayload; receivedAt: number }[] = [];
+
     // Simulate client clock 1 hour ahead
     await page.addInitScript(() => {
       const realDateNow = Date.now;
@@ -88,17 +102,32 @@ test.describe('Clock Skew Detection', () => {
       Date.now = () => realDateNow() + offset;
     });
 
+    await page.route('**/api/track', async (route) => {
+      const receivedAt = Date.now(); // Real server time
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          captures.push({ payload: JSON.parse(postData), receivedAt });
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
+
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
 
-    const events = await waitForEvents(request, 1);
-    expect(events.length).toBeGreaterThanOrEqual(1);
+    await page.waitForTimeout(1000);
+
+    expect(captures.length).toBeGreaterThanOrEqual(1);
 
     // Check first payload - use sent_at for accurate skew calculation
-    const event = events[0];
-    expect(event.payload.sent_at).toBeDefined();
-    const skewMs = event._received_at - event.payload.sent_at!;
+    const capture = captures[0];
+    expect(capture.payload.sent_at).toBeDefined();
+    const skewMs = capture.receivedAt - capture.payload.sent_at!;
     const skewMinutes = skewMs / 1000 / 60;
 
     // Skew should be approximately -60 minutes (client ahead)
@@ -108,7 +137,10 @@ test.describe('Clock Skew Detection', () => {
     console.log(`Client 1h ahead: skew = ${skewMinutes.toFixed(1)} minutes`);
   });
 
-  test('detects client clock 30 minutes behind (positive skew)', async ({ page, request }) => {
+  test('detects client clock 30 minutes behind (positive skew)', async ({ page }) => {
+    // Capture payloads with receive time
+    const captures: { payload: SessionPayload; receivedAt: number }[] = [];
+
     // Simulate client clock 30 minutes behind
     await page.addInitScript(() => {
       const realDateNow = Date.now;
@@ -116,17 +148,32 @@ test.describe('Clock Skew Detection', () => {
       Date.now = () => realDateNow() + offset;
     });
 
+    await page.route('**/api/track', async (route) => {
+      const receivedAt = Date.now(); // Real server time
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          captures.push({ payload: JSON.parse(postData), receivedAt });
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
+
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
 
-    const events = await waitForEvents(request, 1);
-    expect(events.length).toBeGreaterThanOrEqual(1);
+    await page.waitForTimeout(1000);
+
+    expect(captures.length).toBeGreaterThanOrEqual(1);
 
     // Check first payload - use sent_at for accurate skew calculation
-    const event = events[0];
-    expect(event.payload.sent_at).toBeDefined();
-    const skewMs = event._received_at - event.payload.sent_at!;
+    const capture = captures[0];
+    expect(capture.payload.sent_at).toBeDefined();
+    const skewMs = capture.receivedAt - capture.payload.sent_at!;
     const skewMinutes = skewMs / 1000 / 60;
 
     // Skew should be approximately +30 minutes (client behind)
@@ -136,18 +183,35 @@ test.describe('Clock Skew Detection', () => {
     console.log(`Client 30m behind: skew = ${skewMinutes.toFixed(1)} minutes`);
   });
 
-  test('skew calculation demonstrates correction threshold', async ({ page, request }) => {
+  test('skew calculation demonstrates correction threshold', async ({ page }) => {
+    // Capture payloads with receive time
+    const captures: { payload: SessionPayload; receivedAt: number }[] = [];
+    await page.route('**/api/track', async (route) => {
+      const receivedAt = Date.now();
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          captures.push({ payload: JSON.parse(postData), receivedAt });
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
+
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
 
-    const events = await waitForEvents(request, 1);
-    expect(events.length).toBeGreaterThanOrEqual(1);
+    await page.waitForTimeout(1000);
+
+    expect(captures.length).toBeGreaterThanOrEqual(1);
 
     // Verify server can calculate skew using sent_at and apply threshold logic
-    const event = events[0];
-    expect(event.payload.sent_at).toBeDefined();
-    const skewMs = event._received_at - event.payload.sent_at!;
+    const capture = captures[0];
+    expect(capture.payload.sent_at).toBeDefined();
+    const skewMs = capture.receivedAt - capture.payload.sent_at!;
 
     // In normal conditions, skew should be minimal (<5s)
     // Server-side logic checks: |skew| > 5000ms to determine if correction needed
@@ -157,5 +221,47 @@ test.describe('Clock Skew Detection', () => {
     expect(needsCorrection).toBe(false);
 
     console.log(`Normal skew: ${skewMs}ms, needsCorrection = ${needsCorrection}`);
+  });
+
+  test('heartbeat payloads also include sent_at', async ({ page }) => {
+    // Capture payloads
+    const payloads: SessionPayload[] = [];
+    await page.route('**/api/track', async (route) => {
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          payloads.push(JSON.parse(postData));
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
+
+    await page.goto('/test-page.html');
+    await page.waitForFunction(() => window.SDK_INITIALIZED);
+    await page.evaluate(() => window.SDK_READY);
+
+    // Wait for heartbeat (10s on desktop)
+    await page.waitForTimeout(11000);
+
+    expect(payloads.length).toBeGreaterThanOrEqual(2);
+
+    // All payloads including heartbeat should have sent_at
+    for (const payload of payloads) {
+      expect(payload.sent_at).toBeDefined();
+      expect(typeof payload.sent_at).toBe('number');
+      expect(payload.sent_at).toBeGreaterThan(0);
+    }
+
+    // Heartbeat payload's sent_at should be > first payload's sent_at
+    const firstSentAt = payloads[0].sent_at!;
+    const lastSentAt = payloads[payloads.length - 1].sent_at!;
+    expect(lastSentAt).toBeGreaterThan(firstSentAt);
+
+    // Time difference should be approximately heartbeat interval (10s)
+    const timeDiff = lastSentAt - firstSentAt;
+    expect(timeDiff).toBeGreaterThan(9000);
   });
 });

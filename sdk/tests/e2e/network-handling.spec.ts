@@ -3,37 +3,66 @@
  *
  * Tests network resilience: beacon, fetch, error handling.
  * Updated for V3 SessionPayload format.
+ * Now uses request interception instead of mock server.
  *
  * Note: Queue/retry functionality has been removed from the SDK in V3.
  * These tests focus on the current transport capabilities.
  */
 
-import { test, expect, CapturedPayload, hasGoal } from './fixtures';
+import { test, expect, SessionPayload, hasGoal, truncateEvents } from './fixtures';
 
 test.describe('Network Handling', () => {
-  test.beforeEach(async ({ request }) => {
-    await request.post('/api/test/reset');
+  test.beforeEach(async () => {
+    await truncateEvents();
   });
 
-  test('sends payload via fetch on init', async ({ page, request }) => {
+  test('sends payload via fetch on init', async ({ page }) => {
+    // Capture payloads
+    const payloads: SessionPayload[] = [];
+    await page.route('**/api/track', async (route) => {
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          payloads.push(JSON.parse(postData));
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
+
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
 
     await page.waitForTimeout(500);
 
-    const response = await request.get('/api/test/events');
-    const events: CapturedPayload[] = await response.json();
-
-    expect(events.length).toBeGreaterThanOrEqual(1);
-    expect(events[0].payload.workspace_id).toBe('test_workspace');
+    expect(payloads.length).toBeGreaterThanOrEqual(1);
+    expect(payloads[0].workspace_id).toBe('test_workspace');
   });
 
-  test('falls back to fetch when beacon fails', async ({ page, request }) => {
+  test('falls back to fetch when beacon fails', async ({ page }) => {
+    // Capture payloads
+    const payloads: SessionPayload[] = [];
+
     // Disable sendBeacon
     await page.addInitScript(() => {
       // @ts-expect-error - Mocking navigator
       navigator.sendBeacon = () => false;
+    });
+
+    await page.route('**/api/track', async (route) => {
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          payloads.push(JSON.parse(postData));
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
     });
 
     await page.goto('/test-page.html');
@@ -44,18 +73,31 @@ test.describe('Network Handling', () => {
     await page.evaluate(() => Staminads.trackGoal({ action: 'fetch_test' }));
     await page.waitForTimeout(500);
 
-    const response = await request.get('/api/test/events');
-    const events: CapturedPayload[] = await response.json();
-
     // Should still have received the event via fetch
-    expect(events.length).toBeGreaterThanOrEqual(1);
-    const found = events.some((e) => hasGoal(e.payload, 'fetch_test'));
+    expect(payloads.length).toBeGreaterThanOrEqual(1);
+    const found = payloads.some((p) => hasGoal(p, 'fetch_test'));
     expect(found).toBe(true);
   });
 
-  test('handles slow network gracefully', async ({ page, request }) => {
+  test('handles slow network gracefully', async ({ page }) => {
+    // Capture payloads
+    const payloads: SessionPayload[] = [];
+
     // Add 2 second delay to responses
-    await request.post('/api/test/delay/2000');
+    await page.route('**/api/track', async (route) => {
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          payloads.push(JSON.parse(postData));
+        } catch {
+          // ignore
+        }
+      }
+      // Delay the response by 2 seconds
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await route.continue();
+    });
 
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
@@ -70,14 +112,26 @@ test.describe('Network Handling', () => {
     expect(elapsed).toBeLessThan(5000);
     expect(elapsed).toBeGreaterThanOrEqual(2000); // At least the delay time
 
-    const response = await request.get('/api/test/events');
-    const events: CapturedPayload[] = await response.json();
-
-    const found = events.some((e) => hasGoal(e.payload, 'slow_test'));
+    const found = payloads.some((p) => hasGoal(p, 'slow_test'));
     expect(found).toBe(true);
   });
 
-  test('uses beacon on pagehide', async ({ page, request }) => {
+  test('uses beacon on pagehide', async ({ page }) => {
+    // Capture payloads
+    const payloads: SessionPayload[] = [];
+    await page.route('**/api/track', async (route) => {
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          payloads.push(JSON.parse(postData));
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
+
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
@@ -91,11 +145,8 @@ test.describe('Network Handling', () => {
 
     await page.waitForTimeout(500);
 
-    const response = await request.get('/api/test/events');
-    const events: CapturedPayload[] = await response.json();
-
     // Should have sent payload on pagehide
-    expect(events.length).toBeGreaterThanOrEqual(1);
+    expect(payloads.length).toBeGreaterThanOrEqual(1);
   });
 
   test('handles network timeout gracefully', async ({ page }) => {
@@ -115,7 +166,22 @@ test.describe('Network Handling', () => {
     expect(sessionId).toBeTruthy();
   });
 
-  test('server returns checkpoint on success', async ({ page, request }) => {
+  test('server returns checkpoint on success', async ({ page }) => {
+    // Capture payloads
+    const payloads: SessionPayload[] = [];
+    await page.route('**/api/track', async (route) => {
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          payloads.push(JSON.parse(postData));
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
+
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
@@ -125,17 +191,37 @@ test.describe('Network Handling', () => {
     await page.evaluate(() => Staminads.trackGoal({ action: 'goal2' }));
     await page.waitForTimeout(500);
 
-    const response = await request.get('/api/test/events');
-    const events: CapturedPayload[] = await response.json();
-
     // Latest payload should have actions
-    const latestPayload = events[events.length - 1].payload;
+    const latestPayload = payloads[payloads.length - 1];
     expect(latestPayload.actions.length).toBeGreaterThanOrEqual(2);
   });
 
-  test('continues sending after server failure', async ({ page, request }) => {
-    // Configure server to fail first request
-    await request.post('/api/test/fail/1');
+  test('continues sending after server failure', async ({ page }) => {
+    // Capture payloads
+    const payloads: SessionPayload[] = [];
+    let requestCount = 0;
+
+    // First request fails, subsequent succeed
+    await page.route('**/api/track', async (route) => {
+      requestCount++;
+      const request = route.request();
+      const postData = request.postData();
+
+      if (requestCount === 1) {
+        // Fail first request
+        await route.abort('failed');
+        return;
+      }
+
+      if (postData) {
+        try {
+          payloads.push(JSON.parse(postData));
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
 
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
@@ -148,15 +234,27 @@ test.describe('Network Handling', () => {
     await page.evaluate(() => Staminads.trackGoal({ action: 'after_failure' }));
     await page.waitForTimeout(500);
 
-    const response = await request.get('/api/test/events');
-    const events: CapturedPayload[] = await response.json();
-
     // Should have received the second request
-    const found = events.some((e) => hasGoal(e.payload, 'after_failure'));
+    const found = payloads.some((p) => hasGoal(p, 'after_failure'));
     expect(found).toBe(true);
   });
 
-  test('beacon is used on visibility hidden', async ({ page, request }) => {
+  test('beacon is used on visibility hidden', async ({ page }) => {
+    // Capture payloads
+    const payloads: SessionPayload[] = [];
+    await page.route('**/api/track', async (route) => {
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          payloads.push(JSON.parse(postData));
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
+
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
@@ -174,14 +272,26 @@ test.describe('Network Handling', () => {
 
     await page.waitForTimeout(500);
 
-    const response = await request.get('/api/test/events');
-    const events: CapturedPayload[] = await response.json();
-
     // Should have sent payload on visibility change
-    expect(events.length).toBeGreaterThanOrEqual(1);
+    expect(payloads.length).toBeGreaterThanOrEqual(1);
   });
 
-  test('payload is sent on beforeunload', async ({ page, request }) => {
+  test('payload is sent on beforeunload', async ({ page }) => {
+    // Capture payloads
+    const payloads: SessionPayload[] = [];
+    await page.route('**/api/track', async (route) => {
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          payloads.push(JSON.parse(postData));
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
+
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
@@ -195,13 +305,25 @@ test.describe('Network Handling', () => {
 
     await page.waitForTimeout(500);
 
-    const response = await request.get('/api/test/events');
-    const events: CapturedPayload[] = await response.json();
-
-    expect(events.length).toBeGreaterThanOrEqual(1);
+    expect(payloads.length).toBeGreaterThanOrEqual(1);
   });
 
-  test('actions array grows cumulatively', async ({ page, request }) => {
+  test('actions array grows cumulatively', async ({ page }) => {
+    // Capture payloads
+    const payloads: SessionPayload[] = [];
+    await page.route('**/api/track', async (route) => {
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          payloads.push(JSON.parse(postData));
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
+
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
@@ -214,11 +336,8 @@ test.describe('Network Handling', () => {
     await page.evaluate(() => Staminads.trackGoal({ action: 'goal_c' }));
     await page.waitForTimeout(500);
 
-    const response = await request.get('/api/test/events');
-    const events: CapturedPayload[] = await response.json();
-
     // Get the latest payload
-    const latestPayload = events[events.length - 1].payload;
+    const latestPayload = payloads[payloads.length - 1];
 
     // Should have all 3 goals in actions array
     expect(hasGoal(latestPayload, 'goal_a')).toBe(true);
@@ -226,7 +345,22 @@ test.describe('Network Handling', () => {
     expect(hasGoal(latestPayload, 'goal_c')).toBe(true);
   });
 
-  test('attributes sent only on first payload', async ({ page, request }) => {
+  test('attributes sent only on first payload', async ({ page }) => {
+    // Capture payloads
+    const payloads: SessionPayload[] = [];
+    await page.route('**/api/track', async (route) => {
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          payloads.push(JSON.parse(postData));
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
+    });
+
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
@@ -234,27 +368,26 @@ test.describe('Network Handling', () => {
     // Wait for initial + heartbeat
     await page.waitForTimeout(11000);
 
-    const response = await request.get('/api/test/events');
-    const events: CapturedPayload[] = await response.json();
-
-    expect(events.length).toBeGreaterThanOrEqual(2);
+    expect(payloads.length).toBeGreaterThanOrEqual(2);
 
     // First payload should have attributes
-    expect(events[0].payload.attributes).toBeTruthy();
+    expect(payloads[0].attributes).toBeTruthy();
 
-    // Subsequent payloads should not have attributes
-    // (SDK marks attributesSent = true after first successful send)
-    for (let i = 1; i < events.length; i++) {
-      // After the first successful send, attributes should be undefined
-      // Note: This depends on SDK behavior - check if it actually omits
-    }
+    // Document payload behavior - SDK may or may not send attributes after first
+    const payloadWithAttributes = payloads.filter((p) => p.attributes);
+    console.log('Payloads with attributes:', payloadWithAttributes.length, 'of', payloads.length);
+
+    // At minimum, first payload must have attributes
+    expect(payloads[0].attributes?.device).toBeTruthy();
   });
 
   test('queues payloads when offline and sends when back online', async ({
     page,
     context,
-    request,
   }) => {
+    // Capture payloads
+    const payloads: SessionPayload[] = [];
+
     // Mock navigator.onLine BEFORE page loads
     await page.addInitScript(() => {
       // Create a controllable onLine property
@@ -264,24 +397,42 @@ test.describe('Network Handling', () => {
         configurable: true,
       });
       // Expose controls
-      (window as any).__goOffline = () => {
-        _isOnline = false;
-      };
-      (window as any).__goOnline = () => {
-        _isOnline = true;
-        window.dispatchEvent(new Event('online'));
-      };
+      (window as Window & { __goOffline?: () => void; __goOnline?: () => void }).__goOffline =
+        () => {
+          _isOnline = false;
+        };
+      (window as Window & { __goOffline?: () => void; __goOnline?: () => void }).__goOnline =
+        () => {
+          _isOnline = true;
+          window.dispatchEvent(new Event('online'));
+        };
+    });
+
+    await page.route('**/api/track', async (route) => {
+      const request = route.request();
+      const postData = request.postData();
+      if (postData) {
+        try {
+          payloads.push(JSON.parse(postData));
+        } catch {
+          // ignore
+        }
+      }
+      await route.continue();
     });
 
     await page.goto('/test-page.html');
     await page.waitForFunction(() => window.SDK_INITIALIZED);
     await page.evaluate(() => window.SDK_READY);
 
-    // Reset events
-    await request.post('/api/test/reset');
+    // Clear captured payloads (from initial load)
+    payloads.length = 0;
 
     // Go offline - both mock AND network
-    await page.evaluate(() => (window as any).__goOffline());
+    await page.evaluate(
+      () =>
+        (window as Window & { __goOffline?: () => void; __goOnline?: () => void }).__goOffline?.()
+    );
     await context.setOffline(true);
 
     // Verify navigator.onLine is false
@@ -293,9 +444,7 @@ test.describe('Network Handling', () => {
     await page.waitForTimeout(500);
 
     // Verify nothing sent yet (SDK queued it locally)
-    let response = await request.get('/api/test/events');
-    let events: CapturedPayload[] = await response.json();
-    const offlineGoalSent = events.some((e) => hasGoal(e.payload, 'offline_goal'));
+    const offlineGoalSent = payloads.some((p) => hasGoal(p, 'offline_goal'));
     expect(offlineGoalSent).toBe(false);
 
     // Verify queue has the payload stored
@@ -308,14 +457,61 @@ test.describe('Network Handling', () => {
     // Come back online - restore network first, then trigger online event
     await context.setOffline(false);
     await page.waitForTimeout(100); // Let network restore
-    await page.evaluate(() => (window as any).__goOnline());
+    await page.evaluate(
+      () =>
+        (window as Window & { __goOffline?: () => void; __goOnline?: () => void }).__goOnline?.()
+    );
     await page.waitForTimeout(2000); // Wait for flush to complete
 
     // Verify queued payload was sent
-    response = await request.get('/api/test/events');
-    events = await response.json();
-    const found = events.some((e) => hasGoal(e.payload, 'offline_goal'));
+    const found = payloads.some((p) => hasGoal(p, 'offline_goal'));
     expect(found).toBe(true);
+  });
+
+  test('handles 500 server error gracefully', async ({ page }) => {
+    // First let SDK initialize
+    await page.goto('/test-page.html');
+    await page.waitForFunction(() => window.SDK_INITIALIZED);
+    await page.evaluate(() => window.SDK_READY);
+
+    // Block further requests with 500 error
+    await page.route('**/api/track', async (route) => {
+      await route.fulfill({
+        status: 500,
+        body: JSON.stringify({ error: 'Internal Server Error' }),
+      });
+    });
+
+    // Track goal - should not crash
+    await page.evaluate(() => Staminads.trackGoal({ action: 'error_test' }));
+    await page.waitForTimeout(500);
+
+    // SDK should still function
+    const sessionId = await page.evaluate(() => Staminads.getSessionId());
+    expect(sessionId).toBeTruthy();
+  });
+
+  test('handles 429 rate limit gracefully', async ({ page }) => {
+    // First let SDK initialize
+    await page.goto('/test-page.html');
+    await page.waitForFunction(() => window.SDK_INITIALIZED);
+    await page.evaluate(() => window.SDK_READY);
+
+    // Block further requests with 429 error
+    await page.route('**/api/track', async (route) => {
+      await route.fulfill({
+        status: 429,
+        body: JSON.stringify({ error: 'Too Many Requests' }),
+      });
+    });
+
+    // Track goal - should not crash
+    await page.evaluate(() => Staminads.trackGoal({ action: 'rate_limit_test' }));
+    await page.waitForTimeout(500);
+
+    // SDK should still function
+    const sessionId = await page.evaluate(() => Staminads.getSessionId());
+    expect(sessionId).toBeTruthy();
   });
 
   // Note: Timeout queue functionality is tested in unit tests (sender.test.ts)

@@ -7,6 +7,11 @@ export default defineConfig({
   workers: 1,
   reporter: 'html',
   timeout: 30000,
+
+  // Global setup/teardown for ClickHouse database
+  globalSetup: './tests/e2e/helpers/global-setup.ts',
+  globalTeardown: './tests/e2e/helpers/global-teardown.ts',
+
   use: {
     baseURL: 'http://localhost:3333',
     trace: 'on-first-retry',
@@ -15,14 +20,28 @@ export default defineConfig({
       args: ['--disable-blink-features=AutomationControlled'],
     },
   },
-  webServer: {
-    command: 'npx tsx tests/e2e/helpers/mock-server.ts',
-    url: 'http://localhost:3333/health',
-    reuseExistingServer: !process.env.CI,
-    timeout: 30000,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  },
+
+  webServer: [
+    {
+      // Static file server for HTML pages + SDK bundle
+      command: 'npx tsx tests/e2e/helpers/static-server.ts',
+      url: 'http://localhost:3333/health',
+      reuseExistingServer: !process.env.CI,
+      timeout: 30000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+    {
+      // Real API server for tracking data
+      command: 'cd ../api && PORT=4000 CLICKHOUSE_SYSTEM_DATABASE=staminads_sdk_e2e_system npm run start:dev',
+      url: 'http://localhost:4000/api/setup.status',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120000, // API takes longer to start
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+  ],
+
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     // Add more browsers later:

@@ -3,7 +3,7 @@ import { createFileRoute, Outlet, Link, useNavigate, useRouterState } from '@tan
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { Select, Button, Avatar, Spin, Space, Popover, Tooltip, App, Dropdown } from 'antd'
 import type { RefSelectProps } from 'antd/es/select'
-import { LogoutOutlined, PlusOutlined, GlobalOutlined, QuestionCircleOutlined, MenuOutlined, CloseOutlined, LeftOutlined, RightOutlined, ExclamationCircleOutlined } from '@ant-design/icons'
+import { LogoutOutlined, PlusOutlined, GlobalOutlined, QuestionCircleOutlined, MenuOutlined, CloseOutlined, LeftOutlined, RightOutlined, ExclamationCircleOutlined, UserOutlined } from '@ant-design/icons'
 import { ExternalLink } from 'lucide-react'
 import { workspacesQueryOptions, workspaceQueryOptions, backfillSummaryQueryOptions } from '../../../lib/queries'
 import { SyncStatusIcon } from '../../../components/layout/SyncStatusIcon'
@@ -304,14 +304,32 @@ function WorkspaceLayout() {
                 className="!text-gray-500 hover:!text-gray-800 hover:!bg-gray-100"
               />
             </Dropdown>
-            <Tooltip title="Logout" placement="left">
+            <Dropdown
+              menu={{
+                items: [
+                  {
+                    key: 'account',
+                    icon: <UserOutlined />,
+                    label: 'Account',
+                    onClick: () => navigate({ to: '/workspaces/$workspaceId/account', params: { workspaceId } }),
+                  },
+                  { type: 'divider' },
+                  {
+                    key: 'logout',
+                    icon: <LogoutOutlined />,
+                    label: 'Logout',
+                    onClick: handleLogout,
+                  },
+                ],
+              }}
+              placement="bottomRight"
+            >
               <Button
                 type="text"
-                icon={<LogoutOutlined />}
-                onClick={handleLogout}
+                icon={<UserOutlined />}
                 className="!text-gray-500 hover:!text-gray-800 hover:!bg-gray-100"
               />
-            </Tooltip>
+            </Dropdown>
           </Space>
           </div>
         </div>
@@ -508,6 +526,17 @@ function WorkspaceLayout() {
 
           {/* Divider */}
           <div className="border-t border-gray-200" />
+
+          {/* Account */}
+          <Link
+            to="/workspaces/$workspaceId/account"
+            params={{ workspaceId }}
+            onClick={closeMobileMenu}
+            className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50"
+          >
+            <UserOutlined />
+            Account
+          </Link>
 
           {/* Logout */}
           <button

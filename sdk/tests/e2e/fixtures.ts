@@ -3,9 +3,21 @@
  *
  * Includes stealth mode to bypass SDK bot detection.
  * Updated for V3 SessionPayload format.
+ * Now uses real API + ClickHouse for data verification.
  */
 
 import { test as base, expect, devices } from '@playwright/test';
+
+// Re-export ClickHouse helpers for use in tests
+export {
+  truncateEvents,
+  truncateWorkspaceTables,
+  queryEvents,
+  countEvents,
+  waitForEvents,
+  getTestWorkspaceId,
+  type EventRecord,
+} from './helpers/clickhouse';
 
 // V3 SessionPayload types (matches SDK types/session-state.ts)
 export interface PageviewAction {
