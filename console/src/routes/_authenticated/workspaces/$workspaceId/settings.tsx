@@ -14,7 +14,7 @@ import { ApiKeysPage } from '../../../../pages/settings/api-keys'
 import { z } from 'zod'
 
 const settingsSearchSchema = z.object({
-  section: z.enum(['workspace', 'dimensions', 'team', 'integrations', 'smtp', 'api-keys', 'privacy', 'sdk']).optional().default('workspace'),
+  section: z.enum(['workspace', 'dimensions', 'team', 'integrations', 'smtp', 'api-keys', 'privacy', 'sdk', 'danger']).optional().default('workspace'),
 })
 
 export const Route = createFileRoute('/_authenticated/workspaces/$workspaceId/settings')({
@@ -55,9 +55,9 @@ const currencyOptions = [
   { value: 'BRL', label: 'BRL - Brazilian Real' },
 ]
 
-type SettingsSection = 'workspace' | 'dimensions' | 'team' | 'integrations' | 'smtp' | 'api-keys' | 'privacy' | 'sdk'
+type SettingsSection = 'workspace' | 'dimensions' | 'team' | 'integrations' | 'smtp' | 'api-keys' | 'privacy' | 'sdk' | 'danger'
 
-const menuItems: { key: SettingsSection; label: string }[] = [
+const menuItems: { key: SettingsSection; label: string; ownerOnly?: boolean }[] = [
   { key: 'workspace', label: 'Workspace' },
   { key: 'dimensions', label: 'Custom Dimensions' },
   { key: 'team', label: 'Team' },
@@ -66,6 +66,7 @@ const menuItems: { key: SettingsSection; label: string }[] = [
   { key: 'api-keys', label: 'API Keys' },
   { key: 'privacy', label: 'Privacy' },
   { key: 'sdk', label: 'Install SDK' },
+  { key: 'danger', label: 'Danger zone', ownerOnly: true },
 ]
 
 function Settings() {
@@ -82,16 +83,16 @@ function Settings() {
     queryFn: api.auth.me,
   })
 
-  // Fetch members to get current user's role
+  // Fetch members to get current user's role (needed to show owner-only tabs)
   const { data: members = [] } = useQuery({
     queryKey: ['members', workspaceId],
     queryFn: () => api.members.list(workspaceId),
-    enabled: section === 'team', // Only fetch when on team section
   })
 
   // Get current user's role
   const currentMember = members.find(m => m.user_id === currentUser?.id)
   const userRole = currentMember?.role || 'viewer'
+  const isOwner = userRole === 'owner'
 
   // Check if workspace has sessions
   const { data: sessionCount } = useQuery({
@@ -124,6 +125,8 @@ function Settings() {
   const [geoStoreCity, setGeoStoreCity] = useState(workspace.settings.geo_store_city ?? true)
   const [geoStoreRegion, setGeoStoreRegion] = useState(workspace.settings.geo_store_region ?? true)
   const [geoCoordinatesPrecision, setGeoCoordinatesPrecision] = useState(workspace.settings.geo_coordinates_precision ?? 2)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
 
   const updateWorkspaceMutation = useMutation({
     mutationFn: api.workspaces.update,
@@ -146,6 +149,18 @@ function Settings() {
     },
     onError: (error: Error) => {
       message.error(error.message || 'Failed to update label')
+    },
+  })
+
+  const deleteWorkspaceMutation = useMutation({
+    mutationFn: () => api.workspaces.delete(workspaceId),
+    onSuccess: async () => {
+      await queryClient.refetchQueries({ queryKey: ['workspaces'] })
+      message.success('Workspace deleted')
+      navigate({ to: '/workspaces' })
+    },
+    onError: (error: Error) => {
+      message.error(error.message || 'Failed to delete workspace')
     },
   })
 
@@ -599,6 +614,57 @@ window.StaminadsConfig = {
     </div>
   )
 
+  const dangerContent = (
+    <div className="bg-white p-6 rounded-lg shadow-sm max-w-xl border border-red-200">
+      <h3 className="text-lg font-medium text-red-600 mb-4">Delete Workspace</h3>
+      <p className="text-gray-600 mb-4">
+        Once you delete a workspace, there is no going back. This will permanently delete all
+        analytics data, team members, API keys, and settings.
+      </p>
+      <Button danger onClick={() => setDeleteConfirmOpen(true)}>
+        Delete this workspace
+      </Button>
+
+      <Modal
+        title="Delete Workspace"
+        open={deleteConfirmOpen}
+        onCancel={() => {
+          setDeleteConfirmOpen(false)
+          setDeleteConfirmText('')
+        }}
+        footer={[
+          <Button key="cancel" onClick={() => {
+            setDeleteConfirmOpen(false)
+            setDeleteConfirmText('')
+          }}>
+            Cancel
+          </Button>,
+          <Button
+            key="delete"
+            danger
+            type="primary"
+            loading={deleteWorkspaceMutation.isPending}
+            disabled={deleteConfirmText !== workspace.name}
+            onClick={() => deleteWorkspaceMutation.mutate()}
+          >
+            Delete
+          </Button>,
+        ]}
+      >
+        <p className="mb-4">
+          This action cannot be undone. This will permanently delete the workspace
+          <strong> {workspace.name}</strong> and all of its data.
+        </p>
+        <p className="mb-2">Please type <strong>{workspace.name}</strong> to confirm:</p>
+        <Input
+          value={deleteConfirmText}
+          onChange={(e) => setDeleteConfirmText(e.target.value)}
+          placeholder={workspace.name}
+        />
+      </Modal>
+    </div>
+  )
+
   return (
     <div className="flex-1 p-6">
       <h1 className="hidden md:block text-2xl font-light text-gray-800 mb-6">Settings</h1>
@@ -607,22 +673,24 @@ window.StaminadsConfig = {
         {/* Sidebar Menu - hidden on mobile, accessible via hamburger menu */}
         <div className="hidden md:block w-56 flex-shrink-0">
           <nav className="space-y-1">
-            {menuItems.map((item) => {
-              const isActive = section === item.key
-              return (
-                <button
-                  key={item.key}
-                  onClick={() => setActiveSection(item.key)}
-                  className={`w-full px-3 py-2 rounded-md text-left text-sm font-medium transition-colors ${
-                    isActive
-                      ? 'bg-[var(--primary)] text-white'
-                      : 'text-gray-600 hover:bg-gray-100'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              )
-            })}
+            {menuItems
+              .filter((item) => !item.ownerOnly || isOwner)
+              .map((item) => {
+                const isActive = section === item.key
+                return (
+                  <button
+                    key={item.key}
+                    onClick={() => setActiveSection(item.key)}
+                    className={`w-full px-3 py-2 rounded-md text-left text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-[var(--primary)] text-white'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                )
+              })}
           </nav>
         </div>
 
@@ -636,6 +704,7 @@ window.StaminadsConfig = {
           {section === 'api-keys' && <ApiKeysPage workspaceId={workspaceId} />}
           {section === 'privacy' && privacyContent}
           {section === 'sdk' && sdkContent}
+          {section === 'danger' && isOwner && dangerContent}
         </div>
       </div>
     </div>

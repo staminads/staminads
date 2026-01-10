@@ -301,10 +301,30 @@ export class WorkspacesService {
       throw new NotFoundException(`Workspace ${id} not found`);
     }
 
-    // 1. Drop workspace database (cascades to all tables)
+    // 1. Delete workspace memberships
+    await this.clickhouse.commandSystem(
+      `ALTER TABLE workspace_memberships DELETE WHERE workspace_id = '${id}'`,
+    );
+
+    // 2. Delete invitations
+    await this.clickhouse.commandSystem(
+      `ALTER TABLE invitations DELETE WHERE workspace_id = '${id}'`,
+    );
+
+    // 3. Delete workspace-scoped API keys
+    await this.clickhouse.commandSystem(
+      `ALTER TABLE api_keys DELETE WHERE workspace_id = '${id}'`,
+    );
+
+    // 4. Delete backfill tasks
+    await this.clickhouse.commandSystem(
+      `ALTER TABLE backfill_tasks DELETE WHERE workspace_id = '${id}'`,
+    );
+
+    // 5. Drop workspace database (cascades to all tables)
     await this.clickhouse.dropWorkspaceDatabase(id);
 
-    // 2. Delete workspace row from system database
+    // 6. Delete workspace row from system database
     await this.clickhouse.commandSystem(
       `ALTER TABLE workspaces DELETE WHERE id = '${id}'`,
     );

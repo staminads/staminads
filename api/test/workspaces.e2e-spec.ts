@@ -44,6 +44,8 @@ describe('Workspaces Integration', () => {
       'invitations',
       'users',
       'sessions',
+      'api_keys',
+      'backfill_tasks',
     ]);
 
     // Create test user for each test
@@ -586,9 +588,13 @@ describe('Workspaces Integration', () => {
   });
 
   describe('POST /api/workspaces.delete', () => {
-    it('deletes workspace from ClickHouse', async () => {
+    it('deletes workspace and all related data from ClickHouse', async () => {
+      const workspaceId = 'delete_test_ws';
+      const now = toClickHouseDateTime();
+
+      // Create workspace
       const workspace = {
-        id: 'delete_test_ws',
+        id: workspaceId,
         name: 'Delete Test',
         website: 'https://delete.com',
         timezone: 'UTC',
@@ -598,33 +604,144 @@ describe('Workspaces Integration', () => {
           timescore_reference: 60,
           bounce_threshold: 10,
         }),
-        created_at: toClickHouseDateTime(),
-        updated_at: toClickHouseDateTime(),
+        created_at: now,
+        updated_at: now,
       };
       await ctx.systemClient.insert({
         table: 'workspaces',
         values: [workspace],
         format: 'JSONEachRow',
       });
+
+      // Create membership for this workspace
+      const membership = {
+        id: 'membership-1',
+        workspace_id: workspaceId,
+        user_id: 'test-user-id',
+        role: 'owner',
+        joined_at: now,
+        created_at: now,
+        updated_at: now,
+      };
+      await ctx.systemClient.insert({
+        table: 'workspace_memberships',
+        values: [membership],
+        format: 'JSONEachRow',
+      });
+
+      // Create invitation for this workspace
+      const invitation = {
+        id: 'invitation-1',
+        workspace_id: workspaceId,
+        email: 'invited@test.com',
+        role: 'editor',
+        token_hash: 'hash123',
+        invited_by: 'test-user-id',
+        status: 'pending',
+        expires_at: now,
+        created_at: now,
+        updated_at: now,
+      };
+      await ctx.systemClient.insert({
+        table: 'invitations',
+        values: [invitation],
+        format: 'JSONEachRow',
+      });
+
+      // Create API key for this workspace
+      const apiKey = {
+        id: 'apikey-1',
+        key_hash: 'keyhash123',
+        key_prefix: 'sk_test_',
+        user_id: 'test-user-id',
+        workspace_id: workspaceId,
+        name: 'Test API Key',
+        description: '',
+        role: 'editor',
+        status: 'active',
+        created_by: 'test-user-id',
+        created_at: now,
+        updated_at: now,
+      };
+      await ctx.systemClient.insert({
+        table: 'api_keys',
+        values: [apiKey],
+        format: 'JSONEachRow',
+      });
+
+      // Create backfill task for this workspace
+      const backfillTask = {
+        id: 'backfill-1',
+        workspace_id: workspaceId,
+        status: 'pending',
+        lookback_days: 30,
+        chunk_size_days: 1,
+        batch_size: 5000,
+        total_sessions: 0,
+        processed_sessions: 0,
+        total_events: 0,
+        processed_events: 0,
+        created_at: now,
+        updated_at: now,
+      };
+      await ctx.systemClient.insert({
+        table: 'backfill_tasks',
+        values: [backfillTask],
+        format: 'JSONEachRow',
+      });
+
       await waitForClickHouse();
 
+      // Delete workspace
       await request(ctx.app.getHttpServer())
         .post('/api/workspaces.delete')
         .set('Authorization', `Bearer ${authToken}`)
-        .send({ id: workspace.id })
+        .send({ id: workspaceId })
         .expect(200);
 
-      // Wait for delete mutation to complete
+      // Wait for delete mutations to complete
       await waitForMutations(ctx.systemClient, TEST_SYSTEM_DATABASE);
 
-      // Verify deleted from ClickHouse system database
-      const result = await ctx.systemClient.query({
+      // Verify workspace deleted
+      const workspaceResult = await ctx.systemClient.query({
         query: 'SELECT * FROM workspaces WHERE id = {id:String}',
-        query_params: { id: workspace.id },
+        query_params: { id: workspaceId },
         format: 'JSONEachRow',
       });
-      const rows = await result.json();
-      expect(rows).toHaveLength(0);
+      expect(await workspaceResult.json()).toHaveLength(0);
+
+      // Verify memberships deleted
+      const membershipResult = await ctx.systemClient.query({
+        query:
+          'SELECT * FROM workspace_memberships WHERE workspace_id = {id:String}',
+        query_params: { id: workspaceId },
+        format: 'JSONEachRow',
+      });
+      expect(await membershipResult.json()).toHaveLength(0);
+
+      // Verify invitations deleted
+      const invitationResult = await ctx.systemClient.query({
+        query: 'SELECT * FROM invitations WHERE workspace_id = {id:String}',
+        query_params: { id: workspaceId },
+        format: 'JSONEachRow',
+      });
+      expect(await invitationResult.json()).toHaveLength(0);
+
+      // Verify API keys deleted
+      const apiKeyResult = await ctx.systemClient.query({
+        query: 'SELECT * FROM api_keys WHERE workspace_id = {id:String}',
+        query_params: { id: workspaceId },
+        format: 'JSONEachRow',
+      });
+      expect(await apiKeyResult.json()).toHaveLength(0);
+
+      // Verify backfill tasks deleted
+      const backfillResult = await ctx.systemClient.query({
+        query: 'SELECT * FROM backfill_tasks WHERE workspace_id = {id:String}',
+        query_params: { id: workspaceId },
+        format: 'JSONEachRow',
+      });
+      expect(await backfillResult.json()).toHaveLength(0);
     });
 
     it('returns 404 for non-existent workspace', async () => {

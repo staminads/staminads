@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, useNavigate, redirect } from '@tanstack/react-router'
 import { Form, Input, Button, message, Avatar } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -13,6 +13,11 @@ const toSnakeCase = (str: string) =>
     .replace(/_+/g, '_')
 
 export const Route = createFileRoute('/_authenticated/workspaces/new')({
+  beforeLoad: ({ context }) => {
+    if (!context.auth.user?.isSuperAdmin) {
+      throw redirect({ to: '/workspaces' })
+    }
+  },
   component: NewWorkspaceForm,
 })
 

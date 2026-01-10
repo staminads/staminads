@@ -388,18 +388,44 @@ describe('WorkspacesService', () => {
   });
 
   describe('delete', () => {
-    it('deletes workspace and drops database', async () => {
+    it('deletes workspace and all related data', async () => {
       clickhouse.querySystem.mockResolvedValue([{ id: 'ws-test-001' }]);
       clickhouse.dropWorkspaceDatabase.mockResolvedValue(undefined);
       clickhouse.commandSystem.mockResolvedValue(undefined);
 
       await service.delete('ws-test-001');
 
+      // Verify memberships cleanup
+      expect(clickhouse.commandSystem).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "workspace_memberships DELETE WHERE workspace_id = 'ws-test-001'",
+        ),
+      );
+      // Verify invitations cleanup
+      expect(clickhouse.commandSystem).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "invitations DELETE WHERE workspace_id = 'ws-test-001'",
+        ),
+      );
+      // Verify API keys cleanup
+      expect(clickhouse.commandSystem).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "api_keys DELETE WHERE workspace_id = 'ws-test-001'",
+        ),
+      );
+      // Verify backfill tasks cleanup
+      expect(clickhouse.commandSystem).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "backfill_tasks DELETE WHERE workspace_id = 'ws-test-001'",
+        ),
+      );
+      // Verify database dropped
       expect(clickhouse.dropWorkspaceDatabase).toHaveBeenCalledWith(
         'ws-test-001',
       );
+      // Verify workspace row deleted
       expect(clickhouse.commandSystem).toHaveBeenCalledWith(
-        expect.stringContaining("DELETE WHERE id = 'ws-test-001'"),
+        expect.stringContaining("workspaces DELETE WHERE id = 'ws-test-001'"),
       );
     });
 
