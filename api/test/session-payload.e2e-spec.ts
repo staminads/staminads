@@ -90,7 +90,7 @@ describe('V3 Session Payload E2E', () => {
 
       const response = await request(ctx.app.getHttpServer())
         .post('/api/track')
-        .set('Authorization', `Bearer ${apiKey}`)
+
         .send(payload)
         .expect(200);
 
@@ -112,7 +112,7 @@ describe('V3 Session Payload E2E', () => {
 
       await request(ctx.app.getHttpServer())
         .post('/api/track')
-        .set('Authorization', `Bearer ${apiKey}`)
+
         .send(payload)
         .expect(200);
 
@@ -154,7 +154,7 @@ describe('V3 Session Payload E2E', () => {
 
       const response1 = await request(ctx.app.getHttpServer())
         .post('/api/track')
-        .set('Authorization', `Bearer ${apiKey}`)
+
         .send(payload1)
         .expect(200);
 
@@ -178,7 +178,7 @@ describe('V3 Session Payload E2E', () => {
 
       const response2 = await request(ctx.app.getHttpServer())
         .post('/api/track')
-        .set('Authorization', `Bearer ${apiKey}`)
+
         .send(payload2)
         .expect(200);
 
@@ -208,7 +208,7 @@ describe('V3 Session Payload E2E', () => {
 
       await request(ctx.app.getHttpServer())
         .post('/api/track')
-        .set('Authorization', `Bearer ${apiKey}`)
+
         .send(payload)
         .expect(200);
 
@@ -236,7 +236,7 @@ describe('V3 Session Payload E2E', () => {
 
       await request(ctx.app.getHttpServer())
         .post('/api/track')
-        .set('Authorization', `Bearer ${apiKey}`)
+
         .send(payload)
         .expect(200);
 
@@ -267,7 +267,7 @@ describe('V3 Session Payload E2E', () => {
 
       await request(ctx.app.getHttpServer())
         .post('/api/track')
-        .set('Authorization', `Bearer ${apiKey}`)
+
         .send(payload)
         .expect(200);
 
@@ -286,17 +286,6 @@ describe('V3 Session Payload E2E', () => {
       expect(Number(event._version)).toBeLessThanOrEqual(afterTime);
     });
 
-    it('requires API key authentication', async () => {
-      const payload = createSessionPayload({
-        actions: [createPageviewAction()],
-      });
-
-      await request(ctx.app.getHttpServer())
-        .post('/api/track')
-        .send(payload)
-        .expect(401);
-    });
-
     it('rejects invalid workspace_id', async () => {
       const payload = createSessionPayload({
         workspace_id: 'invalid-ws',
@@ -305,9 +294,8 @@ describe('V3 Session Payload E2E', () => {
 
       await request(ctx.app.getHttpServer())
         .post('/api/track')
-        .set('Authorization', `Bearer ${apiKey}`)
         .send(payload)
-        .expect(403);
+        .expect(400);
     });
 
     it('validates nested actions', async () => {
@@ -322,7 +310,7 @@ describe('V3 Session Payload E2E', () => {
 
       const response = await request(ctx.app.getHttpServer())
         .post('/api/track')
-        .set('Authorization', `Bearer ${apiKey}`)
+
         .send(payload)
         .expect(400);
 
@@ -341,7 +329,7 @@ describe('V3 Session Payload E2E', () => {
 
       await request(ctx.app.getHttpServer())
         .post('/api/track')
-        .set('Authorization', `Bearer ${apiKey}`)
+
         .send(payload)
         .expect(400);
     });
@@ -369,7 +357,7 @@ describe('V3 Session Payload E2E', () => {
 
       await request(ctx.app.getHttpServer())
         .post('/api/track')
-        .set('Authorization', `Bearer ${apiKey}`)
+
         .send(payload)
         .expect(200);
 
@@ -427,7 +415,7 @@ describe('V3 Session Payload E2E', () => {
 
       await request(ctx.app.getHttpServer())
         .post('/api/track')
-        .set('Authorization', `Bearer ${apiKey}`)
+
         .send(payload1)
         .expect(200);
 
@@ -450,7 +438,7 @@ describe('V3 Session Payload E2E', () => {
 
       await request(ctx.app.getHttpServer())
         .post('/api/track')
-        .set('Authorization', `Bearer ${apiKey}`)
+
         .send(payload2)
         .expect(200);
 
@@ -486,7 +474,7 @@ describe('V3 Session Payload E2E', () => {
 
       await request(ctx.app.getHttpServer())
         .post('/api/track')
-        .set('Authorization', `Bearer ${apiKey}`)
+
         .send(payload)
         .expect(200);
 
@@ -525,7 +513,7 @@ describe('V3 Session Payload E2E', () => {
 
       await request(ctx.app.getHttpServer())
         .post('/api/track')
-        .set('Authorization', `Bearer ${apiKey}`)
+
         .send(payload)
         .expect(200);
 
@@ -565,7 +553,7 @@ describe('V3 Session Payload E2E', () => {
 
       await request(ctx.app.getHttpServer())
         .post('/api/track')
-        .set('Authorization', `Bearer ${apiKey}`)
+
         .send(payload)
         .expect(200);
 

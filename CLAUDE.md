@@ -7,52 +7,62 @@ Web analytics platform for tracking TimeScore metrics.
 ```
 /api          NestJS TypeScript API
 /console      React frontend (Vite + TypeScript + Ant Design)
+/sdk          JavaScript/TypeScript tracking SDK
+/docs         Technical documentation and specs
+/releases     Release notes per version
 ```
 
 ## API
 
-NestJS application with RPC-style endpoints.
-
-### Endpoints
-
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/api/auth.login` | POST | No | Login with admin credentials |
-| `/api/workspaces.list` | GET | Yes | List all workspaces |
-| `/api/workspaces.get` | GET | Yes | Get workspace by id |
-| `/api/workspaces.create` | POST | Yes | Create workspace |
-| `/api/workspaces.update` | POST | Yes | Update workspace |
-| `/api/workspaces.delete` | POST | Yes | Delete workspace |
-| `/api/track` | POST | No | Track session with cumulative actions array |
-| `/api/tools.websiteMeta` | POST | No | Fetch website title and logo |
-| `/api/demo.generate?secret=<DEMO_SECRET>` | POST | Secret | Generate demo fixtures (10k sessions) |
-| `/api/demo.delete?secret=<DEMO_SECRET>` | POST | Secret | Delete demo workspace and sessions |
+NestJS application with RPC-style endpoints. See `openapi.json` for full API documentation.
 
 ### Environment Variables
 
 ```
-ENCRYPTION_KEY=<required, 32+ chars>
-JWT_EXPIRES_IN=7d
-ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=<required>
+# Server
 PORT=3000
+JWT_EXPIRES_IN=7d
+APP_URL=http://localhost:5173
+CORS_ALLOWED_ORIGINS=http://localhost:5173
 
-# Demo fixtures (optional)
-DEMO_SECRET=<optional, required for demo endpoints>
-
-# Demo mode - disable write operations when true
-IS_DEMO=false
+# Security (REQUIRED)
+ENCRYPTION_KEY=<32+ chars, generate with: openssl rand -hex 32>
 
 # ClickHouse
 CLICKHOUSE_HOST=http://localhost:8123
-CLICKHOUSE_DATABASE=staminads
+CLICKHOUSE_SYSTEM_DATABASE=staminads_system
 CLICKHOUSE_USER=default
 CLICKHOUSE_PASSWORD=
+
+# Demo (optional)
+DEMO_SECRET=<for demo.generate/demo.delete endpoints>
+IS_DEMO=false
+
+# Geo Location (optional)
+GEOIP_DB_PATH=./data/GeoLite2-City.mmdb
+
+# Custom Dimensions Cache (optional)
+CUSTOM_DIMENSIONS_CACHE_TTL_MS=15000
+
+# Global SMTP (optional, or configure per-workspace)
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_TLS=true
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM_NAME=Staminads
+SMTP_FROM_EMAIL=noreply@example.com
 ```
 
 ### Database
 
-ClickHouse is used for storing workspaces and web sessions. Schemas in `api/src/database/schemas/`.
+ClickHouse is used for all data storage:
+- Workspaces, users, sessions, memberships
+- Invitations, password reset tokens
+- Audit logs, API keys
+- Analytics data
+
+Schemas in `api/src/database/schemas/`.
 
 ### OpenAPI Spec
 
@@ -113,6 +123,8 @@ npm run dev          # Start dev server
 npm run build        # Build for production
 npm run lint         # Run ESLint + TypeScript type checking
 npm run type-check   # TypeScript type checking only
+npm run copy-sdk     # Copy SDK from /sdk/dist to public/
+npm run preview      # Preview production build
 ```
 
 ### Linting
@@ -122,6 +134,31 @@ The `npm run lint` command runs both ESLint and TypeScript compiler:
 - **TypeScript** (`tsc --noEmit`): Checks all type errors (same errors shown in VSCode)
 
 This ensures CLI linting catches the same errors as your IDE.
+
+## SDK
+
+JavaScript/TypeScript SDK for tracking TimeScore metrics.
+
+### Scripts
+
+```bash
+cd sdk
+npm run build         # Build UMD/ESM/CJS bundles
+npm run dev           # Watch mode
+npm run test          # Run unit tests
+npm run test:watch    # Watch mode
+npm run test:e2e      # Run Playwright E2E tests
+npm run type-check    # TypeScript check
+npm run lint          # ESLint
+```
+
+### Output
+
+Built to `dist/`:
+- `staminads.min.js` - UMD bundle for script tags
+- `staminads.esm.js` - ESM for modern bundlers
+- `staminads.cjs.js` - CommonJS for Node.js
+- `staminads.d.ts` - TypeScript declarations
 
 ## Versioning
 
