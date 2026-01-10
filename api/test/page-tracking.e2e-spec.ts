@@ -392,9 +392,10 @@ describe('Page Duration Tracking E2E', () => {
         query_params: { session_id: sessionId },
         format: 'JSONEachRow',
       });
-      const pages = await result.json<
-        { path: string; page_number: number; duration: number }[]
-      >();
+      const pages =
+        await result.json<
+          { path: string; page_number: number; duration: number }[]
+        >();
 
       // Each pageview creates a page row with matching path and duration
       expect(pages).toHaveLength(2);
@@ -437,9 +438,10 @@ describe('Page Duration Tracking E2E', () => {
         query_params: { session_id: sessionId },
         format: 'JSONEachRow',
       });
-      const pages = await result.json<
-        { path: string; page_number: number; duration: number }[]
-      >();
+      const pages =
+        await result.json<
+          { path: string; page_number: number; duration: number }[]
+        >();
 
       expect(pages).toHaveLength(1);
       expect(pages[0].path).toBe('/landing');
@@ -604,7 +606,9 @@ describe('Page Duration Tracking E2E', () => {
         expect(Boolean(page.is_exit)).toBe(false); // Always false in current impl
 
         // Entry type
-        expect(page.entry_type).toBe(event.page_number === 1 ? 'landing' : 'navigation');
+        expect(page.entry_type).toBe(
+          event.page_number === 1 ? 'landing' : 'navigation',
+        );
 
         // Timestamps - should match SDK timestamps
         expect(page.entered_at).toBe(event.entered_at);

@@ -1305,7 +1305,9 @@ describe('Analytics E2E', () => {
         expect(response.body.data[0]).toHaveProperty('sum_goal_value');
         // 10 purchase goals with values: 99.99 + [2,5,8,11,14,17,20,23,26,29]
         // = 10 * 99.99 + (2+5+8+11+14+17+20+23+26+29) = 999.9 + 155 = 1154.9
-        expect(Number(response.body.data[0].sum_goal_value)).toBeGreaterThan(1000);
+        expect(Number(response.body.data[0].sum_goal_value)).toBeGreaterThan(
+          1000,
+        );
       });
 
       it('returns goals grouped by goal_name', async () => {

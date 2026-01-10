@@ -23,7 +23,7 @@ NestJS application with RPC-style endpoints.
 | `/api/workspaces.create` | POST | Yes | Create workspace |
 | `/api/workspaces.update` | POST | Yes | Update workspace |
 | `/api/workspaces.delete` | POST | Yes | Delete workspace |
-| `/api/track` | POST | API Key | Track session with cumulative actions array |
+| `/api/track` | POST | No | Track session with cumulative actions array |
 | `/api/tools.websiteMeta` | POST | No | Fetch website title and logo |
 | `/api/demo.generate?secret=<DEMO_SECRET>` | POST | Secret | Generate demo fixtures (10k sessions) |
 | `/api/demo.delete?secret=<DEMO_SECRET>` | POST | Secret | Delete demo workspace and sessions |

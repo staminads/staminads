@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.2.0] - 2026-01-10
+
+- Fix /track endpoint to be public (no auth required) as per spec
+
 ## [3.1.0] - 2026-01-09
 
 - Add conversion rate KPI to Goals page with explanatory tooltip
