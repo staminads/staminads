@@ -24,7 +24,7 @@ import { ApiKeysModule } from '../api-keys/api-keys.module';
           secret,
           signOptions: {
             expiresIn: (configService.get<string>('JWT_EXPIRES_IN') ??
-              '7d') as `${number}${'s' | 'm' | 'h' | 'd'}`,
+              '14d') as `${number}${'s' | 'm' | 'h' | 'd'}`,
           },
         };
       },

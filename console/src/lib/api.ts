@@ -65,6 +65,11 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     },
   })
   if (!res.ok) {
+    // Handle expired/invalid token - redirect to logout route
+    if (res.status === 401) {
+      window.location.href = '/logout'
+      throw new Error('Session expired')
+    }
     const errorData = await res.json().catch(() => ({}))
     throw new Error(extractErrorMessage(errorData, 'Request failed'))
   }

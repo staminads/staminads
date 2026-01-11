@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [4.1.0] - 2026-01-11
+
+- Fix expired JWT token handling - redirect to logout on 401 responses
+- Add public /logout route
+- Increase default JWT expiration from 7 to 14 days
+
 ## [4.0.0] - 2026-01-10
 
 ### Breaking Changes
