@@ -197,6 +197,12 @@ export function fillGaps<T extends Record<string, unknown>>(
   const allDates: string[] = [];
   let current = dayjs.utc(start).tz(tz);
   const endDate = dayjs.utc(end).tz(tz);
+
+  // For weekly granularity, align to ISO week start (Monday) to match ClickHouse's toStartOfWeek()
+  if (granularity === 'week') {
+    current = current.startOf('isoWeek');
+  }
+
   while (current.isBefore(endDate) || current.isSame(endDate, unit)) {
     allDates.push(current.format(dateFormat));
     current = current.add(1, unit);

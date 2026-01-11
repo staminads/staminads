@@ -189,6 +189,41 @@ describe('fillGaps', () => {
     expect(result).toHaveLength(3); // 3 weeks
   });
 
+  it('aligns week granularity to ISO week start (Monday) when start is not Monday', () => {
+    // This tests the bug where previous period (e.g., 91 days shifted) doesn't start on Monday
+    // ClickHouse returns weeks starting on Monday (toStartOfWeek with mode=1)
+    // fillGaps must align to the same Monday start to match data correctly
+
+    // 2025-12-03 is a Wednesday, 2025-12-17 is a Wednesday
+    // ISO week of Dec 3: starts Dec 1 (Monday)
+    // ISO week of Dec 17: starts Dec 15 (Monday)
+    // So we should have weeks: Dec 1, Dec 8, Dec 15 = 3 weeks
+
+    // Data returned by ClickHouse (always Monday-aligned)
+    const data = [
+      { date_week: '2025-12-01', sessions: 100 }, // Monday Dec 1
+      { date_week: '2025-12-08', sessions: 200 }, // Monday Dec 8
+    ];
+
+    const result = fillGaps(
+      data,
+      'week',
+      'date_week',
+      '2025-12-03', // Wednesday - NOT a Monday!
+      '2025-12-17', // Wednesday
+      ['sessions'],
+    );
+
+    // Should align to Monday and generate: Dec 1, Dec 8, Dec 15
+    expect(result).toHaveLength(3);
+    expect(result[0].date_week).toBe('2025-12-01');
+    expect(result[0].sessions).toBe(100);
+    expect(result[1].date_week).toBe('2025-12-08');
+    expect(result[1].sessions).toBe(200);
+    expect(result[2].date_week).toBe('2025-12-15');
+    expect(result[2].sessions).toBe(0); // gap filled
+  });
+
   it('handles month granularity', () => {
     const data = [{ date_month: '2025-10-01', sessions: 100 }];
     const result = fillGaps(

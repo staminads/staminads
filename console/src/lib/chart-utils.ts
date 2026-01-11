@@ -23,14 +23,14 @@ export function determineGranularity(preset: DatePreset): Granularity {
     previous_14_days: 'day',
     previous_28_days: 'day',
     previous_30_days: 'day',
-    previous_90_days: 'week',
-    previous_91_days: 'week',
+    previous_90_days: 'day',
+    previous_91_days: 'day',
     this_week: 'day',
     previous_week: 'day',
     this_month: 'day',
     previous_month: 'day',
-    this_quarter: 'week',
-    previous_quarter: 'week',
+    this_quarter: 'day',
+    previous_quarter: 'day',
     this_year: 'month',
     previous_year: 'month',
     previous_12_months: 'month',
@@ -48,7 +48,7 @@ export function getAvailableGranularities(days: number): Granularity[] {
   if (days <= 2) return ['hour']
   if (days <= 7) return ['hour', 'day']
   if (days <= 30) return ['day', 'week']
-  if (days <= 90) return ['day', 'week', 'month']
+  if (days <= 120) return ['day', 'week', 'month'] // < 4 months: daily available
   return ['week', 'month']
 }
 

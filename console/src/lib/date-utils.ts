@@ -165,7 +165,6 @@ export function validateDateRange(start: Dayjs, end: Dayjs): string | null {
 export function determineGranularityForRange(start: Dayjs, end: Dayjs): Granularity {
   const days = end.diff(start, 'day')
   if (days <= 2) return 'hour'
-  if (days <= 31) return 'day'
-  if (days <= 90) return 'week'
+  if (days <= 120) return 'day' // < 4 months: use daily
   return 'month'
 }

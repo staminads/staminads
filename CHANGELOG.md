@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [4.2.0] - 2026-01-11
+
+- Fix weekly granularity comparison showing 0 sessions for previous period
+- Use daily granularity by default for periods under 4 months
+
 ## [4.1.0] - 2026-01-11
 
 - Fix expired JWT token handling - redirect to logout on 401 responses
