@@ -34,9 +34,9 @@ describe('buildAnalyticsQuery', () => {
       defaultContext,
     );
     expect(sql).toContain('count() as sessions');
-    expect(sql).toContain('round(avg(duration), 1) as avg_duration');
+    expect(sql).toContain('round(avg(duration) / 1000, 1) as avg_duration');
     expect(sql).toContain(
-      'round(countIf(duration < 10) * 100.0 / count(), 2) as bounce_rate',
+      'round(countIf(duration < 10000) * 100.0 / count(), 2) as bounce_rate',
     );
   });
 
@@ -438,7 +438,7 @@ describe('buildAnalyticsQuery', () => {
         metrics: ['page_count', 'page_duration', 'page_scroll'],
       });
       expect(sql).toContain('count() as page_count');
-      expect(sql).toContain('round(median(duration), 1) as page_duration');
+      expect(sql).toContain('round(median(duration) / 1000, 1) as page_duration');
       expect(sql).toContain('round(median(max_scroll), 1) as page_scroll');
     });
 
@@ -502,8 +502,8 @@ describe('buildExtremesQuery', () => {
   it('includes correct metric SQL in inner query', () => {
     const { sql } = buildExtremesQuery(baseExtremesQuery);
 
-    // median_duration uses: round(median(duration), 1)
-    expect(sql).toContain('round(median(duration), 1) as value');
+    // median_duration uses: round(median(duration) / 1000, 1)
+    expect(sql).toContain('round(median(duration) / 1000, 1) as value');
   });
 
   it('handles sessions metric', () => {
@@ -658,7 +658,7 @@ describe('buildExtremesQuery', () => {
         metric: 'page_duration',
         groupBy: ['page_path'],
       });
-      expect(sql).toContain('round(median(duration), 1) as value');
+      expect(sql).toContain('round(median(duration) / 1000, 1) as value');
       expect(sql).toContain('GROUP BY path');
     });
   });
