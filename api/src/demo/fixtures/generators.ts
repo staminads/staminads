@@ -588,8 +588,8 @@ function generateSessionEvents(
   const sessionCreatedAt = toClickHouseDateTime(sessionStart);
   const version = Date.now();
 
-  // SDK sends cumulative focus duration with each event
-  // duration variable = total session duration in seconds
+  // SDK sends cumulative focus duration with each event in milliseconds
+  // duration variable = total session duration in seconds (converted to ms when stored)
   events.push({
     ...baseProps,
     received_at: toClickHouseDateTime(sessionStart), // Server timestamp
@@ -623,7 +623,7 @@ function generateSessionEvents(
       updated_at: toClickHouseDateTime(scrollTime),
       name: 'scroll',
       path: page.path,
-      duration: elapsedSeconds, // Cumulative duration at this point
+      duration: elapsedSeconds * 1000, // Cumulative duration at this point (ms)
       page_duration: 0, // v3: scroll events don't carry page duration
       previous_path: '', // v3: scroll events don't carry previous path
       max_scroll: generateMaxScroll(duration),
@@ -655,8 +655,8 @@ function generateSessionEvents(
       updated_at: toClickHouseDateTime(secondPageTime),
       name: 'screen_view',
       path: secondPage.path,
-      duration: elapsedSeconds, // Cumulative duration at this point
-      page_duration: firstPageDuration, // v3: time spent on previous page
+      duration: elapsedSeconds * 1000, // Cumulative duration at this point (ms)
+      page_duration: firstPageDuration * 1000, // v3: time spent on previous page (ms)
       previous_path: page.path, // v3: previous page was landing page
       max_scroll: generateMaxScroll(duration / 2),
       // V3 required fields
@@ -681,7 +681,7 @@ function generateSessionEvents(
       updated_at: toClickHouseDateTime(endTime),
       name: 'scroll',
       path: events[events.length - 1].path, // Same as last page
-      duration: duration, // Final cumulative duration (full session)
+      duration: duration * 1000, // Final cumulative duration (full session, ms)
       page_duration: 0, // v3: scroll events don't carry page duration
       previous_path: '', // v3: scroll events don't carry previous path
       max_scroll: generateMaxScroll(duration),
