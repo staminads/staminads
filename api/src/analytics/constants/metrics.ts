@@ -28,13 +28,13 @@ export const METRICS: Record<string, MetricDefinition> = {
   },
   avg_duration: {
     name: 'avg_duration',
-    sql: 'round(avg(duration), 1)',
+    sql: 'round(avg(duration) / 1000, 1)',
     description: 'Average session duration in seconds',
     tables: ['sessions'],
   },
   median_duration: {
     name: 'median_duration',
-    sql: 'round(median(duration), 1)',
+    sql: 'round(median(duration) / 1000, 1)',
     description: 'Median session duration in seconds',
     tables: ['sessions'],
   },
@@ -53,7 +53,7 @@ export const METRICS: Record<string, MetricDefinition> = {
   bounce_rate: {
     name: 'bounce_rate',
     sql: (ctx: MetricContext) =>
-      `round(countIf(duration < ${ctx.bounce_threshold}) * 100.0 / count(), 2)`,
+      `round(countIf(duration < ${ctx.bounce_threshold * 1000}) * 100.0 / count(), 2)`,
     description: 'Percentage of sessions under bounce threshold',
     tables: ['sessions'],
   },
@@ -72,7 +72,7 @@ export const METRICS: Record<string, MetricDefinition> = {
   },
   median_page_duration: {
     name: 'median_page_duration',
-    sql: 'round(median(median_page_duration), 1)',
+    sql: 'round(median(median_page_duration) / 1000, 1)',
     description: 'Median time on page (seconds)',
     tables: ['sessions'],
   },
@@ -92,7 +92,7 @@ export const METRICS: Record<string, MetricDefinition> = {
   },
   page_duration: {
     name: 'page_duration',
-    sql: 'round(median(duration), 1)',
+    sql: 'round(median(duration) / 1000, 1)',
     description: 'Median time on page (seconds)',
     tables: ['pages'],
   },
