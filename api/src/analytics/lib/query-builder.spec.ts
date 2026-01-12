@@ -438,7 +438,9 @@ describe('buildAnalyticsQuery', () => {
         metrics: ['page_count', 'page_duration', 'page_scroll'],
       });
       expect(sql).toContain('count() as page_count');
-      expect(sql).toContain('round(median(duration) / 1000, 1) as page_duration');
+      expect(sql).toContain(
+        'round(median(duration) / 1000, 1) as page_duration',
+      );
       expect(sql).toContain('round(median(max_scroll), 1) as page_scroll');
     });
 

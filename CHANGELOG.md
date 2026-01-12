@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [4.3.0] - 2026-01-12
+
+- Fix TimeScore/duration displaying in hours instead of seconds (1000x scaling error)
+- Fix bounce rate threshold comparison against millisecond duration values
+- Fix demo data generator to output duration in milliseconds (consistent with SDK)
+
 ## [4.2.0] - 2026-01-11
 
 - Fix weekly granularity comparison showing 0 sessions for previous period
