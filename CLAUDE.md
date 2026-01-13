@@ -274,3 +274,7 @@ When the server is needed:
 ### Web Server Ports
 
 Port 3000 is reserved for the main API. When starting any temporary web server (e.g., for testing, previewing, or debugging), use a different port (e.g., 4000, 5000, 8080) and kill it after use.
+
+### Metrics
+
+**Never round integer metrics.** Count-based metrics like `sessions`, `goals`, `pageviews` should always be integers from the database. If they appear as floats, there is a bug upstream in the query or aggregation - fix the root cause instead of masking it with rounding.

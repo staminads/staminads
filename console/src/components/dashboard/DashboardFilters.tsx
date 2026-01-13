@@ -1,3 +1,5 @@
+import { Button, Dropdown } from 'antd'
+import { Bell } from 'lucide-react'
 import { DateRangePicker } from './DateRangePicker'
 import { ComparisonPicker } from './ComparisonPicker'
 import { ExploreFilterBuilder } from '../explore/ExploreFilterBuilder'
@@ -20,6 +22,8 @@ interface DashboardFiltersProps {
   onFiltersChange: (filters: Filter[]) => void
   customDimensionLabels?: CustomDimensionLabels | null
   hideFilterBuilder?: boolean
+  onSubscribeClick?: () => void
+  onViewSubscriptions?: () => void
 }
 
 export function DashboardFilters({
@@ -37,6 +41,8 @@ export function DashboardFilters({
   onFiltersChange,
   customDimensionLabels,
   hideFilterBuilder = false,
+  onSubscribeClick,
+  onViewSubscriptions,
 }: DashboardFiltersProps) {
   return (
     <div className={`flex flex-col md:flex-row md:items-center gap-2 ${isPending ? 'opacity-75 transition-opacity' : ''}`}>
@@ -60,6 +66,23 @@ export function DashboardFilters({
           onCustomRangeChange={onCustomRangeChange}
         />
         <ComparisonPicker value={comparison} onChange={onComparisonChange} />
+        {onSubscribeClick && (
+          <Dropdown
+            menu={{
+              items: [
+                { key: 'create', label: 'Create subscription', onClick: onSubscribeClick },
+                { key: 'view', label: 'View subscriptions', onClick: onViewSubscriptions },
+              ],
+            }}
+            trigger={['click']}
+          >
+            <Button
+              type="primary"
+              ghost
+              icon={<Bell className="w-4 h-4" />}
+            />
+          </Dropdown>
+        )}
       </div>
     </div>
   )

@@ -42,6 +42,12 @@ import type {
   AcceptInvitationResponse,
 } from '../types/invitation'
 import type { Member, Invitation, Role } from '../types/member'
+import type {
+  Subscription,
+  CreateSubscriptionInput,
+  UpdateSubscriptionInput,
+  PreviewSubscriptionInput,
+} from '../types/subscription'
 
 // Extract error message from NestJS response (handles both string and array formats)
 function extractErrorMessage(errorData: { message?: string | string[] }, fallback: string): string {
@@ -400,5 +406,63 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ workspace_id: workspaceId, new_owner_id: newOwnerId }),
       }),
+  },
+  subscriptions: {
+    list: (workspaceId: string) =>
+      request<Subscription[]>(`subscriptions.list?workspace_id=${workspaceId}`),
+
+    get: (id: string) =>
+      request<Subscription>(`subscriptions.get?id=${id}`),
+
+    create: (data: CreateSubscriptionInput) =>
+      request<Subscription>('subscriptions.create', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    update: (data: UpdateSubscriptionInput) =>
+      request<Subscription>('subscriptions.update', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    delete: (workspaceId: string, id: string) =>
+      request<{ success: boolean }>('subscriptions.delete', {
+        method: 'POST',
+        body: JSON.stringify({ workspace_id: workspaceId, id }),
+      }),
+
+    pause: (workspaceId: string, id: string) =>
+      request<Subscription>('subscriptions.pause', {
+        method: 'POST',
+        body: JSON.stringify({ workspace_id: workspaceId, id }),
+      }),
+
+    resume: (workspaceId: string, id: string) =>
+      request<Subscription>('subscriptions.resume', {
+        method: 'POST',
+        body: JSON.stringify({ workspace_id: workspaceId, id }),
+      }),
+
+    sendNow: (workspaceId: string, id: string) =>
+      request<{ success: boolean }>('subscriptions.sendNow', {
+        method: 'POST',
+        body: JSON.stringify({ workspace_id: workspaceId, id }),
+      }),
+
+    preview: (data: PreviewSubscriptionInput) =>
+      request<{ html: string }>('subscriptions.preview', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    unsubscribe: async (token: string): Promise<{ success: boolean; message: string }> => {
+      const res = await fetch(`/api/subscriptions.unsubscribe?token=${encodeURIComponent(token)}`)
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}))
+        throw new Error(extractErrorMessage(error, 'Unsubscribe failed'))
+      }
+      return res.json()
+    },
   },
 }

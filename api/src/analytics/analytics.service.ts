@@ -452,8 +452,8 @@ export class AnalyticsService {
     const parts = [
       dto.workspace_id,
       dto.table || 'sessions',
-      dto.metrics.sort().join(','),
-      (dto.dimensions || []).sort().join(','),
+      [...dto.metrics].sort().join(','),
+      [...(dto.dimensions || [])].sort().join(','),
       dates.start,
       dates.end,
       dto.dateRange.granularity || '',

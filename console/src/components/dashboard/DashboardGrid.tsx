@@ -15,10 +15,11 @@ import { TrafficHeatmapWidget, type HeatmapDataPoint } from './TrafficHeatmapWid
 import {
   METRICS,
   extractDashboardData,
+  extractKpiTotals,
   type MetricKey,
   type ComparisonMode,
   type DimensionTabConfig,
-  type ColumnConfig
+  type ColumnConfig,
 } from '../../types/dashboard'
 import type { DatePreset, Granularity, Filter } from '../../types/analytics'
 import type { Annotation } from '../../types/workspace'
@@ -146,6 +147,44 @@ export function DashboardGrid({
   })
 
   const dashboardData = response ? extractDashboardData(response, granularity) : null
+
+  // KPI totals query (no granularity for accurate aggregated values)
+  const kpiTotalsQuery = {
+    workspace_id: workspaceId,
+    metrics: METRICS.map((m) => m.key),
+    filters: globalFilters.length > 0 ? globalFilters : undefined,
+    dateRange: {
+      preset: period as DatePreset,
+      // NO granularity here - we want the true aggregated values
+      ...(period === 'custom' &&
+        customStart &&
+        customEnd && {
+          start: customStart,
+          end: customEnd,
+          preset: undefined
+        })
+    },
+    ...(showComparison && {
+      compareDateRange: {
+        preset: period as DatePreset,
+        ...(period === 'custom' &&
+          customStart &&
+          customEnd && {
+            start: customStart,
+            end: customEnd,
+            preset: undefined
+          })
+      }
+    }),
+    timezone
+  }
+
+  const { data: kpiTotalsResponse, isFetching: kpiFetching } = useQuery({
+    ...analyticsQueryOptions(kpiTotalsQuery),
+    placeholderData: keepPreviousData
+  })
+
+  const kpiTotals = kpiTotalsResponse ? extractKpiTotals(kpiTotalsResponse) : null
 
   // Heatmap query - day_of_week x hour aggregation (no comparison)
   const heatmapQuery = {
@@ -380,8 +419,8 @@ export function DashboardGrid({
       <div className={isFetching ? 'opacity-75 transition-opacity' : ''}>
         <div className="rounded-md overflow-hidden bg-white">
           <MetricSummary
-            data={dashboardData}
-            loading={!response && isFetching}
+            kpiTotals={kpiTotals}
+            loading={(!response && isFetching) || (!kpiTotalsResponse && kpiFetching)}
             selectedMetric={selectedMetric}
             onMetricSelect={setSelectedMetric}
             showComparison={showComparison}

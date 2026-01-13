@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { join } from 'path';
 import { validate } from './config/env.validation';
 import { AnalyticsModule } from './analytics/analytics.module';
@@ -25,6 +26,7 @@ import { SmtpModule } from './smtp/smtp.module';
 import { ToolsModule } from './tools/tools.module';
 import { UsersModule } from './users/users.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 
 @Module({
   imports: [
@@ -41,6 +43,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
       ttl: 24 * 60 * 60 * 1000, // 24 hours in ms
     }),
     EventEmitterModule.forRoot(),
+    ScheduleModule.forRoot(),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -85,6 +88,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     EventsModule,
     AnalyticsModule,
     AssistantModule,
+    SubscriptionsModule,
   ],
 })
 export class AppModule implements NestModule {

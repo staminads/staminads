@@ -1,5 +1,5 @@
-import { useCallback } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { useCallback, useState } from 'react'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { workspaceQueryOptions } from '../../../../lib/queries'
 import { DashboardGrid } from '../../../../components/dashboard/DashboardGrid'
@@ -7,6 +7,7 @@ import { DashboardFilters } from '../../../../components/dashboard/DashboardFilt
 import { ExploreFilterBuilder } from '../../../../components/explore/ExploreFilterBuilder'
 import { LiveButton } from '../../../../components/live/LiveButton'
 import { SdkVersionWarning } from '../../../../components/dashboard/SdkVersionWarning'
+import { SubscribeDrawer } from '../../../../components/subscriptions/SubscribeDrawer'
 import { useDashboardParams } from '../../../../hooks/useDashboardParams'
 import type { Filter } from '../../../../types/analytics'
 
@@ -16,7 +17,9 @@ export const Route = createFileRoute('/_authenticated/workspaces/$workspaceId/')
 
 function Dashboard() {
   const { workspaceId } = Route.useParams()
+  const navigate = useNavigate()
   const { data: workspace } = useSuspenseQuery(workspaceQueryOptions(workspaceId))
+  const [subscribeDrawerOpen, setSubscribeDrawerOpen] = useState(false)
   const {
     period,
     timezone,
@@ -86,6 +89,8 @@ function Dashboard() {
           onFiltersChange={setFilters}
           customDimensionLabels={workspace.settings.custom_dimensions}
           hideFilterBuilder={hasFilters}
+          onSubscribeClick={() => setSubscribeDrawerOpen(true)}
+          onViewSubscriptions={() => navigate({ to: '/workspaces/$workspaceId/account', params: { workspaceId }, search: { section: 'notifications' } })}
         />
       </div>
       {hasFilters && (
@@ -108,6 +113,13 @@ function Dashboard() {
         annotations={workspace.settings.annotations}
         globalFilters={filters}
         onAddFilter={handleAddFilter}
+      />
+      <SubscribeDrawer
+        open={subscribeDrawerOpen}
+        onClose={() => setSubscribeDrawerOpen(false)}
+        workspaceId={workspaceId}
+        filters={filters}
+        timezone={workspace.timezone}
       />
     </div>
   )

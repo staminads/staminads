@@ -14,6 +14,7 @@ const ADDITIONAL_WORKSPACE_DATABASES = [
   'staminads_ws_analytics_test_ws',
   'staminads_ws_page_tracking_test_ws',
   'staminads_ws_test_ws_v3',
+  'staminads_ws_report_gen_test_ws',
 ];
 
 let client: ClickHouseClient;

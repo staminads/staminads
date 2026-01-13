@@ -132,6 +132,14 @@ export interface DashboardData {
   granularity: Granularity
 }
 
+export interface KpiTotals {
+  [metricKey: string]: {
+    current: number
+    previous: number
+    changePercent: number
+  }
+}
+
 export const METRICS: MetricConfig[] = [
   {
     key: 'sessions',
@@ -287,4 +295,29 @@ function findDateColumn(row: Record<string, unknown>, expected: string): string 
   }
   // Fallback to expected (will result in undefined timestamps, but won't crash)
   return expected
+}
+
+/**
+ * Extract KPI totals from a non-granular API response.
+ * Use this for accurate aggregated values (median, bounce_rate, etc.)
+ * instead of averaging granular data points.
+ */
+export function extractKpiTotals(response: AnalyticsResponse): KpiTotals {
+  const data = response.data as { current: Record<string, unknown>[]; previous: Record<string, unknown>[] }
+  const currentRow = data.current[0] || {}
+  const previousRow = data.previous[0] || {}
+
+  const totals: KpiTotals = {}
+
+  for (const metric of METRICS) {
+    const current = Number(currentRow[metric.key] ?? 0)
+    const previous = Number(previousRow[metric.key] ?? 0)
+    const changePercent = previous !== 0
+      ? ((current - previous) / previous) * 100
+      : 0
+
+    totals[metric.key] = { current, previous, changePercent }
+  }
+
+  return totals
 }

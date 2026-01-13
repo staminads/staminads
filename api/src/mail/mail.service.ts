@@ -158,6 +158,32 @@ export class MailService {
   }
 
   /**
+   * Send report email (pre-rendered HTML)
+   */
+  async sendReport(
+    workspaceId: string,
+    to: string,
+    subject: string,
+    html: string,
+  ): Promise<void> {
+    const config = await this.smtpService.getConfig(workspaceId);
+    if (!config) {
+      throw new BadRequestException(
+        'SMTP not configured. Please configure SMTP settings or set global SMTP environment variables.',
+      );
+    }
+
+    const transporter = this.createTransporter(config);
+
+    await transporter.sendMail({
+      from: `"${config.from.name}" <${config.from.email}>`,
+      to,
+      subject,
+      html,
+    });
+  }
+
+  /**
    * Send test email
    */
   async sendTestEmail(workspaceId: string, to: string): Promise<void> {

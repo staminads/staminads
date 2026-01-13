@@ -25,7 +25,8 @@ export type SystemTable =
   | 'sessions'
   | 'audit_logs'
   | 'password_reset_tokens'
-  | 'system_settings';
+  | 'system_settings'
+  | 'report_subscriptions';
 
 /**
  * Workspace database tables that can be truncated

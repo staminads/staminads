@@ -172,6 +172,31 @@ export const SYSTEM_SCHEMAS: Record<string, string> = {
     ) ENGINE = ReplacingMergeTree(updated_at)
     ORDER BY id
   `,
+
+  report_subscriptions: `
+    CREATE TABLE IF NOT EXISTS {database}.report_subscriptions (
+      id String,
+      user_id String,
+      workspace_id String,
+      name String,
+      frequency Enum8('daily' = 1, 'weekly' = 2, 'monthly' = 3),
+      day_of_week Nullable(UInt8),
+      day_of_month Nullable(UInt8),
+      hour UInt8 DEFAULT 8,
+      metrics Array(String),
+      dimensions Array(String),
+      filters String DEFAULT '[]',
+      status Enum8('active' = 1, 'paused' = 2, 'disabled' = 3) DEFAULT 'active',
+      last_sent_at Nullable(DateTime64(3)),
+      last_send_status Enum8('pending' = 0, 'success' = 1, 'failed' = 2) DEFAULT 'pending',
+      last_error String DEFAULT '',
+      next_send_at Nullable(DateTime64(3)),
+      consecutive_failures UInt8 DEFAULT 0,
+      created_at DateTime64(3) DEFAULT now64(3),
+      updated_at DateTime64(3) DEFAULT now64(3)
+    ) ENGINE = ReplacingMergeTree(updated_at)
+    ORDER BY (user_id, workspace_id, id)
+  `,
 };
 
 // Workspace schemas - stored in staminads_ws_{workspace_id} databases

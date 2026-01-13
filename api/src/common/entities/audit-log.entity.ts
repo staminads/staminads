@@ -22,6 +22,16 @@ export const AUDIT_ACTIONS = {
   // API Keys
   'api_key.created': 'API key created',
   'api_key.revoked': 'API key revoked',
+
+  // Subscriptions
+  'subscription.created': 'Report subscription created',
+  'subscription.updated': 'Report subscription updated',
+  'subscription.deleted': 'Report subscription deleted',
+  'subscription.paused': 'Report subscription paused',
+  'subscription.resumed': 'Report subscription resumed',
+  'subscription.report_sent': 'Report email sent',
+  'subscription.report_failed': 'Report email failed to send',
+  'subscription.unsubscribed': 'User unsubscribed via email link',
 } as const;
 
 export type AuditAction = keyof typeof AUDIT_ACTIONS;
@@ -30,7 +40,8 @@ export type AuditTargetType =
   | 'invitation'
   | 'membership'
   | 'api_key'
-  | 'workspace';
+  | 'workspace'
+  | 'subscription';
 
 export interface AuditLog {
   id: string;

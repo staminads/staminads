@@ -2,10 +2,10 @@ import { Statistic, Skeleton, Tooltip } from 'antd'
 import { InfoCircleOutlined } from '@ant-design/icons'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import { formatValue } from '../../lib/chart-utils'
-import { METRICS, type DashboardData, type MetricKey } from '../../types/dashboard'
+import { METRICS, type MetricKey, type KpiTotals } from '../../types/dashboard'
 
 interface MetricSummaryProps {
-  data: DashboardData | null
+  kpiTotals: KpiTotals | null
   loading?: boolean
   selectedMetric: MetricKey
   onMetricSelect: (metric: MetricKey) => void
@@ -13,7 +13,7 @@ interface MetricSummaryProps {
 }
 
 export function MetricSummary({
-  data,
+  kpiTotals,
   loading = false,
   selectedMetric,
   onMetricSelect,
@@ -22,9 +22,10 @@ export function MetricSummary({
   return (
     <div className="grid grid-cols-2 md:grid-cols-4">
       {METRICS.map((metric, index) => {
-        const metricData = data?.metrics[metric.key]
-        const currentTotal = metricData?.currentTotal ?? 0
-        const changePercent = metricData?.changePercent ?? 0
+        // Use kpiTotals for accurate aggregated values (not averaged from granular data)
+        const totals = kpiTotals?.[metric.key]
+        const currentTotal = totals?.current ?? 0
+        const changePercent = totals?.changePercent ?? 0
         const isSelected = selectedMetric === metric.key
         const isLast = index === METRICS.length - 1
 

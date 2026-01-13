@@ -540,6 +540,71 @@ describe('Analytics E2E', () => {
       expect(response.body.query.sql).toContain('sessions FINAL');
       expect(response.body.query.params).toBeDefined();
     });
+
+    it('returns sessions as integers (not floats) when grouped by dimension', async () => {
+      // This test verifies that count() returns integers, not floats
+      // If this test fails with float values like 7.5, there's an upstream bug
+      const response = await request(ctx.app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions', 'median_duration'],
+          dimensions: ['device'],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      // Verify we have data
+      expect(response.body.data.length).toBeGreaterThan(0);
+
+      // Check each row: sessions must be an integer (no decimal part)
+      for (const row of response.body.data) {
+        const sessions = Number(row.sessions);
+        expect(Number.isInteger(sessions)).toBe(true);
+        // Log for debugging if test fails
+        if (!Number.isInteger(sessions)) {
+          console.log('FAIL: sessions is not an integer:', {
+            device: row.device,
+            sessions: row.sessions,
+            median_duration: row.median_duration,
+          });
+        }
+      }
+
+      // Additional check: sessions should be exactly 15 for each device type
+      // (30 total sessions, half desktop, half mobile)
+      const desktopRow = response.body.data.find(
+        (r: { device: string }) => r.device === 'desktop',
+      );
+      const mobileRow = response.body.data.find(
+        (r: { device: string }) => r.device === 'mobile',
+      );
+      expect(Number(desktopRow?.sessions)).toBe(15);
+      expect(Number(mobileRow?.sessions)).toBe(15);
+    });
+
+    it('returns sessions as integers when grouped by landing_path', async () => {
+      // Test with landing_path dimension (same as email reports use)
+      const response = await request(ctx.app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions', 'median_duration'],
+          dimensions: ['landing_path'],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      expect(response.body.data.length).toBeGreaterThan(0);
+
+      // Check that all sessions values are integers
+      for (const row of response.body.data) {
+        const sessions = Number(row.sessions);
+        expect(Number.isInteger(sessions)).toBe(true);
+      }
+    });
   });
 
   describe('GET /api/analytics.metrics', () => {
