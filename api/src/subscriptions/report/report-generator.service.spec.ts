@@ -73,14 +73,21 @@ describe('ReportGeneratorService', () => {
   };
 
   const mockDimensionResponse = {
-    data: [
-      { landing_path: '/home', sessions: 165, median_duration: 384 },
-      { landing_path: '/about', sessions: 268, median_duration: 358 },
-    ],
+    data: {
+      current: [
+        { landing_path: '/home', sessions: 165, median_duration: 384 },
+        { landing_path: '/about', sessions: 268, median_duration: 358 },
+      ],
+      previous: [
+        { landing_path: '/home', sessions: 150, median_duration: 360 },
+        { landing_path: '/about', sessions: 250, median_duration: 340 },
+      ],
+    },
     meta: {
       metrics: ['sessions', 'median_duration'],
       dimensions: ['landing_path'],
       dateRange: { start: '2024-01-01', end: '2024-01-01' },
+      compareDateRange: { start: '2023-12-31', end: '2023-12-31' },
       total_rows: 2,
     },
     query: { sql: '', params: {} },
@@ -136,7 +143,6 @@ describe('ReportGeneratorService', () => {
     jwtService = module.get(JwtService);
     configService = module.get(ConfigService);
   });
-
 
   describe('generate', () => {
     it('should query analytics service with correct params', async () => {
@@ -327,18 +333,27 @@ describe('ReportGeneratorService', () => {
               {
                 value: '/iphone/',
                 sessions: 165,
+                sessionsEvo: 10,
+                sessionsEvoClass: 'positive',
                 metric: 384,
+                metricEvo: 5,
+                metricEvoClass: 'positive',
                 formattedMetric: '6m 24s',
               },
               {
                 value: '/about/',
                 sessions: 268,
+                sessionsEvo: -5,
+                sessionsEvoClass: 'negative',
                 metric: 358,
+                metricEvo: null,
+                metricEvoClass: 'neutral',
                 formattedMetric: '5m 58s',
               },
             ],
           },
         ],
+        filters: [],
         dashboardUrl: 'http://localhost:5173/workspaces/ws-123',
         unsubscribeUrl: 'http://localhost:5173/unsubscribe?token=test',
       };
@@ -384,18 +399,27 @@ describe('ReportGeneratorService', () => {
               {
                 value: '/iphone-17-pro/',
                 sessions: 259,
+                sessionsEvo: 10,
+                sessionsEvoClass: 'positive',
                 metric: 471,
+                metricEvo: 5,
+                metricEvoClass: 'positive',
                 formattedMetric: '7m 51s',
               },
               {
                 value: '/iphone/',
                 sessions: 165,
+                sessionsEvo: -5,
+                sessionsEvoClass: 'negative',
                 metric: 384,
+                metricEvo: null,
+                metricEvoClass: 'neutral',
                 formattedMetric: '6m 24s',
               },
             ],
           },
         ],
+        filters: [],
         dashboardUrl: 'http://localhost:5173/workspaces/ws-123',
         unsubscribeUrl: 'http://localhost:5173/unsubscribe?token=test',
       };
@@ -430,12 +454,17 @@ describe('ReportGeneratorService', () => {
               {
                 value: '/quick-page/',
                 sessions: 50,
+                sessionsEvo: null,
+                sessionsEvoClass: 'neutral',
                 metric: 45,
+                metricEvo: null,
+                metricEvoClass: 'neutral',
                 formattedMetric: '45s',
               },
             ],
           },
         ],
+        filters: [],
         dashboardUrl: 'http://localhost:5173/workspaces/ws-123',
         unsubscribeUrl: 'http://localhost:5173/unsubscribe?token=test',
       };

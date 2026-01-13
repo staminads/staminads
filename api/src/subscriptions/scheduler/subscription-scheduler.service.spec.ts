@@ -3,6 +3,7 @@ import { SubscriptionSchedulerService } from './subscription-scheduler.service';
 import { SubscriptionsService } from '../subscriptions.service';
 import { ReportGeneratorService } from '../report/report-generator.service';
 import { MailService } from '../../mail/mail.service';
+import { SmtpService } from '../../smtp/smtp.service';
 import { UsersService } from '../../users/users.service';
 import { AuditService } from '../../audit/audit.service';
 import { Subscription } from '../entities/subscription.entity';
@@ -12,6 +13,7 @@ describe('SubscriptionSchedulerService', () => {
   let subscriptionsService: jest.Mocked<SubscriptionsService>;
   let reportGenerator: jest.Mocked<ReportGeneratorService>;
   let mailService: jest.Mocked<MailService>;
+  let smtpService: jest.Mocked<SmtpService>;
   let usersService: jest.Mocked<UsersService>;
   let auditService: jest.Mocked<AuditService>;
 
@@ -79,6 +81,14 @@ describe('SubscriptionSchedulerService', () => {
           },
         },
         {
+          provide: SmtpService,
+          useValue: {
+            getInfo: jest.fn().mockResolvedValue({
+              status: { available: true, source: 'global' },
+            }),
+          },
+        },
+        {
           provide: UsersService,
           useValue: {
             findById: jest.fn().mockResolvedValue(mockUser),
@@ -99,6 +109,7 @@ describe('SubscriptionSchedulerService', () => {
     subscriptionsService = module.get(SubscriptionsService);
     reportGenerator = module.get(ReportGeneratorService);
     mailService = module.get(MailService);
+    smtpService = module.get(SmtpService);
     usersService = module.get(UsersService);
     auditService = module.get(AuditService);
   });
@@ -288,6 +299,59 @@ describe('SubscriptionSchedulerService', () => {
           'sub-123',
           expect.stringContaining('no email'),
         );
+      });
+    });
+
+    describe('SMTP validation', () => {
+      it('should fail if SMTP is not configured', async () => {
+        subscriptionsService.getById.mockResolvedValueOnce(mockSubscription);
+        smtpService.getInfo.mockResolvedValueOnce({
+          status: { available: false, source: 'none' },
+          settings: null,
+        });
+
+        await service.processScheduledReports();
+
+        expect(reportGenerator.generate).not.toHaveBeenCalled();
+        expect(mailService.sendReport).not.toHaveBeenCalled();
+        expect(subscriptionsService.markFailed).toHaveBeenCalledWith(
+          'sub-123',
+          expect.stringContaining('SMTP not configured'),
+        );
+      });
+
+      it('should proceed if workspace SMTP is configured', async () => {
+        subscriptionsService.getById.mockResolvedValueOnce(mockSubscription);
+        smtpService.getInfo.mockResolvedValueOnce({
+          status: {
+            available: true,
+            source: 'workspace',
+            from_email: 'test@workspace.com',
+          },
+          settings: null,
+        });
+
+        await service.processScheduledReports();
+
+        expect(reportGenerator.generate).toHaveBeenCalled();
+        expect(mailService.sendReport).toHaveBeenCalled();
+      });
+
+      it('should proceed if global SMTP is configured', async () => {
+        subscriptionsService.getById.mockResolvedValueOnce(mockSubscription);
+        smtpService.getInfo.mockResolvedValueOnce({
+          status: {
+            available: true,
+            source: 'global',
+            from_email: 'noreply@staminads.com',
+          },
+          settings: null,
+        });
+
+        await service.processScheduledReports();
+
+        expect(reportGenerator.generate).toHaveBeenCalled();
+        expect(mailService.sendReport).toHaveBeenCalled();
       });
     });
   });

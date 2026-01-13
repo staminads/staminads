@@ -9,6 +9,7 @@ import { DatabaseModule } from '../database/database.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { MailModule } from '../mail/mail.module';
+import { SmtpModule } from '../smtp/smtp.module';
 import { UsersModule } from '../users/users.module';
 import { AuditModule } from '../audit/audit.module';
 import { MembersModule } from '../members/members.module';
@@ -19,6 +20,7 @@ import { MembersModule } from '../members/members.module';
     WorkspacesModule,
     forwardRef(() => AnalyticsModule),
     MailModule,
+    SmtpModule,
     UsersModule,
     AuditModule,
     MembersModule,

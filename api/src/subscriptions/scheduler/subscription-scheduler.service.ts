@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { SubscriptionsService } from '../subscriptions.service';
 import { ReportGeneratorService } from '../report/report-generator.service';
 import { MailService } from '../../mail/mail.service';
+import { SmtpService } from '../../smtp/smtp.service';
 import { UsersService } from '../../users/users.service';
 import { AuditService } from '../../audit/audit.service';
 import { Subscription } from '../entities/subscription.entity';
@@ -15,6 +16,7 @@ export class SubscriptionSchedulerService {
     private readonly subscriptionsService: SubscriptionsService,
     private readonly reportGenerator: ReportGeneratorService,
     private readonly mailService: MailService,
+    private readonly smtpService: SmtpService,
     private readonly usersService: UsersService,
     private readonly auditService: AuditService,
   ) {}
@@ -60,6 +62,16 @@ export class SubscriptionSchedulerService {
       // Validate user has email
       if (!user.email) {
         throw new Error(`User ${subscription.user_id} has no email address`);
+      }
+
+      // Check SMTP availability before generating report (fail fast)
+      const smtpInfo = await this.smtpService.getInfo(
+        subscription.workspace_id,
+      );
+      if (!smtpInfo.status.available) {
+        throw new Error(
+          'SMTP not configured. Please configure SMTP settings in workspace or set global SMTP environment variables.',
+        );
       }
 
       // Generate report data

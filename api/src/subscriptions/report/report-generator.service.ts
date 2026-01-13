@@ -42,9 +42,20 @@ export interface DimensionBreakdown {
   rows: Array<{
     value: string;
     sessions: number;
+    sessionsEvo: number | null;
+    sessionsEvoClass: string;
     metric: number;
+    metricEvo: number | null;
+    metricEvoClass: string;
     formattedMetric: string;
   }>;
+}
+
+export interface ReportFilter {
+  dimension: string;
+  dimensionLabel: string;
+  operator: string;
+  values: (string | number | null)[];
 }
 
 export interface ReportData {
@@ -54,12 +65,15 @@ export interface ReportData {
     timezone: string;
     website?: string;
     logo_url?: string;
+    currency?: string;
   };
   reportName: string;
   dateRange: DateRange;
   dateRangeLabel: string;
   metrics: MetricSummary[];
   dimensions: DimensionBreakdown[];
+  filters: ReportFilter[];
+  appUrl: string;
   dashboardUrl: string;
   unsubscribeUrl: string;
 }
@@ -130,6 +144,106 @@ const DIMENSION_LABELS: Record<string, string> = {
   os: 'Operating Systems',
   goal_name: 'Goals',
 };
+
+// Browser icon mappings (matches console/src/lib/device-icons.tsx)
+const BROWSER_ICONS: Record<string, string> = {
+  chrome: 'chrome.svg',
+  firefox: 'firefox.svg',
+  safari: 'safari.svg',
+  edge: 'edge.svg',
+  opera: 'opera.svg',
+  brave: 'brave.png',
+  samsung: 'samsung.svg',
+  'samsung browser': 'samsung.svg',
+  'samsung internet': 'samsung.svg',
+  'mobile safari': 'safari.svg',
+  'chrome mobile': 'chrome.svg',
+  'firefox mobile': 'firefox.svg',
+  'edge mobile': 'edge.svg',
+  'opera mobile': 'opera.svg',
+};
+
+// OS icon mappings (matches console/src/lib/device-icons.tsx)
+const OS_ICONS: Record<string, string> = {
+  windows: 'windows.svg',
+  'mac os': 'macos.svg',
+  macos: 'macos.svg',
+  linux: 'linux.svg',
+  ubuntu: 'ubuntu.svg',
+  ios: 'ios.svg',
+  ipados: 'ios.svg',
+  android: 'android.svg',
+  'chrome os': 'chromeos.svg',
+};
+
+/**
+ * Get icon HTML for a dimension value
+ */
+function getDimensionIcon(
+  dimension: string,
+  value: string,
+  appUrl: string,
+): string {
+  const lowerValue = value?.toLowerCase() ?? '';
+  const iconStyle =
+    'width: 14px; height: 14px; margin-right: 6px; vertical-align: middle;';
+
+  if (dimension === 'referrer_domain' && value) {
+    return `<img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(value)}&sz=16" alt="" width="14" height="14" style="${iconStyle} border-radius: 2px;" />`;
+  }
+
+  if (dimension === 'country' && value) {
+    // Use local flag SVGs from public folder (expects lowercase ISO 3166-1 alpha-2 codes)
+    const countryCode = value.toLowerCase();
+    return `<img src="${appUrl}/icons/flags/${countryCode}.svg" alt="" width="16" height="12" style="width: 16px; height: 12px; margin-right: 6px; vertical-align: middle;" />`;
+  }
+
+  if (dimension === 'browser') {
+    // Check for exact match first
+    let iconFile = BROWSER_ICONS[lowerValue];
+    if (!iconFile) {
+      // Check for partial matches
+      for (const [key, file] of Object.entries(BROWSER_ICONS)) {
+        if (lowerValue.includes(key) || key.includes(lowerValue)) {
+          iconFile = file;
+          break;
+        }
+      }
+    }
+    if (iconFile) {
+      return `<img src="${appUrl}/icons/browsers/${iconFile}" alt="" width="14" height="14" style="${iconStyle}" />`;
+    }
+  }
+
+  if (dimension === 'os') {
+    // Check for exact match first
+    let iconFile = OS_ICONS[lowerValue];
+    if (!iconFile) {
+      // Check for partial matches
+      for (const [key, file] of Object.entries(OS_ICONS)) {
+        if (lowerValue.includes(key) || key.includes(lowerValue)) {
+          iconFile = file;
+          break;
+        }
+      }
+    }
+    if (iconFile) {
+      return `<img src="${appUrl}/icons/os/${iconFile}" alt="" width="14" height="14" style="${iconStyle}" />`;
+    }
+  }
+
+  if (dimension === 'device') {
+    let iconFile = 'desktop.svg';
+    if (lowerValue.includes('mobile')) {
+      iconFile = 'mobile.svg';
+    } else if (lowerValue.includes('tablet')) {
+      iconFile = 'tablet.svg';
+    }
+    return `<img src="${appUrl}/icons/devices/${iconFile}" alt="" width="14" height="14" style="${iconStyle}" />`;
+  }
+
+  return '';
+}
 
 @Injectable()
 export class ReportGeneratorService {
@@ -215,7 +329,7 @@ export class ReportGeneratorService {
       };
     });
 
-    // Query dimension breakdowns
+    // Query dimension breakdowns with comparison
     const dimensions: DimensionBreakdown[] = [];
     for (const dimension of subscription.dimensions) {
       const isGoals = dimension === 'goal_name';
@@ -229,28 +343,85 @@ export class ReportGeneratorService {
         dimensions: [dimension],
         filters,
         dateRange: { preset },
+        compareDateRange: { preset },
         timezone: workspace.timezone,
         limit: subscription.limit || 10,
         order: { [dimensionMetrics[0]]: 'desc' },
         ...(isGoals && { table: 'goals' }),
       });
 
-      const rows = (dimensionResponse.data as Record<string, unknown>[])
+      // Build lookup map for previous period data
+      const dimData = dimensionResponse.data as {
+        current: Record<string, unknown>[];
+        previous: Record<string, unknown>[];
+      };
+      const previousMap = new Map<string, Record<string, unknown>>();
+      for (const row of dimData.previous) {
+        const key = String(row[dimension] || '');
+        if (key) previousMap.set(key, row);
+      }
+
+      const rows = dimData.current
         .filter((row) => {
           // Filter out rows with empty dimension values or zero sessions
           const dimValue = row[dimension];
           const sessions = Number(row[dimensionMetrics[0]] || 0);
           return dimValue && String(dimValue).trim() !== '' && sessions > 0;
         })
-        .map((row) => ({
-          value: String(row[dimension]),
-          sessions: Number(row[dimensionMetrics[0]] || 0),
-          metric: Number(row[dimensionMetrics[1]] || 0),
-          formattedMetric: this.formatMetric(
-            dimensionMetrics[1],
-            Number(row[dimensionMetrics[1]] || 0),
-          ),
-        }));
+        .map((row) => {
+          const dimValue = String(row[dimension]);
+          const sessions = Number(row[dimensionMetrics[0]] || 0);
+          const metric = Number(row[dimensionMetrics[1]] || 0);
+
+          // Get previous period values
+          const prevRow = previousMap.get(dimValue);
+          const prevSessions = prevRow
+            ? Number(prevRow[dimensionMetrics[0]] || 0)
+            : 0;
+          const prevMetric = prevRow
+            ? Number(prevRow[dimensionMetrics[1]] || 0)
+            : 0;
+
+          // Calculate evolution percentages
+          const sessionsEvo =
+            prevSessions > 0
+              ? Math.round(((sessions - prevSessions) / prevSessions) * 1000) /
+                10
+              : null;
+          const metricEvo =
+            prevMetric > 0
+              ? Math.round(((metric - prevMetric) / prevMetric) * 1000) / 10
+              : null;
+
+          return {
+            value: dimValue,
+            sessions,
+            sessionsEvo,
+            sessionsEvoClass:
+              sessionsEvo === null
+                ? 'neutral'
+                : sessionsEvo > 0
+                  ? 'positive'
+                  : sessionsEvo < 0
+                    ? 'negative'
+                    : 'neutral',
+            metric,
+            metricEvo,
+            metricEvoClass:
+              metricEvo === null
+                ? 'neutral'
+                : metricEvo > 0
+                  ? 'positive'
+                  : metricEvo < 0
+                    ? 'negative'
+                    : 'neutral',
+            formattedMetric: this.formatMetric(
+              dimensionMetrics[1],
+              metric,
+              isGoals ? workspace.currency : undefined,
+            ),
+          };
+        });
 
       dimensions.push({
         dimension,
@@ -261,6 +432,14 @@ export class ReportGeneratorService {
 
     const unsubscribeToken = this.generateUnsubscribeToken(subscription.id);
 
+    // Map filters to include human-readable labels
+    const reportFilters: ReportFilter[] = filters.map((f) => ({
+      dimension: f.dimension,
+      dimensionLabel: DIMENSION_LABELS[f.dimension] || f.dimension,
+      operator: f.operator,
+      values: f.values || [],
+    }));
+
     return {
       workspace: {
         id: workspace.id,
@@ -268,6 +447,7 @@ export class ReportGeneratorService {
         timezone: workspace.timezone,
         website: workspace.website,
         logo_url: workspace.logo_url,
+        currency: workspace.currency,
       },
       reportName: subscription.name,
       dateRange,
@@ -278,6 +458,8 @@ export class ReportGeneratorService {
       ),
       metrics,
       dimensions,
+      filters: reportFilters,
+      appUrl,
       dashboardUrl: `${appUrl}/workspaces/${workspace.id}`,
       unsubscribeUrl: `${appUrl}/unsubscribe?token=${unsubscribeToken}`,
     };
@@ -301,7 +483,7 @@ export class ReportGeneratorService {
     );
   }
 
-  private formatMetric(key: string, value: number): string {
+  private formatMetric(key: string, value: number, currency?: string): string {
     if (key === 'median_duration') {
       // Value is already in seconds (SQL divides by 1000)
       const seconds = Math.round(value);
@@ -313,6 +495,15 @@ export class ReportGeneratorService {
 
     if (key === 'bounce_rate' || key === 'median_scroll') {
       return `${value.toFixed(1)}%`;
+    }
+
+    if (key === 'sum_goal_value' && currency) {
+      return value.toLocaleString('en-US', {
+        style: 'currency',
+        currency: currency,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      });
     }
 
     return value.toLocaleString();
@@ -333,12 +524,57 @@ export class ReportGeneratorService {
     return `${start.format('MMM D')} - ${end.format('MMM D, YYYY')}`;
   }
 
+  private formatOperator(operator: string): string {
+    const operatorLabels: Record<string, string> = {
+      equals: 'is',
+      not_equals: 'is not',
+      contains: 'contains',
+      not_contains: 'does not contain',
+      starts_with: 'starts with',
+      ends_with: 'ends with',
+      gt: '>',
+      gte: '≥',
+      lt: '<',
+      lte: '≤',
+      isNull: 'is empty',
+      isNotNull: 'is not empty',
+      isEmpty: 'is empty',
+      isNotEmpty: 'is not empty',
+    };
+    return operatorLabels[operator] || operator;
+  }
+
   private buildMjml(data: ReportData, subscriptionName: string): string {
-    const metricsHeaders = data.metrics.map((m) => `<th>${m.label}</th>`).join('\n                  ');
-    const metricsValues = data.metrics.map((m) => `<td>${m.formatted}</td>`).join('\n                  ');
-    const metricsTrends = data.metrics
-      .map((m) => `<td class="${m.trendClass}">${m.trendPrefix}${m.changePercent}%</td>`)
+    const metricsHeaders = data.metrics
+      .map((m) => `<th>${m.label}</th>`)
       .join('\n                  ');
+    const metricsValues = data.metrics
+      .map((m) => `<td>${m.formatted}</td>`)
+      .join('\n                  ');
+    const metricsTrends = data.metrics
+      .map(
+        (m) =>
+          `<td class="${m.trendClass}">${m.trendPrefix}${m.changePercent}%</td>`,
+      )
+      .join('\n                  ');
+
+    // Build filters display
+    const filtersSection =
+      data.filters.length > 0
+        ? `
+    <mj-section padding-top="0px" padding-bottom="8px" padding-left="12px" padding-right="12px">
+      <mj-column>
+        <mj-text font-size="10px" color="#6b7280" padding="0">
+          With filters: ${data.filters
+            .map((f) => {
+              const valuesText = f.values.length > 0 ? f.values.join(', ') : '';
+              return `${f.dimensionLabel} ${this.formatOperator(f.operator)}${valuesText ? ' ' + valuesText : ''}`;
+            })
+            .join(' · ')}
+        </mj-text>
+      </mj-column>
+    </mj-section>`
+        : '';
 
     // Build workspace icon - use logo if available, otherwise show initial
     const workspaceIcon = data.workspace.logo_url
@@ -349,6 +585,9 @@ export class ReportGeneratorService {
       .map((dim) => {
         // Calculate max metric value for heat map coloring
         const maxMetric = Math.max(...dim.rows.map((r) => r.metric), 0);
+        const isGoals = dim.dimension === 'goal_name';
+        const col1Label = isGoals ? 'Count' : 'Sessions';
+        const col2Label = isGoals ? 'Value Sum' : 'TimeScore';
 
         return `
     <mj-wrapper padding-top="8px">
@@ -366,18 +605,48 @@ export class ReportGeneratorService {
               <thead>
                 <tr>
                   <th style="padding: 6px 4px; text-align: left; border-bottom: 2px solid #e5e7eb; font-size: 11px; color: #6b7280; line-height: 1.3;">Name</th>
-                  <th style="padding: 6px 4px; text-align: right; border-bottom: 2px solid #e5e7eb; font-size: 11px; color: #6b7280; line-height: 1.3;">Sessions</th>
-                  <th style="padding: 6px 4px; text-align: right; border-bottom: 2px solid #e5e7eb; font-size: 11px; color: #6b7280; line-height: 1.3;">TimeScore</th>
+                  <th style="padding: 6px 4px; text-align: right; border-bottom: 2px solid #e5e7eb; font-size: 11px; color: #6b7280; line-height: 1.3; width: 60px;">${col1Label}</th>
+                  <th style="padding: 6px 4px; text-align: right; border-bottom: 2px solid #e5e7eb; font-size: 11px; color: #6b7280; line-height: 1.3; width: 50px;"></th>
+                  <th style="padding: 6px 4px; text-align: right; border-bottom: 2px solid #e5e7eb; font-size: 11px; color: #6b7280; line-height: 1.3; width: 70px;">${col2Label}</th>
+                  <th style="padding: 6px 4px; text-align: right; border-bottom: 2px solid #e5e7eb; font-size: 11px; color: #6b7280; line-height: 1.3; width: 50px;"></th>
                 </tr>
               </thead>
               <tbody>
                 ${dim.rows
                   .map((row) => {
                     const heatColor = getHeatMapColor(row.metric, maxMetric);
+                    const sessionsEvoColor =
+                      row.sessionsEvoClass === 'positive'
+                        ? '#10b981'
+                        : row.sessionsEvoClass === 'negative'
+                          ? '#ef4444'
+                          : '#6b7280';
+                    const metricEvoColor =
+                      row.metricEvoClass === 'positive'
+                        ? '#10b981'
+                        : row.metricEvoClass === 'negative'
+                          ? '#ef4444'
+                          : '#6b7280';
+                    const sessionsEvoText =
+                      row.sessionsEvo !== null
+                        ? `${row.sessionsEvo > 0 ? '+' : ''}${row.sessionsEvo}%`
+                        : '-';
+                    const metricEvoText =
+                      row.metricEvo !== null
+                        ? `${row.metricEvo > 0 ? '+' : ''}${row.metricEvo}%`
+                        : '-';
+                    // Add icon for supported dimensions (referrers, countries, browsers, OS)
+                    const icon = getDimensionIcon(
+                      dim.dimension,
+                      row.value,
+                      data.appUrl,
+                    );
                     return `<tr>
-                  <td style="padding: 6px 4px; border-bottom: 1px solid #f3f4f6; line-height: 1.3; color: #333333;">${row.value}</td>
-                  <td style="padding: 6px 4px; border-bottom: 1px solid #f3f4f6; line-height: 1.3; text-align: right; color: #333333;">${row.sessions}</td>
-                  <td style="padding: 6px 4px; border-bottom: 1px solid #f3f4f6; line-height: 1.3; text-align: right; color: #333333;"><span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background-color: ${heatColor}; margin-right: 6px; vertical-align: middle;"></span>${row.formattedMetric}</td>
+                  <td style="padding: 6px 4px; border-bottom: 1px solid #f3f4f6; line-height: 1.3; color: #333333;">${icon}${row.value}</td>
+                  <td style="padding: 6px 4px; border-bottom: 1px solid #f3f4f6; line-height: 1.3; text-align: right; color: #333333; width: 60px;">${row.sessions}</td>
+                  <td style="padding: 6px 4px; border-bottom: 1px solid #f3f4f6; line-height: 1.3; text-align: right; font-size: 10px; color: ${sessionsEvoColor}; width: 50px;">${sessionsEvoText}</td>
+                  <td style="padding: 6px 4px; border-bottom: 1px solid #f3f4f6; line-height: 1.3; text-align: right; color: #333333; width: 70px;"><span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background-color: ${heatColor}; margin-right: 6px; vertical-align: middle;"></span>${row.formattedMetric}</td>
+                  <td style="padding: 6px 4px; border-bottom: 1px solid #f3f4f6; line-height: 1.3; text-align: right; font-size: 10px; color: ${metricEvoColor}; width: 50px;">${metricEvoText}</td>
                 </tr>`;
                   })
                   .join('\n                ')}
@@ -418,17 +687,17 @@ export class ReportGeneratorService {
         <mj-table padding="0">
           <tr>
             <td style="width: 36px; vertical-align: middle; padding: 0;">
-              ${workspaceIcon}
+              <a href="${data.dashboardUrl}" style="text-decoration: none;">${workspaceIcon}</a>
             </td>
             <td style="vertical-align: middle; padding: 0 0 0 8px;">
-              <div style="font-family: Arial, sans-serif; font-size: 14px; font-weight: bold; color: #333333; line-height: 1.45;">${data.workspace.name}</div>
+              <a href="${data.dashboardUrl}" style="text-decoration: none;"><div style="font-family: Arial, sans-serif; font-size: 14px; font-weight: bold; color: #333333; line-height: 1.45;">${data.workspace.name}</div></a>
               ${data.workspace.website ? `<div style="font-family: Arial, sans-serif; font-size: 10px; color: #9ca3af; line-height: 1;">${data.workspace.website.replace(/^https?:\/\//, '')}</div>` : ''}
             </td>
           </tr>
         </mj-table>
       </mj-column>
       <mj-column width="30%" vertical-align="middle">
-        <mj-image src="https://www.staminads.com/favicon.svg" alt="Staminads" width="32px" align="right" padding="0" />
+        <mj-image src="https://www.staminads.com/favicon.svg" alt="Staminads" width="32px" align="right" padding="0" href="https://www.staminads.com" />
       </mj-column>
     </mj-section>
 
@@ -445,7 +714,7 @@ export class ReportGeneratorService {
         </mj-text>
       </mj-column>
     </mj-section>
-
+${filtersSection}
     <mj-wrapper padding-top="8px">
       <mj-section background-color="#ffffff" padding-top="12px" padding-bottom="12px" padding-left="12px" padding-right="12px">
         <mj-column>

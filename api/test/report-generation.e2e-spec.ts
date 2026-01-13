@@ -148,7 +148,12 @@ describe('Report Generation E2E', () => {
         name: 'Test Report',
         frequency: 'weekly',
         hour: 8,
-        metrics: ['sessions', 'median_duration', 'bounce_rate', 'median_scroll'],
+        metrics: [
+          'sessions',
+          'median_duration',
+          'bounce_rate',
+          'median_scroll',
+        ],
         dimensions: ['landing_path'],
         filters: '[]',
         status: 'active',
