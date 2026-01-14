@@ -235,24 +235,20 @@ describe('Sender', () => {
   });
 
   describe('debug mode', () => {
-    let consoleSpy: ReturnType<typeof vi.spyOn>;
-    let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
-
     beforeEach(() => {
-      consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-      consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      vi.spyOn(console, 'error').mockImplementation(() => {});
       sender = new Sender('https://api.example.com', mockStorage, true);
     });
 
     afterEach(() => {
-      consoleSpy.mockRestore();
-      consoleErrorSpy.mockRestore();
+      vi.restoreAllMocks();
     });
 
     it('logs sendSession payload in debug mode', async () => {
       await sender.sendSession(createPayload());
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(console.log).toHaveBeenCalledWith(
         '[Staminads] Sending session payload:',
         expect.any(Object)
       );
@@ -266,7 +262,7 @@ describe('Sender', () => {
 
       await sender.sendSession(createPayload());
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(console.log).toHaveBeenCalledWith(
         '[Staminads] Session response:',
         { success: true, checkpoint: 3 }
       );
@@ -277,7 +273,7 @@ describe('Sender', () => {
 
       await sender.sendSession(createPayload());
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect(console.error).toHaveBeenCalledWith(
         '[Staminads] Send failed:',
         expect.any(Error)
       );
@@ -286,11 +282,11 @@ describe('Sender', () => {
     it('logs beacon send in debug mode', () => {
       sender.sendSessionBeacon(createPayload());
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(console.log).toHaveBeenCalledWith(
         '[Staminads] Sending session beacon:',
         expect.any(Object)
       );
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(console.log).toHaveBeenCalledWith(
         '[Staminads] Session sent via beacon'
       );
     });
@@ -300,7 +296,7 @@ describe('Sender', () => {
 
       sender.sendSessionBeacon(createPayload());
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(console.log).toHaveBeenCalledWith(
         '[Staminads] Session sent via fetch keepalive'
       );
     });

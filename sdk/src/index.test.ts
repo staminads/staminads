@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+import type { StaminadsConfig } from './types';
+
 describe('Staminads SDK - Global Config Pattern', () => {
   // Store original window.StaminadsConfig
-  let originalConfig: unknown;
+  let originalConfig: StaminadsConfig | undefined;
 
   beforeEach(() => {
     // Save original

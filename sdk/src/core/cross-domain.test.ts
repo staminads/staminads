@@ -116,7 +116,7 @@ describe('CrossDomainLinker', () => {
     });
 
     it('should return original URL if no IDs available', () => {
-      linker.setIdGetters(() => '', () => '');
+      linker.setIdGetters(() => '');
       const decorated = linker.decorateUrl('https://blog.example.com/article');
       expect(decorated).toBe('https://blog.example.com/article');
     });

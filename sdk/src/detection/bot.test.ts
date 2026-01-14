@@ -2,11 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { isBot, getBotScore } from './bot';
 
 describe('Bot Detection', () => {
-  // Store original values
-  let originalNavigator: Navigator;
-  let originalScreen: Screen;
-  let originalWindow: Window & typeof globalThis;
-
   // Helper to mock navigator properties
   const mockNavigator = (overrides: Partial<Navigator> = {}) => {
     const mockNav = {
