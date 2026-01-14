@@ -7,6 +7,8 @@ import { LogoutOutlined, PlusOutlined, GlobalOutlined, QuestionCircleOutlined, M
 import { ExternalLink } from 'lucide-react'
 import { workspacesQueryOptions, workspaceQueryOptions, backfillSummaryQueryOptions } from '../../../lib/queries'
 import { SyncStatusIcon } from '../../../components/layout/SyncStatusIcon'
+import { AssistantProvider } from '../../../contexts/AssistantContext'
+import { AssistantButton, AssistantPanel } from '../../../components/Assistant'
 import { useAuth } from '../../../lib/useAuth'
 import { useTimezone } from '../../../hooks/useTimezone'
 import type { DatePreset } from '../../../types/analytics'
@@ -118,6 +120,7 @@ function WorkspaceLayout() {
   }
 
   return (
+    <AssistantProvider workspaceId={workspaceId}>
     <div className="flex-1 flex flex-col bg-[var(--background)]">
       <header className="bg-[var(--background)]">
         <div className="h-16 max-w-7xl mx-auto px-4 md:px-6 flex items-center justify-between border-b border-gray-200">
@@ -556,6 +559,15 @@ function WorkspaceLayout() {
           <Outlet />
         </div>
       </div>
+
+      {/* AI Assistant - available on all workspace pages */}
+      {isWorkspaceActive && (
+        <>
+          <AssistantButton />
+          <AssistantPanel />
+        </>
+      )}
     </div>
+    </AssistantProvider>
   )
 }

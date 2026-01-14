@@ -5,52 +5,27 @@ import type { ExploreState, ExploreConfigOutput, Message, AssistantStatus, Conve
 
 const MAX_HISTORY = 20
 
+export interface SendPromptOptions {
+  generateTitle?: boolean
+  currentPage?: string
+  onTitle?: (title: string) => void
+}
+
 export function useAssistant(workspaceId: string) {
   const [messages, setMessages] = useState<Message[]>([])
   const [status, setStatus] = useState<AssistantStatus>('idle')
   const [usage, setUsage] = useState<ConversationUsage>({ inputTokens: 0, outputTokens: 0, costUsd: 0 })
   const abortControllerRef = useRef<AbortController | null>(null)
   const conversationHistoryRef = useRef<{ role: 'user' | 'assistant'; content: string }[]>([])
+  const onTitleRef = useRef<((title: string) => void) | undefined>(undefined)
 
-  // Session storage keys include workspace ID
-  const sessionKeyMessages = `assistant_messages_${workspaceId}`
-  const sessionKeyHistory = `assistant_history_${workspaceId}`
-
-  // Restore from sessionStorage on mount or workspace change
+  // Reset state when workspace changes
   useEffect(() => {
-    const savedMessages = sessionStorage.getItem(sessionKeyMessages)
-    const savedHistory = sessionStorage.getItem(sessionKeyHistory)
-    if (savedMessages) {
-      try {
-        const parsed = JSON.parse(savedMessages) as Message[]
-        // Filter out error messages so user can retry after configuring integration
-        setMessages(parsed.filter(m => m.status !== 'error'))
-      } catch {
-        // Ignore invalid JSON
-      }
-    } else {
-      setMessages([])
-    }
-    if (savedHistory) {
-      try {
-        conversationHistoryRef.current = JSON.parse(savedHistory)
-      } catch {
-        conversationHistoryRef.current = []
-      }
-    } else {
-      conversationHistoryRef.current = []
-    }
+    setMessages([])
+    conversationHistoryRef.current = []
     setStatus('idle')
     setUsage({ inputTokens: 0, outputTokens: 0, costUsd: 0 })
-  }, [workspaceId, sessionKeyMessages, sessionKeyHistory])
-
-  // Persist to sessionStorage on change
-  useEffect(() => {
-    if (messages.length > 0) {
-      sessionStorage.setItem(sessionKeyMessages, JSON.stringify(messages))
-      sessionStorage.setItem(sessionKeyHistory, JSON.stringify(conversationHistoryRef.current))
-    }
-  }, [messages, sessionKeyMessages, sessionKeyHistory])
+  }, [workspaceId])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -62,6 +37,7 @@ export function useAssistant(workspaceId: string) {
   const sendPrompt = useCallback(async (
     prompt: string,
     currentState?: ExploreState,
+    options?: SendPromptOptions,
   ) => {
     if (!prompt.trim()) return
 
@@ -73,15 +49,19 @@ export function useAssistant(workspaceId: string) {
     // Add user message (optimistic)
     const userMsgId = `user-${Date.now()}`
     const assistantMsgId = `assistant-${Date.now()}`
+    const now = new Date().toISOString()
 
     setMessages(prev => [
       ...prev,
-      { id: userMsgId, role: 'user', content: prompt, status: 'complete' },
-      { id: assistantMsgId, role: 'assistant', content: '', thinking: '', toolCalls: [], status: 'pending' },
+      { id: userMsgId, role: 'user', content: prompt, status: 'complete', created_at: now },
+      { id: assistantMsgId, role: 'assistant', content: '', thinking: '', toolCalls: [], status: 'pending', created_at: now },
     ])
 
     setStatus('connecting')
     let thinkingText = ''
+
+    // Store callback in ref to avoid stale closure
+    onTitleRef.current = options?.onTitle
 
     try {
       // Create job
@@ -89,6 +69,8 @@ export function useAssistant(workspaceId: string) {
         workspace_id: workspaceId,
         prompt,
         current_state: currentState,
+        current_page: options?.currentPage,
+        generate_title: options?.generateTitle,
         messages: conversationHistoryRef.current.slice(-MAX_HISTORY),
       })
 
@@ -132,6 +114,11 @@ export function useAssistant(workspaceId: string) {
                     ? { ...m, config: data as ExploreConfigOutput, status: 'complete' }
                     : m
                 ))
+                break
+
+              case 'title':
+                // Call the title callback via ref to avoid stale closure
+                onTitleRef.current?.(data.title)
                 break
 
               case 'usage':
@@ -193,11 +180,29 @@ export function useAssistant(workspaceId: string) {
   const clearMessages = useCallback(() => {
     setMessages([])
     conversationHistoryRef.current = []
-    sessionStorage.removeItem(sessionKeyMessages)
-    sessionStorage.removeItem(sessionKeyHistory)
     setStatus('idle')
     setUsage({ inputTokens: 0, outputTokens: 0, costUsd: 0 })
-  }, [sessionKeyMessages, sessionKeyHistory])
+  }, [])
+
+  // Load a conversation from storage
+  const loadConversation = useCallback((
+    storedMessages: Message[],
+    storedUsage?: ConversationUsage,
+  ) => {
+    setMessages(storedMessages)
+
+    // Rebuild conversation history for API
+    conversationHistoryRef.current = storedMessages
+      .filter(m => m.status === 'complete')
+      .map(m => ({
+        role: m.role,
+        content: m.content || m.thinking || '',
+      }))
+      .slice(-MAX_HISTORY)
+
+    setStatus('idle')
+    setUsage(storedUsage || { inputTokens: 0, outputTokens: 0, costUsd: 0 })
+  }, [])
 
   const stopStreaming = useCallback(() => {
     abortControllerRef.current?.abort()
@@ -211,6 +216,7 @@ export function useAssistant(workspaceId: string) {
     isStreaming: status === 'connecting' || status === 'streaming',
     sendPrompt,
     clearMessages,
+    loadConversation,
     stopStreaming,
   }
 }

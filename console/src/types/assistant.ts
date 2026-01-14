@@ -1,6 +1,6 @@
 import type { Filter, DatePreset } from './analytics'
 
-export type SSEEventType = 'thinking' | 'tool_call' | 'tool_result' | 'config' | 'usage' | 'error' | 'done'
+export type SSEEventType = 'thinking' | 'tool_call' | 'tool_result' | 'config' | 'title' | 'usage' | 'error' | 'done'
 
 export interface SSEEvent {
   type: SSEEventType
@@ -43,6 +43,11 @@ export interface UsageEvent {
   data: { input_tokens: number; output_tokens: number; cost_usd: number }
 }
 
+export interface TitleEvent {
+  type: 'title'
+  data: { title: string }
+}
+
 export interface ConversationUsage {
   inputTokens: number
   outputTokens: number
@@ -73,7 +78,21 @@ export interface AssistantChatRequest {
   workspace_id: string
   prompt: string
   current_state?: ExploreState
+  current_page?: string
+  generate_title?: boolean
   messages?: { role: 'user' | 'assistant'; content: string }[]
+}
+
+/**
+ * A conversation stored in localStorage.
+ */
+export interface AssistantConversation {
+  id: string
+  title: string
+  messages: Message[]
+  usage?: ConversationUsage
+  created_at: string
+  updated_at: string
 }
 
 export interface Message {
@@ -85,6 +104,7 @@ export interface Message {
   config?: ExploreConfigOutput
   status: 'pending' | 'streaming' | 'complete' | 'error'
   error?: string
+  created_at?: string
 }
 
 export type AssistantStatus = 'idle' | 'connecting' | 'streaming' | 'done' | 'error'

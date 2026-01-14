@@ -14,6 +14,8 @@ export interface AssistantJob {
   prompt: string;
   messages: MessageDto[];
   current_state?: ExploreStateDto;
+  current_page?: string;
+  generate_title?: boolean;
   result?: ExploreConfigOutput;
   error?: string;
   created_at: string;
@@ -42,6 +44,8 @@ export function createAssistantJob(
   prompt: string,
   currentState?: ExploreStateDto,
   messages?: MessageDto[],
+  generateTitle?: boolean,
+  currentPage?: string,
 ): AssistantJob {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + JOB_EXPIRATION_MS);
@@ -53,6 +57,8 @@ export function createAssistantJob(
     prompt,
     messages: messages || [],
     current_state: currentState,
+    current_page: currentPage,
+    generate_title: generateTitle,
     created_at: now.toISOString(),
     expires_at: expiresAt.toISOString(),
     accumulated_text: '',

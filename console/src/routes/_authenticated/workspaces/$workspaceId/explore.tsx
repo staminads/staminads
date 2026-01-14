@@ -5,14 +5,12 @@ import { Alert } from 'antd'
 import dayjs from 'dayjs'
 import { workspaceQueryOptions, analyticsQueryOptions } from '../../../../lib/queries'
 import { useExploreParams } from '../../../../hooks/useExploreParams'
-import { useAssistant } from '../../../../hooks/useAssistant'
 import { useBreakdown } from '../../../../hooks/useBreakdown'
+import { useAssistantContext } from '../../../../contexts/AssistantContext'
 import { ExploreFilters } from '../../../../components/explore/ExploreFilters'
 import { ExploreTable } from '../../../../components/explore/ExploreTable'
 import { ExploreTemplates } from '../../../../components/explore/ExploreTemplates'
 import { ExploreSummary } from '../../../../components/explore/ExploreSummary'
-import { AssistantButton } from '../../../../components/explore/AssistantButton'
-import { AssistantPanel } from '../../../../components/explore/AssistantPanel'
 import { BreakdownDrawer } from '../../../../components/explore/BreakdownDrawer'
 import { BreakdownModal } from '../../../../components/explore/BreakdownModal'
 import { CSVExportModal } from '../../../../components/explore/CSVExportModal'
@@ -59,16 +57,8 @@ function Explore() {
     setAll,
   } = useExploreParams(workspace.timezone)
 
-  // AI Assistant state
-  const [isAssistantOpen, setIsAssistantOpen] = useState(false)
-  const {
-    messages: assistantMessages,
-    status: assistantStatus,
-    usage: assistantUsage,
-    isStreaming: isAssistantStreaming,
-    sendPrompt,
-    clearMessages,
-  } = useAssistant(workspaceId)
+  // AI Assistant context - register config handler
+  const { setOnApplyExploreConfig, setIsOpen: setAssistantOpen } = useAssistantContext()
 
   // Compute date range (needed for breakdown hook) - memoized to stabilize dependencies
   const dateRange = useMemo(() => {
@@ -121,11 +111,11 @@ function Explore() {
     console.log('[AssistantConfig] Received config:', JSON.stringify(config, null, 2))
 
     // Ensure minSessions is a number (AI may return string)
-    let minSessions: number | undefined
+    let minSessionsValue: number | undefined
     if (config.minSessions !== undefined) {
       const parsed = Number(config.minSessions)
       if (!isNaN(parsed) && parsed >= 1) {
-        minSessions = parsed
+        minSessionsValue = parsed
       }
     }
 
@@ -135,27 +125,20 @@ function Explore() {
       filters: config.filters,
       period: config.period,
       comparison: config.comparison,
-      minSessions,
+      minSessions: minSessionsValue,
       customStart: config.customStart,
       customEnd: config.customEnd,
     })
 
     // Close panel after applying
-    setIsAssistantOpen(false)
-  }, [setAll])
+    setAssistantOpen(false)
+  }, [setAll, setAssistantOpen])
 
-  // Handle send with current state
-  const handleAssistantSend = useCallback((prompt: string) => {
-    sendPrompt(prompt, {
-      dimensions,
-      filters,
-      period,
-      comparison,
-      minSessions,
-      customStart,
-      customEnd,
-    })
-  }, [sendPrompt, dimensions, filters, period, comparison, minSessions, customStart, customEnd])
+  // Register config handler with assistant context
+  useEffect(() => {
+    setOnApplyExploreConfig(handleAssistantConfig)
+    return () => setOnApplyExploreConfig(null)
+  }, [setOnApplyExploreConfig, handleAssistantConfig])
 
   // Handle template selection (dimensions + optional filters)
   const handleSelectTemplate = useCallback((dims: string[], templateFilters?: Filter[]) => {
@@ -458,29 +441,9 @@ function Explore() {
 
         <ExploreTemplates
           onSelectTemplate={handleSelectTemplate}
-          onOpenAssistant={() => setIsAssistantOpen(true)}
+          onOpenAssistant={() => setAssistantOpen(true)}
           customDimensionLabels={workspace.settings.custom_dimensions}
         />
-
-        {/* AI Assistant */}
-        <AssistantButton
-          isOpen={isAssistantOpen}
-          onClick={() => setIsAssistantOpen(!isAssistantOpen)}
-          hasMessages={assistantMessages.length > 0}
-        />
-
-        {isAssistantOpen && (
-          <AssistantPanel
-            messages={assistantMessages}
-            status={assistantStatus}
-            usage={assistantUsage}
-            isStreaming={isAssistantStreaming}
-            onSend={handleAssistantSend}
-            onClear={clearMessages}
-            onClose={() => setIsAssistantOpen(false)}
-            onApplyConfig={handleAssistantConfig}
-          />
-        )}
       </div>
     )
   }
@@ -564,26 +527,6 @@ function Explore() {
           maxDimensionValues={extremesData?.maxDimensionValues}
         />
       </div>
-
-      {/* AI Assistant */}
-      <AssistantButton
-        isOpen={isAssistantOpen}
-        onClick={() => setIsAssistantOpen(!isAssistantOpen)}
-        hasMessages={assistantMessages.length > 0}
-      />
-
-      {isAssistantOpen && (
-        <AssistantPanel
-          messages={assistantMessages}
-          status={assistantStatus}
-          usage={assistantUsage}
-          isStreaming={isAssistantStreaming}
-          onSend={handleAssistantSend}
-          onClear={clearMessages}
-          onClose={() => setIsAssistantOpen(false)}
-          onApplyConfig={handleAssistantConfig}
-        />
-      )}
 
       {/* Breakdown Dimension Selector Modal */}
       <BreakdownModal

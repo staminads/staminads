@@ -2,6 +2,7 @@ import {
   IsString,
   IsOptional,
   IsArray,
+  IsBoolean,
   MaxLength,
   ValidateNested,
   IsNumber,
@@ -85,6 +86,14 @@ export class ChatRequestDto {
   @ValidateNested({ each: true })
   @Type(() => MessageDto)
   messages?: MessageDto[];
+
+  @IsOptional()
+  @IsBoolean()
+  generate_title?: boolean;
+
+  @IsOptional()
+  @IsString()
+  current_page?: string;
 }
 
 /**

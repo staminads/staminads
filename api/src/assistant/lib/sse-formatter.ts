@@ -6,6 +6,7 @@ export type SSEEventType =
   | 'tool_call'
   | 'tool_result'
   | 'config'
+  | 'title'
   | 'usage'
   | 'error'
   | 'done';
@@ -108,4 +109,11 @@ export function usageEvent(
     output_tokens: outputTokens,
     cost_usd: costUsd,
   });
+}
+
+/**
+ * Create a title event with auto-generated conversation title.
+ */
+export function titleEvent(title: string): SSEEvent {
+  return createSSEEvent('title', { title });
 }

@@ -2,11 +2,37 @@ import { Workspace } from '../../workspaces/entities/workspace.entity';
 import { ExploreStateDto } from '../dto/chat.dto';
 
 /**
+ * Get page-specific context description.
+ */
+function getPageContext(page?: string): string {
+  if (!page) return '';
+
+  const contexts: Record<string, string> = {
+    dashboard:
+      'The user is on the main Dashboard. You can help them understand their metrics or suggest explore reports for deeper analysis.',
+    explore:
+      'The user is on the Explore page for custom report building. Use configure_explore to set up their report.',
+    goals:
+      'The user is viewing Goals/Conversions. Focus on goal-related analysis and conversion metrics.',
+    live: 'The user is viewing Live/Real-time data. Consider recent time periods in your suggestions.',
+    filters:
+      'The user is managing global Filters. Help them understand filtering options.',
+    annotations:
+      'The user is managing Annotations. Help them track important events.',
+    settings:
+      'The user is in Settings. Help them with configuration questions.',
+  };
+
+  return contexts[page] || '';
+}
+
+/**
  * Build the system prompt for the AI assistant.
  */
 export function buildSystemPrompt(
   workspace: Workspace,
   currentState?: ExploreStateDto,
+  currentPage?: string,
 ): string {
   const customDimensionLabels = workspace.settings.custom_dimensions
     ? Object.entries(workspace.settings.custom_dimensions)
@@ -24,6 +50,13 @@ export function buildSystemPrompt(
 - Min Sessions: ${currentState.minSessions || 1}`
     : '';
 
+  const pageContext = getPageContext(currentPage);
+  const pageContextText = pageContext
+    ? `
+## Current Page
+${pageContext}`
+    : '';
+
   return `You are an AI analytics assistant for the Staminads web analytics platform. Your role is to help users configure the Explore page to analyze their website traffic data.
 
 ## Workspace Context
@@ -32,6 +65,7 @@ export function buildSystemPrompt(
 - Timezone: ${workspace.timezone}
 - Custom Dimensions: ${customDimensionLabels}
 ${currentStateText}
+${pageContextText}
 
 ## Your Capabilities
 You can use tools to:

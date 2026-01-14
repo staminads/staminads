@@ -44,7 +44,7 @@ _authenticated.tsx
 
 ### 2. Persistent Conversations
 
-Store conversations in workspace settings (JSON) instead of sessionStorage.
+Store conversations in browser localStorage (per workspace) instead of sessionStorage.
 
 ### 3. Conversation History Panel
 
@@ -139,10 +139,8 @@ Same as current: fixed bottom-right, visible on all workspace pages.
 ```typescript
 interface AssistantConversation {
   id: string                    // UUID
-  workspace_id: string          // Reference to workspace
-  user_id: string               // User who created it
   title: string                 // LLM-generated title (empty until generated)
-  messages: AssistantMessage[]  // All messages (stored as JSON)
+  messages: AssistantMessage[]  // All messages
   created_at: string            // ISO timestamp
   updated_at: string            // ISO timestamp
 }
@@ -179,45 +177,37 @@ interface TokenUsage {
 }
 ```
 
-### Database Schema (ClickHouse)
+### Browser Storage (localStorage)
 
-```sql
-CREATE TABLE assistant_conversations (
-  id UUID,
-  workspace_id String,
-  user_id String,
-  title String DEFAULT '',
-  messages String DEFAULT '[]',   -- JSON array of AssistantMessage
-  created_at DateTime64(3),
-  updated_at DateTime64(3)
-) ENGINE = MergeTree()
-ORDER BY (workspace_id, user_id, updated_at DESC)
-SETTINGS index_granularity = 8192;
+Conversations are stored per-workspace in localStorage:
+
+```typescript
+// Storage key format
+const STORAGE_KEY = `staminads:assistant:${workspaceId}`
+
+// Stored structure
+interface StoredConversations {
+  conversations: AssistantConversation[]
+}
+
+// Example localStorage entry
+localStorage.setItem('staminads:assistant:ws_123', JSON.stringify({
+  conversations: [
+    { id: 'conv_1', title: 'UTM analysis', messages: [...], ... },
+    { id: 'conv_2', title: 'Mobile traffic', messages: [...], ... }
+  ]
+}))
 ```
 
 ### Storage Limits
 
-- Max 100 messages per conversation (enforced on send, older messages truncated)
+- Max 50 conversations per workspace (oldest auto-deleted when exceeded)
+- Max 100 messages per conversation (oldest messages truncated)
+- Total localStorage limit ~5MB per origin (browser limit)
 
 ---
 
 ## API Endpoints
-
-### New Endpoints
-
-```
-GET /api/assistant.conversations.list
-  Query: { workspace_id: string }
-  Response: { conversations: Array<{ id, title, updated_at, message_count }> }
-
-GET /api/assistant.conversations.get
-  Query: { workspace_id: string, conversation_id: string }
-  Response: AssistantConversation
-
-DELETE /api/assistant.conversations.delete
-  Query: { workspace_id: string, conversation_id: string }
-  Response: { success: boolean }
-```
 
 ### Enhanced Chat Endpoint
 
@@ -225,12 +215,13 @@ DELETE /api/assistant.conversations.delete
 POST /api/assistant.chat
   Body: {
     workspace_id: string
-    conversation_id?: string     // Optional: continue existing, omit for new
+    messages: AssistantMessage[]  // Full conversation history from localStorage
     prompt: string
     current_page?: 'dashboard' | 'explore' | 'live' | 'goals'  // Context hint
     current_state?: ExploreState // Only if on explore page
+    generate_title?: boolean     // Request title generation (first message only)
   }
-  Response: { job_id: string, conversation_id: string, is_new: boolean }
+  Response: { job_id: string }
 ```
 
 ### SSE Stream Events (Enhanced)
@@ -243,11 +234,13 @@ GET /api/assistant.stream/:jobId
     - "tool_result": Tool result
     - "explore_config": Explore configuration (from configure_explore)
     - "dashboard_config": Dashboard configuration (from configure_dashboard)
-    - "title": Auto-generated title (only for new conversations)
+    - "title": Auto-generated title (only when generate_title=true)
     - "usage": Token usage
     - "error": Error
     - "done": Complete
 ```
+
+Note: Conversation persistence is handled entirely in the browser. The API receives the full message history with each request and does not store conversations.
 
 ---
 
@@ -415,14 +408,14 @@ console/src/
 
   hooks/
     useAssistant.ts
-      - Add conversation_id to requests
+      - Send full message history with requests
       - Handle title event
       - Add conversation switching
 
-    useAssistantConversations.ts (new)
-      - List conversations
-      - Delete conversation
-      - Switch conversation
+    useAssistantStorage.ts (new)
+      - Load/save conversations from localStorage
+      - Create/delete conversations
+      - Enforce storage limits
 ```
 
 ### State Management
@@ -433,7 +426,7 @@ interface AssistantState {
   isOpen: boolean
   view: 'chat' | 'history'
   currentConversationId: string | null  // null = new conversation
-  conversations: ConversationSummary[]
+  conversations: AssistantConversation[]  // Loaded from localStorage
 }
 
 // Provide via context
@@ -445,7 +438,65 @@ const AssistantContext = createContext<{
   showChat: () => void
   selectConversation: (id: string | null) => void
   deleteConversation: (id: string) => void
+  saveConversation: (conversation: AssistantConversation) => void
 }>()
+```
+
+### Storage Hook
+
+```typescript
+// hooks/useAssistantStorage.ts
+const STORAGE_KEY_PREFIX = 'staminads:assistant:'
+const MAX_CONVERSATIONS = 50
+const MAX_MESSAGES = 100
+
+export function useAssistantStorage(workspaceId: string) {
+  const storageKey = `${STORAGE_KEY_PREFIX}${workspaceId}`
+
+  const loadConversations = (): AssistantConversation[] => {
+    try {
+      const data = localStorage.getItem(storageKey)
+      if (!data) return []
+      const parsed = JSON.parse(data)
+      return parsed.conversations || []
+    } catch {
+      return []
+    }
+  }
+
+  const saveConversations = (conversations: AssistantConversation[]) => {
+    // Enforce max conversations limit
+    const limited = conversations
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      .slice(0, MAX_CONVERSATIONS)
+
+    // Enforce max messages per conversation
+    const trimmed = limited.map(conv => ({
+      ...conv,
+      messages: conv.messages.slice(-MAX_MESSAGES)
+    }))
+
+    localStorage.setItem(storageKey, JSON.stringify({ conversations: trimmed }))
+  }
+
+  const saveConversation = (conversation: AssistantConversation) => {
+    const conversations = loadConversations()
+    const index = conversations.findIndex(c => c.id === conversation.id)
+    if (index >= 0) {
+      conversations[index] = conversation
+    } else {
+      conversations.unshift(conversation)
+    }
+    saveConversations(conversations)
+  }
+
+  const deleteConversation = (conversationId: string) => {
+    const conversations = loadConversations().filter(c => c.id !== conversationId)
+    saveConversations(conversations)
+  }
+
+  return { loadConversations, saveConversation, deleteConversation }
+}
 ```
 
 ### Context Awareness
@@ -470,137 +521,45 @@ sendPrompt(prompt, { current_page: currentPage, current_state: exploreState })
 
 ## Backend Implementation
 
-### Files to Create
-
-```
-api/src/
-  assistant/
-    conversations/
-      conversations.controller.ts    # CRUD endpoints
-      conversations.service.ts       # Business logic
-      conversations.repository.ts    # ClickHouse queries
-
-    entities/
-      conversation.entity.ts         # Conversation + Message types
-
-  database/
-    schemas/
-      assistant-conversations.schema.ts  # Table schema
-
-    migrations/
-      007-assistant-conversations.ts     # Migration file
-```
-
 ### Files to Modify
 
 ```
 api/src/
   assistant/
     assistant.controller.ts
-      - Add conversations.list endpoint
-      - Add conversations.get endpoint
-      - Add conversations.delete endpoint
-      - Modify chat to accept conversation_id
+      - Modify chat to accept messages array and generate_title flag
 
     assistant.service.ts
-      - Add conversation persistence logic
-      - Add title generation after first response
-      - Load conversation history for context
+      - Accept full message history from request
+      - Add title generation when generate_title=true
 
     dto/
       chat.dto.ts
-        - Add conversation_id field
+        - Add messages field (array of past messages)
         - Add current_page field
-
-  database/
-    database.service.ts
-      - Add assistant_conversations table
+        - Add generate_title field
 ```
 
-### Repository Methods
-
-```typescript
-// conversations.repository.ts
-@Injectable()
-export class ConversationsRepository {
-  constructor(private db: DatabaseService) {}
-
-  async create(conversation: AssistantConversation): Promise<void> {
-    await this.db.insert('assistant_conversations', {
-      ...conversation,
-      messages: JSON.stringify(conversation.messages),
-    })
-  }
-
-  async list(workspaceId: string, userId: string): Promise<ConversationSummary[]> {
-    // Return without messages for list view
-    const rows = await this.db.query(`
-      SELECT id, title, updated_at, length(JSONExtractArrayRaw(messages)) as message_count
-      FROM assistant_conversations
-      WHERE workspace_id = {workspaceId:String}
-        AND user_id = {userId:String}
-      ORDER BY updated_at DESC
-      LIMIT 50
-    `, { workspaceId, userId })
-    return rows
-  }
-
-  async get(conversationId: string): Promise<AssistantConversation | null> {
-    const rows = await this.db.query(`
-      SELECT * FROM assistant_conversations
-      WHERE id = {id:UUID}
-      ORDER BY updated_at DESC
-      LIMIT 1
-    `, { id: conversationId })
-
-    if (!rows[0]) return null
-
-    return {
-      ...rows[0],
-      messages: JSON.parse(rows[0].messages || '[]'),
-    }
-  }
-
-  async update(conversation: AssistantConversation): Promise<void> {
-    // ClickHouse doesn't support UPDATE, so delete + insert.
-    // DELETE is async, but queries use ORDER BY updated_at DESC LIMIT 1
-    // to always get the newest row.
-    await this.db.command(`
-      ALTER TABLE assistant_conversations DELETE WHERE id = {id:UUID}
-    `, { id: conversation.id })
-
-    await this.db.insert('assistant_conversations', {
-      ...conversation,
-      messages: JSON.stringify(conversation.messages),
-      updated_at: new Date().toISOString(),
-    })
-  }
-
-  async delete(conversationId: string): Promise<void> {
-    await this.db.command(`
-      ALTER TABLE assistant_conversations DELETE WHERE id = {id:UUID}
-    `, { id: conversationId })
-  }
-}
-```
+No database changes required - conversations are stored in browser localStorage.
 
 ### Title Generation
 
 ```typescript
 // In AssistantService, after main response completes
-if (isNewConversation && !conversation.title) {
+// Only runs when generate_title=true in request
+if (generateTitle) {
   const titleResponse = await this.anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',  // Fast, cheap
     max_tokens: 20,
     messages: [{
       role: 'user',
-      content: `Generate a short title (max 6 words) for this conversation:\nUser: ${firstUserMessage}\nAssistant: ${firstAssistantResponse.substring(0, 200)}`
+      content: `Generate a short title (max 6 words) for this conversation:\nUser: ${userPrompt}\nAssistant: ${assistantResponse.substring(0, 200)}`
     }]
   })
 
   const title = titleResponse.content[0].text.trim()
   this.sseStream.emit('title', { title })
-  conversation.title = title
+  // Frontend saves the title to localStorage
 }
 ```
 
@@ -640,58 +599,6 @@ The user is looking at conversion goals. Focus on goal-related analysis.
 
 ---
 
-## Database Migration
-
-### Migration File
-
-Create `api/src/database/migrations/007-assistant-conversations.ts`:
-
-```typescript
-import { Migration } from '../migration.interface'
-
-export const migration007AssistantConversations: Migration = {
-  version: 7,
-  name: 'assistant-conversations',
-
-  async up(db) {
-    await db.command(`
-      CREATE TABLE IF NOT EXISTS assistant_conversations (
-        id UUID,
-        workspace_id String,
-        user_id String,
-        title String DEFAULT '',
-        messages String DEFAULT '[]',
-        created_at DateTime64(3),
-        updated_at DateTime64(3)
-      ) ENGINE = MergeTree()
-      ORDER BY (workspace_id, user_id, updated_at DESC)
-      SETTINGS index_granularity = 8192
-    `)
-  },
-
-  async down(db) {
-    await db.command('DROP TABLE IF EXISTS assistant_conversations')
-  },
-}
-```
-
-### Register Migration
-
-Add to `api/src/database/migrations/index.ts`:
-
-```typescript
-import { migration007AssistantConversations } from './007-assistant-conversations'
-
-export const migrations = [
-  // ... existing migrations
-  migration007AssistantConversations,
-]
-```
-
-### Version Bump
-
-This is a schema change, so bump the minor version in `api/src/version.ts`.
-
 ---
 
 ## Code Migration
@@ -700,12 +607,13 @@ This is a schema change, so bump the minor version in `api/src/version.ts`.
 
 1. Keep existing `useAssistant` hook logic
 2. Move state up to workspace layout
-3. Add conversation persistence via new tables
+3. Replace sessionStorage with localStorage for persistence
 4. Add history UI
+5. Send full message history with each API request
 
-### SessionStorage Cleanup
+### SessionStorage to LocalStorage
 
-Remove sessionStorage usage from `useAssistant.ts` - all persistence now via API.
+Replace sessionStorage usage in `useAssistant.ts` with localStorage-based `useAssistantStorage.ts` hook for persistent conversation storage.
 
 ---
 
@@ -716,10 +624,10 @@ Remove sessionStorage usage from `useAssistant.ts` - all persistence now via API
 | Workspace layout | Add assistant state + UI |
 | Explore page | Remove assistant (now in layout) |
 | AssistantPanel | Add history view, title display |
-| useAssistant | Add conversation support, remove sessionStorage |
-| Backend | Add conversation endpoints, title generation |
-| Database | New `assistant_conversations` table (messages as JSON) |
-| Migration | `007-assistant-conversations.ts` |
+| useAssistant | Send full message history, handle title events |
+| useAssistantStorage (new) | localStorage-based conversation persistence |
+| Backend | Accept messages array, optional title generation |
+| Storage | Browser localStorage (no database table needed) |
 
 ---
 

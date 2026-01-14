@@ -33,6 +33,7 @@ import {
   toolCallEvent,
   toolResultEvent,
   configEvent,
+  titleEvent,
   usageEvent,
   errorEvent,
   doneEvent,
@@ -112,6 +113,8 @@ export class AssistantService implements OnModuleInit, OnModuleDestroy {
       dto.prompt,
       dto.current_state,
       dto.messages,
+      dto.generate_title,
+      dto.current_page,
     );
 
     jobStore.set(jobId, job);
@@ -239,7 +242,11 @@ export class AssistantService implements OnModuleInit, OnModuleDestroy {
       { role: 'user' as const, content: job.prompt },
     ];
 
-    const systemPrompt = buildSystemPrompt(workspace, job.current_state);
+    const systemPrompt = buildSystemPrompt(
+      workspace,
+      job.current_state,
+      job.current_page,
+    );
     const startTime = Date.now();
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
@@ -365,6 +372,23 @@ export class AssistantService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
+    // Generate title if requested
+    if (job.generate_title && job.accumulated_text) {
+      try {
+        const title = await this.generateTitle(
+          apiKey,
+          job.prompt,
+          job.accumulated_text,
+        );
+        if (title) {
+          res.write(formatSSE(titleEvent(title)));
+        }
+      } catch (titleError) {
+        // Title generation is non-critical, log but don't fail
+        console.error('[Assistant] Title generation failed:', titleError);
+      }
+    }
+
     // Calculate and send usage
     const totalTokens = totalInputTokens + totalOutputTokens;
     const costUsd = calculateCost(
@@ -384,6 +408,41 @@ export class AssistantService implements OnModuleInit, OnModuleDestroy {
       job.status = 'completed';
       jobStore.set(job.id, job);
     }
+  }
+
+  /**
+   * Generate a short title for the conversation using claude-haiku.
+   */
+  private async generateTitle(
+    apiKey: string,
+    userPrompt: string,
+    assistantResponse: string,
+  ): Promise<string | null> {
+    const client = new Anthropic({ apiKey });
+
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 30,
+      messages: [
+        {
+          role: 'user',
+          content: `Generate a short title (3-6 words, no quotes) summarizing this conversation:
+
+User: ${userPrompt.substring(0, 200)}
+Assistant: ${assistantResponse.substring(0, 300)}
+
+Title:`,
+        },
+      ],
+    });
+
+    const textBlock = response.content.find((b) => b.type === 'text');
+    if (textBlock && textBlock.type === 'text') {
+      // Clean up the title: remove quotes, trim whitespace
+      return textBlock.text.replace(/["']/g, '').trim().substring(0, 60);
+    }
+
+    return null;
   }
 
   /**
