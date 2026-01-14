@@ -378,7 +378,6 @@ SELECT
     {dim1:Identifier},
     {dim2:Identifier},
     quantile(0.5)(duration) as median_duration,
-    avg(duration) as avg_duration,
     count() as sessions
 FROM sessions FINAL
 WHERE workspace_id = {workspaceId:String}
@@ -442,7 +441,6 @@ ORDER BY created_at;
 SELECT
     count() as total_sessions,
     quantile(0.5)(duration) as median_duration,
-    avg(duration) as avg_duration,
     quantile(0.9)(duration) as p90_duration
 FROM sessions FINAL
 WHERE workspace_id = {workspaceId:String}

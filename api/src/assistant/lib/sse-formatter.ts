@@ -60,15 +60,23 @@ export function thinkingEvent(text: string): SSEEvent {
 /**
  * Create a tool call event.
  */
-export function toolCallEvent(name: string, input: unknown): SSEEvent {
-  return createSSEEvent('tool_call', { name, input });
+export function toolCallEvent(
+  id: string,
+  name: string,
+  input: unknown,
+): SSEEvent {
+  return createSSEEvent('tool_call', { id, name, input });
 }
 
 /**
  * Create a tool result event.
  */
-export function toolResultEvent(name: string, result: unknown): SSEEvent {
-  return createSSEEvent('tool_result', { name, result });
+export function toolResultEvent(
+  id: string,
+  name: string,
+  result: unknown,
+): SSEEvent {
+  return createSSEEvent('tool_result', { id, name, result });
 }
 
 /**

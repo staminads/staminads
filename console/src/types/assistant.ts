@@ -1,4 +1,4 @@
-import type { Filter, DatePreset } from './analytics'
+import type { Filter, MetricFilter, DatePreset } from './analytics'
 
 export type SSEEventType = 'thinking' | 'tool_call' | 'tool_result' | 'config' | 'title' | 'usage' | 'error' | 'done'
 
@@ -15,12 +15,32 @@ export interface ThinkingEvent {
 
 export interface ToolCallEvent {
   type: 'tool_call'
-  data: { name: string; input: unknown }
+  data: { id: string; name: string; input: unknown }
 }
 
 export interface ToolResultEvent {
   type: 'tool_result'
-  data: { name: string; result: unknown }
+  data: { id: string; name: string; result: unknown }
+}
+
+/**
+ * Timeline block types for interleaved chain-of-thought rendering.
+ */
+export type TimelineBlock = ThinkingBlock | ToolCallBlock
+
+export interface ThinkingBlock {
+  type: 'thinking'
+  id: string
+  text: string
+}
+
+export interface ToolCallBlock {
+  type: 'tool_call'
+  id: string
+  name: string
+  input: unknown
+  status: 'pending' | 'complete' | 'error'
+  result?: unknown
 }
 
 export interface ConfigEvent {
@@ -57,6 +77,7 @@ export interface ConversationUsage {
 export interface ExploreConfigOutput {
   dimensions?: string[]
   filters?: Filter[]
+  metricFilters?: MetricFilter[]
   period?: DatePreset
   comparison?: 'previous_period' | 'previous_year' | 'none'
   minSessions?: number
@@ -67,6 +88,7 @@ export interface ExploreConfigOutput {
 export interface ExploreState {
   dimensions?: string[]
   filters?: Filter[]
+  metricFilters?: MetricFilter[]
   period?: DatePreset
   comparison?: 'previous_period' | 'previous_year' | 'none'
   minSessions?: number
@@ -91,6 +113,7 @@ export interface AssistantConversation {
   title: string
   messages: Message[]
   usage?: ConversationUsage
+  dismissedConfigIds?: string[]
   created_at: string
   updated_at: string
 }
@@ -99,6 +122,8 @@ export interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
+  timeline?: TimelineBlock[]
+  // Legacy fields kept for backward compatibility with stored conversations
   thinking?: string
   toolCalls?: { name: string; input: unknown }[]
   config?: ExploreConfigOutput

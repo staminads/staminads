@@ -26,12 +26,6 @@ export const METRICS: Record<string, MetricDefinition> = {
     description: 'Total sessions',
     tables: ['sessions'],
   },
-  avg_duration: {
-    name: 'avg_duration',
-    sql: 'round(avg(duration) / 1000, 1)',
-    description: 'Average session duration in seconds',
-    tables: ['sessions'],
-  },
   median_duration: {
     name: 'median_duration',
     sql: 'round(median(duration) / 1000, 1)',

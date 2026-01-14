@@ -13,6 +13,7 @@ import { Type } from 'class-transformer';
 import {
   DateRangeDto,
   FilterDto,
+  MetricFilterDto,
   DateRangeValidator,
 } from './analytics-query.dto';
 import type { AnalyticsTable } from '../constants/tables';
@@ -40,6 +41,12 @@ export class ExtremesQueryDto {
   @ValidateNested({ each: true })
   @Type(() => FilterDto)
   filters?: FilterDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => MetricFilterDto)
+  metricFilters?: MetricFilterDto[];
 
   @IsOptional()
   @IsString()

@@ -1,7 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { AnalyticsService } from '../../analytics/analytics.service';
 import { DIMENSIONS } from '../../analytics/constants/dimensions';
-import { METRICS } from '../../analytics/constants/metrics';
 import {
   DATE_PRESETS,
   DatePreset,
@@ -11,19 +10,19 @@ import { ToolName } from './tool-definitions';
 
 /**
  * Input types for each tool.
- * Empty interfaces represent tools that take no input parameters.
  */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type, @typescript-eslint/no-unused-vars
-interface GetDimensionsInput {}
-
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type, @typescript-eslint/no-unused-vars
-interface GetMetricsInput {}
 
 interface GetDimensionValuesInput {
   dimension: string;
   period?: string;
   search?: string;
   limit?: number;
+}
+
+interface MetricFilterInput {
+  metric: string;
+  operator: string;
+  values: number[];
 }
 
 interface PreviewQueryInput {
@@ -33,6 +32,7 @@ interface PreviewQueryInput {
     operator: string;
     values?: unknown[];
   }>;
+  metricFilters?: MetricFilterInput[];
   period: string;
   limit?: number;
 }
@@ -44,6 +44,7 @@ interface ConfigureExploreInput {
     operator: string;
     values?: unknown[];
   }>;
+  metricFilters?: MetricFilterInput[];
   period?: string;
   comparison?: string;
   minSessions?: number;
@@ -54,21 +55,11 @@ interface ConfigureExploreInput {
 /**
  * Tool execution results.
  */
-interface DimensionInfo {
-  name: string;
-  type: string;
-  category: string;
-}
-
-interface MetricInfo {
-  name: string;
-  description: string;
-}
-
 interface PreviewResult {
   row_count: number;
   sample_data: Record<string, unknown>[];
   dimensions_used: string[];
+  metric_filters_applied: number;
 }
 
 interface DimensionValuesResult {
@@ -81,13 +72,6 @@ interface ConfigureResult {
   success: boolean;
   config: ExploreConfigOutput;
 }
-
-/**
- * Cache for dimensions and metrics (5 minute TTL).
- */
-const CACHE_TTL_MS = 5 * 60 * 1000;
-let dimensionsCache: { data: DimensionInfo[]; timestamp: number } | null = null;
-let metricsCache: { data: MetricInfo[]; timestamp: number } | null = null;
 
 /**
  * Tool executor for AI assistant.
@@ -103,10 +87,6 @@ export class ToolExecutor {
    */
   async execute(name: ToolName, input: unknown): Promise<unknown> {
     switch (name) {
-      case 'get_dimensions':
-        return this.getDimensions();
-      case 'get_metrics':
-        return this.getMetrics();
       case 'get_dimension_values':
         return this.getDimensionValues(input as GetDimensionValuesInput);
       case 'preview_query':
@@ -119,45 +99,6 @@ export class ToolExecutor {
   }
 
   /**
-   * Get all available dimensions.
-   */
-  private getDimensions(): DimensionInfo[] {
-    const now = Date.now();
-
-    if (dimensionsCache && now - dimensionsCache.timestamp < CACHE_TTL_MS) {
-      return dimensionsCache.data;
-    }
-
-    const dimensions = Object.entries(DIMENSIONS).map(([key, def]) => ({
-      name: key,
-      type: def.type,
-      category: def.category,
-    }));
-
-    dimensionsCache = { data: dimensions, timestamp: now };
-    return dimensions;
-  }
-
-  /**
-   * Get all available metrics.
-   */
-  private getMetrics(): MetricInfo[] {
-    const now = Date.now();
-
-    if (metricsCache && now - metricsCache.timestamp < CACHE_TTL_MS) {
-      return metricsCache.data;
-    }
-
-    const metrics = Object.entries(METRICS).map(([key, def]) => ({
-      name: key,
-      description: def.description,
-    }));
-
-    metricsCache = { data: metrics, timestamp: now };
-    return metrics;
-  }
-
-  /**
    * Get values for a specific dimension.
    */
   private async getDimensionValues(
@@ -166,7 +107,7 @@ export class ToolExecutor {
     // Validate dimension exists
     if (!DIMENSIONS[input.dimension]) {
       throw new BadRequestException(
-        `Unknown dimension: ${input.dimension}. Use get_dimensions to see available options.`,
+        `Unknown dimension: ${input.dimension}. See available dimensions in the system prompt.`,
       );
     }
 
@@ -247,7 +188,7 @@ export class ToolExecutor {
     for (const dim of input.dimensions) {
       if (!DIMENSIONS[dim]) {
         throw new BadRequestException(
-          `Unknown dimension: ${dim}. Use get_dimensions to see available options.`,
+          `Unknown dimension: ${dim}. See available dimensions in the system prompt.`,
         );
       }
     }
@@ -257,12 +198,22 @@ export class ToolExecutor {
     try {
       const result = await this.analyticsService.query({
         workspace_id: this.workspaceId,
-        metrics: ['sessions', 'median_duration'],
+        metrics: [
+          'sessions',
+          'bounce_rate',
+          'median_duration',
+          'median_scroll',
+        ],
         dimensions: input.dimensions,
         filters: input.filters?.map((f) => ({
           dimension: f.dimension,
           operator: f.operator as never,
           values: f.values as never,
+        })),
+        metricFilters: input.metricFilters?.map((mf) => ({
+          metric: mf.metric,
+          operator: mf.operator as never,
+          values: mf.values,
         })),
         dateRange: { preset: input.period as DatePreset },
         limit,
@@ -275,6 +226,7 @@ export class ToolExecutor {
         row_count: result.meta.total_rows,
         sample_data: data.slice(0, 5),
         dimensions_used: input.dimensions,
+        metric_filters_applied: input.metricFilters?.length ?? 0,
       };
     } catch (error) {
       throw new BadRequestException(
@@ -295,7 +247,7 @@ export class ToolExecutor {
       for (const dim of input.dimensions) {
         if (!DIMENSIONS[dim]) {
           throw new BadRequestException(
-            `Unknown dimension: ${dim}. Use get_dimensions to see available options.`,
+            `Unknown dimension: ${dim}. See available dimensions in the system prompt.`,
           );
         }
       }
@@ -329,6 +281,11 @@ export class ToolExecutor {
         dimension: f.dimension,
         operator: f.operator as never,
         values: f.values as never,
+      })),
+      metricFilters: input.metricFilters?.map((mf) => ({
+        metric: mf.metric,
+        operator: mf.operator as never,
+        values: mf.values,
       })),
       period: input.period as DatePreset,
       comparison: input.comparison as

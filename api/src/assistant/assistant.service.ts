@@ -305,7 +305,9 @@ export class AssistantService implements OnModuleInit, OnModuleDestroy {
 
         for (const toolUse of toolUseBlocks) {
           // Emit tool call event
-          res.write(formatSSE(toolCallEvent(toolUse.name, toolUse.input)));
+          res.write(
+            formatSSE(toolCallEvent(toolUse.id, toolUse.name, toolUse.input)),
+          );
 
           try {
             // Execute tool
@@ -323,7 +325,9 @@ export class AssistantService implements OnModuleInit, OnModuleDestroy {
             jobStore.set(job.id, job);
 
             // Emit tool result event
-            res.write(formatSSE(toolResultEvent(toolUse.name, result)));
+            res.write(
+              formatSSE(toolResultEvent(toolUse.id, toolUse.name, result)),
+            );
 
             // Check if this is configure_explore (final action)
             if (

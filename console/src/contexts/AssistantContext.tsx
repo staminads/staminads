@@ -23,6 +23,9 @@ import type {
 type AssistantView = 'chat' | 'history'
 
 interface AssistantContextValue {
+  // Workspace
+  workspaceId: string
+
   // UI state
   isOpen: boolean
   setIsOpen: (open: boolean) => void
@@ -50,6 +53,10 @@ interface AssistantContextValue {
   // Config callbacks (set by pages)
   onApplyExploreConfig: ((config: ExploreConfigOutput) => void) | null
   setOnApplyExploreConfig: (cb: ((config: ExploreConfigOutput) => void) | null) => void
+
+  // Dismissed configs (persisted per conversation)
+  dismissedConfigIds: string[]
+  dismissConfig: (msgId: string) => void
 }
 
 const AssistantContext = createContext<AssistantContextValue | null>(null)
@@ -86,6 +93,26 @@ export function AssistantProvider({ children, workspaceId }: AssistantProviderPr
     if (location.pathname.includes('/settings')) return 'settings'
     return 'dashboard'
   }, [location.pathname])
+
+  // Dismissed config IDs - derived from active conversation
+  const dismissedConfigIds = useMemo(
+    () => storage.activeConversation?.dismissedConfigIds || [],
+    [storage.activeConversation]
+  )
+
+  // Dismiss a config (persists to storage)
+  const dismissConfig = useCallback(
+    (msgId: string) => {
+      if (!storage.activeConversationId) return
+      const current = storage.activeConversation?.dismissedConfigIds || []
+      if (!current.includes(msgId)) {
+        storage.updateConversation(storage.activeConversationId, {
+          dismissedConfigIds: [...current, msgId],
+        })
+      }
+    },
+    [storage]
+  )
 
   // Track last synced message to prevent infinite loops
   const lastSyncedMessageRef = useRef<string | null>(null)
@@ -229,6 +256,7 @@ export function AssistantProvider({ children, workspaceId }: AssistantProviderPr
 
   const value = useMemo(
     (): AssistantContextValue => ({
+      workspaceId,
       isOpen,
       setIsOpen,
       view,
@@ -247,8 +275,11 @@ export function AssistantProvider({ children, workspaceId }: AssistantProviderPr
       stopStreaming: chat.stopStreaming,
       onApplyExploreConfig,
       setOnApplyExploreConfig,
+      dismissedConfigIds,
+      dismissConfig,
     }),
     [
+      workspaceId,
       isOpen,
       view,
       storage.conversations,
@@ -264,6 +295,8 @@ export function AssistantProvider({ children, workspaceId }: AssistantProviderPr
       clearMessages,
       chat.stopStreaming,
       onApplyExploreConfig,
+      dismissedConfigIds,
+      dismissConfig,
     ],
   )
 

@@ -19,7 +19,6 @@ Specify the table using the `table` parameter in API requests.
 | Metric | Description | SQL | Example |
 |--------|-------------|-----|---------|
 | `sessions` | Total number of sessions | `count()` | `1,234` |
-| `avg_duration` | Average session duration in seconds | `round(avg(duration), 1)` | `45.3` |
 | `median_duration` | Median session duration in seconds (TimeScore) | `round(median(duration), 1)` | `38.0` |
 | `max_scroll` | Average max scroll depth percentage | `round(avg(max_scroll), 1)` | `67.2` |
 | `median_scroll` | Median max scroll depth percentage | `round(median(max_scroll), 1)` | `72.0` |

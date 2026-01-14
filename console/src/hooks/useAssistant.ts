@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 import { api } from '../lib/api'
-import type { ExploreState, ExploreConfigOutput, Message, AssistantStatus, ConversationUsage } from '../types/assistant'
+import type { ExploreState, ExploreConfigOutput, Message, AssistantStatus, ConversationUsage, TimelineBlock, ThinkingBlock } from '../types/assistant'
 
 const MAX_HISTORY = 20
 
@@ -54,11 +54,15 @@ export function useAssistant(workspaceId: string) {
     setMessages(prev => [
       ...prev,
       { id: userMsgId, role: 'user', content: prompt, status: 'complete', created_at: now },
-      { id: assistantMsgId, role: 'assistant', content: '', thinking: '', toolCalls: [], status: 'pending', created_at: now },
+      { id: assistantMsgId, role: 'assistant', content: '', timeline: [], status: 'pending', created_at: now },
     ])
 
     setStatus('connecting')
-    let thinkingText = ''
+
+    // Timeline state for interleaved rendering
+    let timeline: TimelineBlock[] = []
+    let currentThinkingBlock: ThinkingBlock | null = null
+    let blockIdCounter = 0
 
     // Store callback in ref to avoid stale closure
     onTitleRef.current = options?.onTitle
@@ -92,18 +96,51 @@ export function useAssistant(workspaceId: string) {
 
             switch (event.event) {
               case 'thinking':
-                thinkingText += data.text
+                // Append to current thinking block or create new one
+                if (currentThinkingBlock) {
+                  currentThinkingBlock.text += data.text
+                } else {
+                  currentThinkingBlock = {
+                    type: 'thinking',
+                    id: `thinking-${Date.now()}-${blockIdCounter++}`,
+                    text: data.text,
+                  }
+                  timeline.push(currentThinkingBlock)
+                }
                 setMessages(prev => prev.map(m =>
                   m.id === assistantMsgId
-                    ? { ...m, thinking: thinkingText, status: 'streaming' }
+                    ? { ...m, timeline: [...timeline], status: 'streaming' }
                     : m
                 ))
                 break
 
               case 'tool_call':
+                // End current thinking block when a tool is called
+                currentThinkingBlock = null
+                timeline.push({
+                  type: 'tool_call',
+                  id: data.id,
+                  name: data.name,
+                  input: data.input,
+                  status: 'pending',
+                })
                 setMessages(prev => prev.map(m =>
                   m.id === assistantMsgId
-                    ? { ...m, toolCalls: [...(m.toolCalls || []), { name: data.name, input: data.input }] }
+                    ? { ...m, timeline: [...timeline] }
+                    : m
+                ))
+                break
+
+              case 'tool_result':
+                // Update matching tool call with result
+                timeline = timeline.map(block =>
+                  block.type === 'tool_call' && block.id === data.id
+                    ? { ...block, status: 'complete' as const, result: data.result }
+                    : block
+                )
+                setMessages(prev => prev.map(m =>
+                  m.id === assistantMsgId
+                    ? { ...m, timeline: [...timeline] }
                     : m
                 ))
                 break
@@ -138,14 +175,20 @@ export function useAssistant(workspaceId: string) {
                 setStatus('error')
                 break
 
-              case 'done':
+              case 'done': {
+                // Extract text content from timeline for API history
+                const textContent = timeline
+                  .filter((b): b is ThinkingBlock => b.type === 'thinking')
+                  .map(b => b.text)
+                  .join('')
                 setMessages(prev => prev.map(m =>
                   m.id === assistantMsgId
-                    ? { ...m, status: 'complete', content: thinkingText }
+                    ? { ...m, status: 'complete', content: textContent }
                     : m
                 ))
                 setStatus('done')
                 break
+              }
             }
           } catch {
             // Ignore malformed events
@@ -159,10 +202,14 @@ export function useAssistant(workspaceId: string) {
       })
 
       // Update conversation history (limit size)
+      const assistantContent = timeline
+        .filter((b): b is ThinkingBlock => b.type === 'thinking')
+        .map(b => b.text)
+        .join('') || 'Configured report'
       conversationHistoryRef.current = [
         ...conversationHistoryRef.current,
         { role: 'user' as const, content: prompt },
-        { role: 'assistant' as const, content: thinkingText || 'Configured report' },
+        { role: 'assistant' as const, content: assistantContent },
       ].slice(-MAX_HISTORY)
 
     } catch (error) {

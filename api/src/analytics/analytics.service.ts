@@ -129,6 +129,18 @@ export class AnalyticsService {
       }
     }
 
+    // Validate metricFilters
+    for (const mf of dto.metricFilters || []) {
+      if (!METRICS[mf.metric]) {
+        throw new BadRequestException(`Unknown metric: ${mf.metric}`);
+      }
+      if (!METRICS[mf.metric].tables.includes(table)) {
+        throw new BadRequestException(
+          `Metric '${mf.metric}' is not available for table '${table}'`,
+        );
+      }
+    }
+
     // Resolve date range from preset if needed
     const resolvedDateRange = { ...dto.dateRange };
     if (dto.dateRange.preset) {
@@ -368,6 +380,18 @@ export class AnalyticsService {
       }
     }
 
+    // Validate metricFilters
+    for (const mf of dto.metricFilters || []) {
+      if (!METRICS[mf.metric]) {
+        throw new BadRequestException(`Unknown metric: ${mf.metric}`);
+      }
+      if (!METRICS[mf.metric].tables.includes(table)) {
+        throw new BadRequestException(
+          `Metric '${mf.metric}' is not available for table '${table}'`,
+        );
+      }
+    }
+
     // Resolve date range from preset if needed
     const resolvedDateRange = { ...dto.dateRange };
     if (dto.dateRange.preset) {
@@ -454,12 +478,14 @@ export class AnalyticsService {
       dto.table || 'sessions',
       [...dto.metrics].sort().join(','),
       [...(dto.dimensions || [])].sort().join(','),
+      [...(dto.totalsGroupBy || [])].sort().join(','),
       dates.start,
       dates.end,
       dto.dateRange.granularity || '',
       tz,
       dto.limit || 1000,
       JSON.stringify(dto.filters || []),
+      JSON.stringify(dto.metricFilters || []),
       JSON.stringify(dto.order || {}),
       dto.compareDateRange ? JSON.stringify(dto.compareDateRange) : '',
       dto.havingMinSessions || 0,

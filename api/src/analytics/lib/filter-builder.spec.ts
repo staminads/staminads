@@ -1,5 +1,6 @@
-import { buildFilters } from './filter-builder';
-import { FilterDto } from '../dto/analytics-query.dto';
+import { buildFilters, buildMetricFilters } from './filter-builder';
+import { FilterDto, MetricFilterDto } from '../dto/analytics-query.dto';
+import { MetricContext } from '../constants/metrics';
 
 describe('buildFilters', () => {
   it('returns empty for no filters', () => {
@@ -262,5 +263,132 @@ describe('buildFilters', () => {
       );
       expect(result.sql).toBe('is_landing = {f0:String}');
     });
+  });
+});
+
+describe('buildMetricFilters', () => {
+  const defaultContext: MetricContext = { bounce_threshold: 10 };
+
+  it('returns empty for no filters', () => {
+    const result = buildMetricFilters([], 'sessions', defaultContext);
+    expect(result.sql).toBe('');
+    expect(result.params).toEqual({});
+  });
+
+  it('returns empty for undefined filters', () => {
+    const result = buildMetricFilters(
+      undefined as unknown as MetricFilterDto[],
+      'sessions',
+      defaultContext,
+    );
+    expect(result.sql).toBe('');
+    expect(result.params).toEqual({});
+  });
+
+  it('handles gt operator', () => {
+    const result = buildMetricFilters(
+      [{ metric: 'bounce_rate', operator: 'gt', values: [50] }],
+      'sessions',
+      defaultContext,
+    );
+    expect(result.sql).toContain('> {mf0:Float64}');
+    expect(result.params.mf0).toBe(50);
+  });
+
+  it('handles gte operator', () => {
+    const result = buildMetricFilters(
+      [{ metric: 'median_duration', operator: 'gte', values: [30] }],
+      'sessions',
+      defaultContext,
+    );
+    expect(result.sql).toContain('>= {mf0:Float64}');
+    expect(result.params.mf0).toBe(30);
+  });
+
+  it('handles lt operator', () => {
+    const result = buildMetricFilters(
+      [{ metric: 'bounce_rate', operator: 'lt', values: [25] }],
+      'sessions',
+      defaultContext,
+    );
+    expect(result.sql).toContain('< {mf0:Float64}');
+    expect(result.params.mf0).toBe(25);
+  });
+
+  it('handles lte operator', () => {
+    const result = buildMetricFilters(
+      [{ metric: 'median_scroll', operator: 'lte', values: [75] }],
+      'sessions',
+      defaultContext,
+    );
+    expect(result.sql).toContain('<= {mf0:Float64}');
+    expect(result.params.mf0).toBe(75);
+  });
+
+  it('handles between operator', () => {
+    const result = buildMetricFilters(
+      [{ metric: 'bounce_rate', operator: 'between', values: [20, 80] }],
+      'sessions',
+      defaultContext,
+    );
+    expect(result.sql).toContain('BETWEEN {mf0a:Float64} AND {mf0b:Float64}');
+    expect(result.params.mf0a).toBe(20);
+    expect(result.params.mf0b).toBe(80);
+  });
+
+  it('combines multiple metric filters with AND', () => {
+    const result = buildMetricFilters(
+      [
+        { metric: 'bounce_rate', operator: 'gt', values: [50] },
+        { metric: 'median_duration', operator: 'gte', values: [10] },
+      ],
+      'sessions',
+      defaultContext,
+    );
+    expect(result.sql).toContain(' AND ');
+    expect(result.params.mf0).toBe(50);
+    expect(result.params.mf1).toBe(10);
+  });
+
+  it('uses custom param prefix', () => {
+    const result = buildMetricFilters(
+      [{ metric: 'bounce_rate', operator: 'gt', values: [50] }],
+      'sessions',
+      defaultContext,
+      'metric',
+    );
+    expect(result.sql).toContain('{metric0:Float64}');
+    expect(result.params.metric0).toBe(50);
+  });
+
+  it('throws for unknown metric', () => {
+    expect(() =>
+      buildMetricFilters(
+        [{ metric: 'unknown_metric', operator: 'gt', values: [50] }],
+        'sessions',
+        defaultContext,
+      ),
+    ).toThrow('Unknown metric: unknown_metric');
+  });
+
+  it('throws for metric not available on table', () => {
+    expect(() =>
+      buildMetricFilters(
+        [{ metric: 'sessions', operator: 'gt', values: [100] }],
+        'pages',
+        defaultContext,
+      ),
+    ).toThrow("Metric 'sessions' is not available for table 'pages'");
+  });
+
+  it('uses bounce_threshold from context for bounce_rate', () => {
+    const customContext: MetricContext = { bounce_threshold: 20 };
+    const result = buildMetricFilters(
+      [{ metric: 'bounce_rate', operator: 'gt', values: [50] }],
+      'sessions',
+      customContext,
+    );
+    // bounce_rate SQL uses: countIf(duration < {bounce_threshold * 1000})
+    expect(result.sql).toContain('20000');
   });
 });

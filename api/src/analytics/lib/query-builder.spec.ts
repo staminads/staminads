@@ -28,13 +28,15 @@ describe('buildAnalyticsQuery', () => {
     const { sql } = buildAnalyticsQuery(
       {
         ...baseQuery,
-        metrics: ['sessions', 'avg_duration', 'bounce_rate'],
+        metrics: ['sessions', 'median_duration', 'bounce_rate'],
       },
       undefined,
       defaultContext,
     );
     expect(sql).toContain('count() as sessions');
-    expect(sql).toContain('round(avg(duration) / 1000, 1) as avg_duration');
+    expect(sql).toContain(
+      'round(median(duration) / 1000, 1) as median_duration',
+    );
     expect(sql).toContain(
       'round(countIf(duration < 10000) * 100.0 / count(), 2) as bounce_rate',
     );
@@ -159,9 +161,9 @@ describe('buildAnalyticsQuery', () => {
   it('defaults ORDER BY to first metric DESC when no order specified', () => {
     const { sql } = buildAnalyticsQuery({
       ...baseQuery,
-      metrics: ['avg_duration', 'sessions'],
+      metrics: ['median_duration', 'sessions'],
     });
-    expect(sql).toContain('ORDER BY avg_duration DESC');
+    expect(sql).toContain('ORDER BY median_duration DESC');
   });
 
   it('respects custom order', () => {
@@ -302,6 +304,250 @@ describe('buildAnalyticsQuery', () => {
       // No dimensions, no granularity = no GROUP BY
     });
     expect(sql).not.toContain('HAVING');
+  });
+
+  describe('metricFilters', () => {
+    it('adds metric filter to HAVING clause', () => {
+      const { sql, params } = buildAnalyticsQuery(
+        {
+          ...baseQuery,
+          dimensions: ['utm_source'],
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          ],
+        },
+        undefined,
+        defaultContext,
+      );
+      expect(sql).toContain('HAVING');
+      expect(sql).toContain('> {mf0:Float64}');
+      expect(params.mf0).toBe(50);
+    });
+
+    it('combines metricFilters with havingMinSessions', () => {
+      const { sql, params } = buildAnalyticsQuery(
+        {
+          ...baseQuery,
+          dimensions: ['utm_source'],
+          havingMinSessions: 10,
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          ],
+        },
+        undefined,
+        defaultContext,
+      );
+      expect(sql).toContain('HAVING count() >= 10 AND');
+      expect(sql).toContain('> {mf0:Float64}');
+      expect(params.mf0).toBe(50);
+    });
+
+    it('handles multiple metric filters', () => {
+      const { sql, params } = buildAnalyticsQuery(
+        {
+          ...baseQuery,
+          dimensions: ['utm_source'],
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+            { metric: 'median_duration', operator: 'gte', values: [10] },
+          ],
+        },
+        undefined,
+        defaultContext,
+      );
+      expect(sql).toContain('HAVING');
+      expect(params.mf0).toBe(50);
+      expect(params.mf1).toBe(10);
+    });
+
+    it('ignores metricFilters when no GROUP BY', () => {
+      // This is the "totals" query pattern - no dimensions means no GROUP BY
+      // metricFilters (HAVING clause) only work with GROUP BY, so they should be ignored
+      const { sql } = buildAnalyticsQuery(
+        {
+          ...baseQuery,
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          ],
+          // No dimensions, no granularity = no GROUP BY
+        },
+        undefined,
+        defaultContext,
+      );
+      expect(sql).not.toContain('HAVING');
+      expect(sql).not.toContain('GROUP BY');
+    });
+
+    it('ignores metricFilters for totals query (empty dimensions array)', () => {
+      // Totals queries use dimensions: [] to get a single aggregate row
+      // metricFilters should not apply - they would either hide the single row
+      // or be invalid SQL (HAVING without GROUP BY)
+      const { sql } = buildAnalyticsQuery(
+        {
+          ...baseQuery,
+          dimensions: [], // Explicitly empty - totals pattern
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+            { metric: 'median_duration', operator: 'gte', values: [10] },
+          ],
+        },
+        undefined,
+        defaultContext,
+      );
+      expect(sql).not.toContain('HAVING');
+      expect(sql).not.toContain('GROUP BY');
+      // Query should still work and return aggregate metrics
+      expect(sql).toContain('count() as sessions');
+    });
+
+    it('handles between operator in metricFilters', () => {
+      const { sql, params } = buildAnalyticsQuery(
+        {
+          ...baseQuery,
+          dimensions: ['utm_source'],
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'between', values: [20, 80] },
+          ],
+        },
+        undefined,
+        defaultContext,
+      );
+      expect(sql).toContain('BETWEEN {mf0a:Float64} AND {mf0b:Float64}');
+      expect(params.mf0a).toBe(20);
+      expect(params.mf0b).toBe(80);
+    });
+  });
+
+  describe('totalsGroupBy (filtered totals)', () => {
+    it('uses subquery pattern when totalsGroupBy is set with metricFilters', () => {
+      const { sql, params } = buildAnalyticsQuery(
+        {
+          ...baseQuery,
+          dimensions: [], // Empty = totals
+          totalsGroupBy: ['utm_source'], // Group by this for filtering
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          ],
+        },
+        undefined,
+        defaultContext,
+      );
+      // Should use subquery pattern
+      expect(sql).toContain('FROM (');
+      expect(sql).toContain('GROUP BY utm_source');
+      expect(sql).toContain('HAVING');
+      expect(sql).toContain('sum(_sessions)');
+      expect(params.mf0).toBe(50);
+    });
+
+    it('aggregates sessions correctly in filtered totals', () => {
+      const { sql } = buildAnalyticsQuery(
+        {
+          ...baseQuery,
+          metrics: ['sessions'],
+          dimensions: [],
+          totalsGroupBy: ['device'],
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          ],
+        },
+        undefined,
+        defaultContext,
+      );
+      expect(sql).toContain('count() as _sessions');
+      expect(sql).toContain('sum(_sessions) as sessions');
+    });
+
+    it('recalculates bounce_rate correctly from underlying counts', () => {
+      const { sql } = buildAnalyticsQuery(
+        {
+          ...baseQuery,
+          metrics: ['bounce_rate'],
+          dimensions: [],
+          totalsGroupBy: ['utm_source'],
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          ],
+        },
+        undefined,
+        defaultContext,
+      );
+      // Should calculate from summed bounces/total
+      expect(sql).toContain('countIf(duration < 10000) as _bounces');
+      expect(sql).toContain('count() as _total');
+      expect(sql).toContain('sum(_bounces) * 100.0 / sum(_total)');
+    });
+
+    it('uses quantileMerge for median metrics', () => {
+      const { sql } = buildAnalyticsQuery(
+        {
+          ...baseQuery,
+          metrics: ['median_duration'],
+          dimensions: [],
+          totalsGroupBy: ['utm_source'],
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          ],
+        },
+        undefined,
+        defaultContext,
+      );
+      expect(sql).toContain('quantileState(0.5)(duration)');
+      expect(sql).toContain('quantileMerge(0.5)');
+    });
+
+    it('does not use subquery when totalsGroupBy is set but no metricFilters', () => {
+      const { sql } = buildAnalyticsQuery(
+        {
+          ...baseQuery,
+          dimensions: [],
+          totalsGroupBy: ['utm_source'],
+          // No metricFilters
+        },
+        undefined,
+        defaultContext,
+      );
+      // Should NOT use subquery - regular totals query
+      expect(sql).not.toContain('FROM (');
+    });
+
+    it('does not use subquery when dimensions are present (not a totals query)', () => {
+      const { sql } = buildAnalyticsQuery(
+        {
+          ...baseQuery,
+          dimensions: ['device'], // Has dimensions = not a totals query
+          totalsGroupBy: ['utm_source'],
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          ],
+        },
+        undefined,
+        defaultContext,
+      );
+      // Should use regular grouped query, not subquery
+      expect(sql).not.toContain('FROM (');
+      expect(sql).toContain('GROUP BY device');
+    });
+
+    it('applies dimension filters in filtered totals', () => {
+      const { sql, params } = buildAnalyticsQuery(
+        {
+          ...baseQuery,
+          dimensions: [],
+          totalsGroupBy: ['utm_source'],
+          filters: [
+            { dimension: 'device', operator: 'equals', values: ['mobile'] },
+          ],
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          ],
+        },
+        undefined,
+        defaultContext,
+      );
+      expect(sql).toContain('device = {f0:String}');
+      expect(params.f0).toBe('mobile');
+    });
   });
 
   describe('table parameter', () => {
@@ -578,6 +824,87 @@ describe('buildExtremesQuery', () => {
         groupBy: ['unknown_dimension'],
       }),
     ).toThrow('Unknown dimension: unknown_dimension');
+  });
+
+  describe('metricFilters', () => {
+    const defaultContext: MetricContext = { bounce_threshold: 10 };
+
+    it('includes metricFilters in HAVING clause', () => {
+      const { sql, params } = buildExtremesQuery(
+        {
+          ...baseExtremesQuery,
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          ],
+        },
+        defaultContext,
+      );
+      expect(sql).toContain('HAVING');
+      expect(sql).toContain('> {mf0:Float64}');
+      expect(params.mf0).toBe(50);
+    });
+
+    it('applies metricFilters to both subqueries', () => {
+      const { sql, params } = buildExtremesQuery(
+        {
+          ...baseExtremesQuery,
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          ],
+        },
+        defaultContext,
+      );
+      // HAVING should appear twice: once in grouped subquery, once in max_row join
+      const havingMatches = sql.match(/HAVING/g);
+      expect(havingMatches).toHaveLength(2);
+      expect(params.mf0).toBe(50);
+    });
+
+    it('combines metricFilters with havingMinSessions', () => {
+      const { sql, params } = buildExtremesQuery(
+        {
+          ...baseExtremesQuery,
+          havingMinSessions: 10,
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          ],
+        },
+        defaultContext,
+      );
+      expect(sql).toContain('HAVING count() >= 10 AND');
+      expect(params.mf0).toBe(50);
+    });
+
+    it('handles multiple metric filters', () => {
+      const { sql, params } = buildExtremesQuery(
+        {
+          ...baseExtremesQuery,
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+            { metric: 'median_duration', operator: 'gte', values: [10] },
+          ],
+        },
+        defaultContext,
+      );
+      expect(sql).toContain('HAVING');
+      expect(params.mf0).toBe(50);
+      expect(params.mf1).toBe(10);
+    });
+
+    it('handles between operator', () => {
+      const { sql, params } = buildExtremesQuery(
+        {
+          ...baseExtremesQuery,
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'between', values: [20, 80] },
+          ],
+        },
+        defaultContext,
+      );
+      expect(sql).toContain('BETWEEN {mf0a:Float64} AND {mf0b:Float64}');
+      expect(params.mf0a).toBe(20);
+      expect(params.mf0b).toBe(80);
+    });
   });
 
   describe('table parameter', () => {

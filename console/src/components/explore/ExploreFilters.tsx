@@ -1,7 +1,7 @@
 import { DimensionSelector } from './DimensionSelector'
 import { MinSessionsInput } from './MinSessionsInput'
 import { ExploreFilterBuilder } from './ExploreFilterBuilder'
-import type { Filter } from '../../types/analytics'
+import type { Filter, MetricFilter } from '../../types/analytics'
 import type { CustomDimensionLabels } from '../../types/workspace'
 
 interface ExploreFiltersProps {
@@ -9,9 +9,13 @@ interface ExploreFiltersProps {
   dimensions: string[]
   onDimensionsChange: (dimensions: string[]) => void
 
-  // Filter selection
+  // Dimension filter selection
   filters: Filter[]
   onFiltersChange: (filters: Filter[]) => void
+
+  // Metric filter selection
+  metricFilters: MetricFilter[]
+  onMetricFiltersChange: (metricFilters: MetricFilter[]) => void
 
   // Min sessions
   minSessions: number
@@ -26,6 +30,8 @@ export function ExploreFilters({
   onDimensionsChange,
   filters,
   onFiltersChange,
+  metricFilters,
+  onMetricFiltersChange,
   minSessions,
   onMinSessionsChange,
   customDimensionLabels,
@@ -40,7 +46,13 @@ export function ExploreFilters({
       </div>
 
       {/* Second row: Filters */}
-      <ExploreFilterBuilder value={filters} onChange={onFiltersChange} customDimensionLabels={customDimensionLabels} />
+      <ExploreFilterBuilder
+        value={filters}
+        onChange={onFiltersChange}
+        metricFilters={metricFilters}
+        onMetricFiltersChange={onMetricFiltersChange}
+        customDimensionLabels={customDimensionLabels}
+      />
     </div>
   )
 }

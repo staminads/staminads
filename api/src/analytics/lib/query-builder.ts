@@ -3,7 +3,7 @@ import { ExtremesQueryDto } from '../dto/extremes-query.dto';
 import { METRICS, getMetricSql, MetricContext } from '../constants/metrics';
 import { DIMENSIONS } from '../constants/dimensions';
 import { TABLE_CONFIGS, AnalyticsTable } from '../constants/tables';
-import { buildFilters } from './filter-builder';
+import { buildFilters, buildMetricFilters } from './filter-builder';
 
 export interface BuiltQuery {
   sql: string;
@@ -44,6 +44,168 @@ const GRANULARITY_SQL: Record<
   },
 };
 
+/**
+ * Build a "filtered totals" query that:
+ * 1. Groups by totalsGroupBy dimensions in an inner subquery
+ * 2. Applies metricFilters via HAVING clause
+ * 3. Aggregates the filtered results in an outer query
+ *
+ * This allows totals to respect metricFilters.
+ */
+function buildFilteredTotalsQuery(
+  query: AnalyticsQueryDto,
+  timezone?: string,
+  metricContext?: MetricContext,
+): BuiltQuery {
+  const table: AnalyticsTable = query.table || 'sessions';
+  const tableConfig = TABLE_CONFIGS[table];
+  const defaultContext: MetricContext = { bounce_threshold: 10 };
+  const ctx = metricContext ?? defaultContext;
+
+  // Validate totalsGroupBy dimensions
+  const innerGroupByCols = (query.totalsGroupBy || []).map((d) => {
+    const dim = DIMENSIONS[d];
+    if (!dim) throw new Error(`Unknown dimension: ${d}`);
+    if (!dim.tables.includes(table)) {
+      throw new Error(`Dimension '${d}' is not available for table '${table}'`);
+    }
+    return dim.column;
+  });
+
+  // Build filters
+  const { sql: filterSql, params: filterParams } = buildFilters(
+    query.filters || [],
+    'f',
+    table,
+  );
+
+  // Build metric filters for HAVING clause
+  const { sql: metricFilterSql, params: metricFilterParams } =
+    buildMetricFilters(query.metricFilters || [], table, ctx, 'mf');
+
+  // Build WHERE conditions
+  const dateCol = tableConfig.dateColumn;
+  const whereConditions = [
+    `${dateCol} >= toDateTime64({date_start:String}, 3, 'UTC')`,
+    `${dateCol} <= toDateTime64({date_end:String}, 3, 'UTC')`,
+  ];
+  if (filterSql) {
+    whereConditions.push(filterSql);
+  }
+
+  // Build HAVING clause
+  const havingConditions: string[] = [];
+  if (query.havingMinSessions) {
+    havingConditions.push(`count() >= ${query.havingMinSessions}`);
+  }
+  if (metricFilterSql) {
+    havingConditions.push(metricFilterSql);
+  }
+  const havingClause =
+    havingConditions.length > 0
+      ? `HAVING ${havingConditions.join(' AND ')}`
+      : '';
+
+  // Build FROM clause
+  const fromClause = `FROM ${table}${tableConfig.finalModifier ? ' FINAL' : ''}`;
+
+  // Build inner SELECT with underlying aggregates needed for re-calculation
+  // We need raw counts for proper aggregation of rate metrics
+  const innerSelectParts: string[] = [];
+  const outerSelectParts: string[] = [];
+
+  for (const m of query.metrics) {
+    const metric = METRICS[m];
+    if (!metric) throw new Error(`Unknown metric: ${m}`);
+
+    // Add inner aggregate and corresponding outer aggregation
+    switch (m) {
+      case 'sessions':
+        innerSelectParts.push('count() as _sessions');
+        outerSelectParts.push('sum(_sessions) as sessions');
+        break;
+      case 'bounce_rate':
+        // Need bounces and total for proper re-calculation
+        innerSelectParts.push(
+          `countIf(duration < ${ctx.bounce_threshold * 1000}) as _bounces`,
+        );
+        innerSelectParts.push('count() as _total');
+        outerSelectParts.push(
+          'if(sum(_total) > 0, sum(_bounces) * 100.0 / sum(_total), 0) as bounce_rate',
+        );
+        break;
+      case 'median_duration':
+        // For medians, we use quantileMerge with quantileState for proper aggregation
+        innerSelectParts.push(
+          'quantileState(0.5)(duration) as _duration_state',
+        );
+        outerSelectParts.push(
+          'quantileMerge(0.5)(_duration_state) / 1000 as median_duration',
+        );
+        break;
+      case 'median_scroll':
+        innerSelectParts.push(
+          'quantileState(0.5)(max_scroll) as _scroll_state',
+        );
+        outerSelectParts.push(
+          'quantileMerge(0.5)(_scroll_state) as median_scroll',
+        );
+        break;
+      case 'page_count':
+        innerSelectParts.push('count() as _page_count');
+        outerSelectParts.push('sum(_page_count) as page_count');
+        break;
+      case 'goals':
+        innerSelectParts.push('count() as _goals');
+        outerSelectParts.push('sum(_goals) as goals');
+        break;
+      case 'sum_goal_value':
+        innerSelectParts.push('sum(goal_value) as _sum_goal_value');
+        outerSelectParts.push('sum(_sum_goal_value) as sum_goal_value');
+        break;
+      case 'avg_goal_value':
+        innerSelectParts.push('sum(goal_value) as _sum_value');
+        innerSelectParts.push('count() as _goal_count');
+        outerSelectParts.push(
+          'if(sum(_goal_count) > 0, sum(_sum_value) / sum(_goal_count), 0) as avg_goal_value',
+        );
+        break;
+      default: {
+        // For other metrics, use a simple sum/count approach
+        // This may not be accurate for all metric types
+        const metricSql = getMetricSql(metric, ctx);
+        innerSelectParts.push(`${metricSql} as _${m}`);
+        outerSelectParts.push(`sum(_${m}) as ${m}`);
+      }
+    }
+  }
+
+  // Remove duplicates from inner select
+  const uniqueInnerParts = [...new Set(innerSelectParts)];
+
+  const sql = `
+SELECT
+  ${outerSelectParts.join(',\n  ')}
+FROM (
+  SELECT
+    ${uniqueInnerParts.join(',\n    ')}
+  ${fromClause}
+  WHERE ${whereConditions.join('\n    AND ')}
+  GROUP BY ${innerGroupByCols.join(', ')}
+  ${havingClause}
+) filtered
+  `.trim();
+
+  const params: Record<string, unknown> = {
+    date_start: query.dateRange.start,
+    date_end: query.dateRange.end,
+    ...filterParams,
+    ...metricFilterParams,
+  };
+
+  return { sql, params };
+}
+
 export function buildAnalyticsQuery(
   query: AnalyticsQueryDto,
   timezone?: string,
@@ -52,6 +214,21 @@ export function buildAnalyticsQuery(
   // Get table configuration (default to sessions for backward compatibility)
   const table: AnalyticsTable = query.table || 'sessions';
   const tableConfig = TABLE_CONFIGS[table];
+
+  // Check if this is a "filtered totals" query
+  // totalsGroupBy is used when we want totals that respect metricFilters
+  const hasTotalsGroupBy =
+    query.totalsGroupBy &&
+    query.totalsGroupBy.length > 0 &&
+    (!query.dimensions || query.dimensions.length === 0);
+
+  if (
+    hasTotalsGroupBy &&
+    query.metricFilters &&
+    query.metricFilters.length > 0
+  ) {
+    return buildFilteredTotalsQuery(query, timezone, metricContext);
+  }
 
   // Validate and build metrics SQL
   // Default context for metrics that require it (e.g., bounce_rate)
@@ -104,10 +281,21 @@ export function buildAnalyticsQuery(
   const groupByClause =
     groupByCols.length > 0 ? `GROUP BY ${groupByCols.join(', ')}` : '';
 
+  // Build metric filters for HAVING clause
+  const { sql: metricFilterSql, params: metricFilterParams } =
+    buildMetricFilters(query.metricFilters || [], table, ctx, 'mf');
+
   // Build HAVING clause (only if GROUP BY exists)
+  const havingConditions: string[] = [];
+  if (query.havingMinSessions && groupByCols.length > 0) {
+    havingConditions.push(`count() >= ${query.havingMinSessions}`);
+  }
+  if (metricFilterSql && groupByCols.length > 0) {
+    havingConditions.push(metricFilterSql);
+  }
   const havingClause =
-    query.havingMinSessions && groupByCols.length > 0
-      ? `HAVING count() >= ${query.havingMinSessions}`
+    havingConditions.length > 0
+      ? `HAVING ${havingConditions.join(' AND ')}`
       : '';
 
   // Build ORDER BY
@@ -175,6 +363,7 @@ ${limitClause}
     date_start: query.dateRange.start,
     date_end: query.dateRange.end,
     ...filterParams,
+    ...metricFilterParams,
   };
 
   return { sql, params };
@@ -217,6 +406,10 @@ export function buildExtremesQuery(
     table,
   );
 
+  // Build metric filters for HAVING clause
+  const { sql: metricFilterSql, params: metricFilterParams } =
+    buildMetricFilters(query.metricFilters || [], table, ctx, 'mf');
+
   // WHERE conditions
   // Explicitly use UTC to ensure correct filtering regardless of ClickHouse server timezone
   const dateCol = tableConfig.dateColumn;
@@ -228,10 +421,18 @@ export function buildExtremesQuery(
     whereConditions.push(filterSql);
   }
 
-  // HAVING clause (for minimum sessions filter)
-  const havingClause = query.havingMinSessions
-    ? `HAVING count() >= ${query.havingMinSessions}`
-    : '';
+  // HAVING clause (for minimum sessions filter and metric filters)
+  const havingConditions: string[] = [];
+  if (query.havingMinSessions) {
+    havingConditions.push(`count() >= ${query.havingMinSessions}`);
+  }
+  if (metricFilterSql) {
+    havingConditions.push(metricFilterSql);
+  }
+  const havingClause =
+    havingConditions.length > 0
+      ? `HAVING ${havingConditions.join(' AND ')}`
+      : '';
 
   // Build dimension select list for returning winning values
   const dimensionSelectList = groupByCols.join(', ');
@@ -269,6 +470,7 @@ LIMIT 1`.trim();
     date_start: query.dateRange.start,
     date_end: query.dateRange.end,
     ...filterParams,
+    ...metricFilterParams,
   };
 
   return { sql, params };

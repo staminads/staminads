@@ -52,6 +52,15 @@ export interface Filter {
   values?: (string | number | null)[]
 }
 
+export const METRIC_FILTER_OPERATORS = ['gt', 'gte', 'lt', 'lte', 'between'] as const
+export type MetricFilterOperator = (typeof METRIC_FILTER_OPERATORS)[number]
+
+export interface MetricFilter {
+  metric: string
+  operator: MetricFilterOperator
+  values: (number | null)[]
+}
+
 export interface DateRange {
   start?: string
   end?: string
@@ -67,12 +76,15 @@ export interface AnalyticsQuery {
   metrics: string[]
   dimensions?: string[]
   filters?: Filter[]
+  metricFilters?: MetricFilter[]
   dateRange: DateRange
   compareDateRange?: DateRange
   timezone?: string
   order?: Record<string, 'asc' | 'desc'>
   limit?: number
   havingMinSessions?: number
+  /** When set with metricFilters, enables filtered totals via subquery */
+  totalsGroupBy?: string[]
 }
 
 export interface AnalyticsResponse {
@@ -108,6 +120,7 @@ export interface ExtremesQuery {
   groupBy: string[]
   dateRange: DateRange
   filters?: Filter[]
+  metricFilters?: MetricFilter[]
   timezone?: string
   havingMinSessions?: number
 }

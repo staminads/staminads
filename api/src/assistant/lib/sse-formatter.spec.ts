@@ -61,12 +61,13 @@ describe('sse-formatter', () => {
   });
 
   describe('toolCallEvent', () => {
-    it('creates tool_call event with name and input', () => {
+    it('creates tool_call event with id, name and input', () => {
       const input = { dimension: 'country', limit: 10 };
-      const event = toolCallEvent('get_dimension_values', input);
+      const event = toolCallEvent('tool_123', 'get_dimension_values', input);
 
       expect(event.type).toBe('tool_call');
       expect(event.data).toEqual({
+        id: 'tool_123',
         name: 'get_dimension_values',
         input,
       });
@@ -74,12 +75,13 @@ describe('sse-formatter', () => {
   });
 
   describe('toolResultEvent', () => {
-    it('creates tool_result event with name and result', () => {
+    it('creates tool_result event with id, name and result', () => {
       const result = { values: ['US', 'UK', 'CA'] };
-      const event = toolResultEvent('get_dimension_values', result);
+      const event = toolResultEvent('tool_123', 'get_dimension_values', result);
 
       expect(event.type).toBe('tool_result');
       expect(event.data).toEqual({
+        id: 'tool_123',
         name: 'get_dimension_values',
         result,
       });

@@ -1,11 +1,14 @@
 import { useRef, useEffect, useState, useMemo } from 'react'
-import { Card, Button, Tag, Drawer, Spin, Typography, Space, Empty, Tooltip } from 'antd'
+import { useNavigate } from '@tanstack/react-router'
+import { Card, Button, Tag, Drawer, Spin, Typography, Space, Empty, Tooltip, Popover } from 'antd'
 import {
   CheckOutlined,
   PlusOutlined,
   HistoryOutlined,
   ArrowLeftOutlined,
   DeleteOutlined,
+  CheckCircleOutlined,
+  LoadingOutlined,
 } from '@ant-design/icons'
 import { Bubble, Sender } from '@ant-design/x'
 import { XMarkdown } from '@ant-design/x-markdown'
@@ -14,7 +17,7 @@ import type { SenderRef } from '@ant-design/x/es/sender/interface'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import { useAssistantContext } from '../../contexts/AssistantContext'
-import type { ExploreConfigOutput, AssistantConversation } from '../../types/assistant'
+import type { ExploreConfigOutput, AssistantConversation, TimelineBlock, ToolCallBlock } from '../../types/assistant'
 
 dayjs.extend(relativeTime)
 
@@ -79,6 +82,60 @@ function ConfigPreview({
           Dismiss
         </Button>
       </Space>
+    </div>
+  )
+}
+
+// Tool call block with Popover showing input/result
+function ToolCallBlockRenderer({ block }: { block: ToolCallBlock }) {
+  const statusIcon =
+    block.status === 'pending' ? (
+      <LoadingOutlined spin />
+    ) : (
+      <CheckCircleOutlined style={{ color: '#52c41a' }} />
+    )
+
+  const popoverContent = (
+    <div style={{ maxWidth: 400, maxHeight: 300, overflow: 'auto' }}>
+      <div className="mb-2">
+        <strong>Input:</strong>
+        <pre className="bg-gray-50 p-2 rounded text-xs mt-1 overflow-x-auto">
+          {JSON.stringify(block.input, null, 2)}
+        </pre>
+      </div>
+      {block.result !== undefined && (
+        <div>
+          <strong>Result:</strong>
+          <pre className="bg-gray-50 p-2 rounded text-xs mt-1 overflow-x-auto">
+            {JSON.stringify(block.result, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  )
+
+  return (
+    <Popover content={popoverContent} title={block.name} trigger="click" placement="left">
+      <Tag color="blue" className="cursor-pointer hover:opacity-80 transition-opacity" icon={statusIcon}>
+        {block.name}
+      </Tag>
+    </Popover>
+  )
+}
+
+// Interleaved timeline renderer
+function AssistantTimeline({ timeline }: { timeline: TimelineBlock[] }) {
+  return (
+    <div className="space-y-2">
+      {timeline.map((block) =>
+        block.type === 'thinking' ? (
+          <Typography key={block.id} className="text-sm text-gray-600">
+            <XMarkdown content={block.text} />
+          </Typography>
+        ) : (
+          <ToolCallBlockRenderer key={block.id} block={block} />
+        )
+      )}
     </div>
   )
 }
@@ -205,6 +262,7 @@ function HistoryView() {
 
 export function AssistantPanel() {
   const {
+    workspaceId,
     isOpen,
     setIsOpen,
     view,
@@ -217,13 +275,16 @@ export function AssistantPanel() {
     sendPrompt,
     clearMessages,
     newConversation,
-    onApplyExploreConfig,
+    dismissedConfigIds,
+    dismissConfig,
   } = useAssistantContext()
+
+  const navigate = useNavigate()
 
   const inputRef = useRef<SenderRef>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const isMobile = useIsMobile()
-  const [dismissedConfigs, setDismissedConfigs] = useState<Set<string>>(new Set())
+  const dismissedConfigs = useMemo(() => new Set(dismissedConfigIds), [dismissedConfigIds])
   const [inputValue, setInputValue] = useState('')
 
   // Focus input on mount
@@ -255,22 +316,47 @@ export function AssistantPanel() {
     }
   }
 
-  const handleApplyConfig = (msgId: string, config: ExploreConfigOutput) => {
-    onApplyExploreConfig?.(config)
-    setDismissedConfigs((prev) => new Set(prev).add(msgId))
+  const handleApplyConfig = (_msgId: string, config: ExploreConfigOutput) => {
     setIsOpen(false)
+
+    // Build search params for URL (same format as useExploreParams.setAll)
+    const search: Record<string, string | undefined> = {}
+    if (config.dimensions?.length) {
+      search.dimensions = config.dimensions.join(',')
+    }
+    if (config.filters?.length) {
+      search.filters = JSON.stringify(config.filters)
+    }
+    if (config.period) {
+      search.period = config.period
+    }
+    if (config.comparison) {
+      search.comparison = config.comparison
+    }
+    if (config.minSessions && config.minSessions > 1) {
+      search.minSessions = String(config.minSessions)
+    }
+    if (config.customStart && config.customEnd) {
+      search.period = 'custom'
+      search.customStart = config.customStart
+      search.customEnd = config.customEnd
+    }
+
+    navigate({
+      to: '/workspaces/$workspaceId/explore',
+      params: { workspaceId },
+      search,
+    })
   }
 
   const handleDismissConfig = (msgId: string) => {
-    setDismissedConfigs((prev) => new Set(prev).add(msgId))
+    dismissConfig(msgId)
   }
 
   const handleNewConversation = () => {
     newConversation()
     setView('chat')
   }
-
-  if (!isOpen) return null
 
   // Header content based on view
   const title =
@@ -351,16 +437,24 @@ export function AssistantPanel() {
                       <div className="text-sm">{msg.content}</div>
                     ) : (
                       <>
-                        {msg.thinking && (
-                          <Typography className="text-sm text-gray-600">
-                            <XMarkdown content={msg.thinking} />
-                          </Typography>
+                        {/* Timeline-based rendering for new messages */}
+                        {msg.timeline && msg.timeline.length > 0 ? (
+                          <AssistantTimeline timeline={msg.timeline} />
+                        ) : (
+                          /* Legacy rendering for old stored conversations */
+                          <>
+                            {msg.thinking && (
+                              <Typography className="text-sm text-gray-600">
+                                <XMarkdown content={msg.thinking} />
+                              </Typography>
+                            )}
+                            {msg.toolCalls?.map((tc, i) => (
+                              <Tag key={i} color="blue" className="mt-1 mr-1">
+                                {tc.name}
+                              </Tag>
+                            ))}
+                          </>
                         )}
-                        {msg.toolCalls?.map((tc, i) => (
-                          <Tag key={i} color="blue" className="mt-1 mr-1">
-                            {tc.name}
-                          </Tag>
-                        ))}
                         {msg.config && !dismissedConfigs.has(msg.id) && (
                           <ConfigPreview
                             config={msg.config}
@@ -421,12 +515,13 @@ export function AssistantPanel() {
       <Drawer
         title={title}
         extra={extra}
-        open
+        open={isOpen}
         onClose={() => setIsOpen(false)}
         placement="bottom"
         height="80vh"
         zIndex={1100}
         styles={{ body: { padding: 0 } }}
+        destroyOnClose={false}
       >
         {content}
       </Drawer>
@@ -436,7 +531,18 @@ export function AssistantPanel() {
   return (
     <Card
       className="shadow-xl"
-      style={{ position: 'fixed', right: 24, bottom: 90, zIndex: 50, width: 576 }}
+      style={{
+        position: 'fixed',
+        right: 24,
+        bottom: 90,
+        zIndex: 50,
+        width: 576,
+        // Hide with visibility to keep component mounted and avoid ResizeObserver cleanup issues
+        visibility: isOpen ? 'visible' : 'hidden',
+        opacity: isOpen ? 1 : 0,
+        pointerEvents: isOpen ? 'auto' : 'none',
+        transition: 'opacity 0.2s, visibility 0.2s',
+      }}
       styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column', height: 720 } }}
       title={title}
       extra={extra}

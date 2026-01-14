@@ -145,7 +145,7 @@ describe('fillGaps', () => {
 
   it('preserves existing data with multiple metrics', () => {
     const data = [
-      { date_day: '2025-12-01', sessions: 100, avg_duration: 45.5 },
+      { date_day: '2025-12-01', sessions: 100, median_duration: 45.5 },
     ];
     const result = fillGaps(
       data,
@@ -153,14 +153,14 @@ describe('fillGaps', () => {
       'date_day',
       '2025-12-01',
       '2025-12-02',
-      ['sessions', 'avg_duration'],
+      ['sessions', 'median_duration'],
     );
 
     expect(result).toHaveLength(2);
     expect(result[0].sessions).toBe(100);
-    expect(result[0].avg_duration).toBe(45.5);
+    expect(result[0].median_duration).toBe(45.5);
     expect(result[1].sessions).toBe(0);
-    expect(result[1].avg_duration).toBe(0);
+    expect(result[1].median_duration).toBe(0);
   });
 
   it('handles empty data', () => {

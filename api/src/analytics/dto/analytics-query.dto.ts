@@ -49,6 +49,28 @@ export class FilterDto {
   values?: (string | number | null)[];
 }
 
+// Metric filters are applied in HAVING clause (post-aggregation)
+export const METRIC_FILTER_OPERATORS = [
+  'gt',
+  'gte',
+  'lt',
+  'lte',
+  'between',
+] as const;
+
+export type MetricFilterOperator = (typeof METRIC_FILTER_OPERATORS)[number];
+
+export class MetricFilterDto {
+  @IsString()
+  metric: string;
+
+  @IsIn(METRIC_FILTER_OPERATORS)
+  operator: MetricFilterOperator;
+
+  @IsArray()
+  values: (number | null)[];
+}
+
 export const GRANULARITIES = ['hour', 'day', 'week', 'month', 'year'] as const;
 export type Granularity = (typeof GRANULARITIES)[number];
 
@@ -143,6 +165,12 @@ export class AnalyticsQueryDto {
   @Type(() => FilterDto)
   filters?: FilterDto[];
 
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => MetricFilterDto)
+  metricFilters?: MetricFilterDto[];
+
   @Validate(DateRangeValidator)
   @ValidateNested()
   @Type(() => DateRangeDto)
@@ -175,4 +203,19 @@ export class AnalyticsQueryDto {
   @IsOptional()
   @IsIn(ANALYTICS_TABLES)
   table?: AnalyticsTable;
+
+  /**
+   * When set, enables "filtered totals" mode for queries with no dimensions.
+   * The query will:
+   * 1. Group by these dimensions in an inner subquery
+   * 2. Apply metricFilters via HAVING clause
+   * 3. Aggregate the filtered results in an outer query
+   *
+   * Use this for totals that should respect metricFilters.
+   * Example: Get total sessions where bounce_rate > 50%, grouped by landing_path.
+   */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  totalsGroupBy?: string[];
 }

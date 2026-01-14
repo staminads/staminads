@@ -97,6 +97,7 @@ export interface WorkspaceSearch {
   // Explore-specific params
   dimensions?: string // Comma-separated dimension list
   filters?: string // JSON-encoded Filter[]
+  metricFilters?: string // JSON-encoded MetricFilter[]
   minSessions?: string // Stored as string in URL, parsed to number
 }
 

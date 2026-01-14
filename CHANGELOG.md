@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.1.0] - 2026-01-14
+
+- AI assistant is now available in all pages of the workspace (not just Explore)
+
+## [5.0.0] - 2026-01-13
+
+- Email reports (daily/weekly/monthly)
+
 ## [4.3.0] - 2026-01-12
 
 - Fix TimeScore/duration displaying in hours instead of seconds (1000x scaling error)
@@ -33,6 +41,7 @@ All notable changes to this project will be documented in this file.
 ### Migration
 
 When upgrading from V3 to V4:
+
 1. All workspace databases will be dropped
 2. All system database tables will be cleared (except migration settings)
 3. Fresh tables will be created on startup

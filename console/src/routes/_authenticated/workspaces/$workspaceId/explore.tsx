@@ -42,6 +42,7 @@ function Explore() {
   const {
     dimensions,
     filters,
+    metricFilters,
     minSessions,
     period,
     timezone,
@@ -50,6 +51,7 @@ function Explore() {
     customEnd,
     setDimensions,
     setFilters,
+    setMetricFilters,
     setMinSessions,
     setPeriod,
     setComparison,
@@ -123,6 +125,7 @@ function Explore() {
     setAll({
       dimensions: config.dimensions,
       filters: config.filters,
+      metricFilters: config.metricFilters,
       period: config.period,
       comparison: config.comparison,
       minSessions: minSessionsValue,
@@ -135,8 +138,9 @@ function Explore() {
   }, [setAll, setAssistantOpen])
 
   // Register config handler with assistant context
+  // Note: wrap in () => to avoid React calling it as a functional state update
   useEffect(() => {
-    setOnApplyExploreConfig(handleAssistantConfig)
+    setOnApplyExploreConfig(() => handleAssistantConfig)
     return () => setOnApplyExploreConfig(null)
   }, [setOnApplyExploreConfig, handleAssistantConfig])
 
@@ -164,6 +168,7 @@ function Explore() {
     metrics: ['sessions', 'median_duration', 'bounce_rate', 'median_scroll'],
     dimensions: [dimensions[0]],
     filters,
+    metricFilters: metricFilters.length > 0 ? metricFilters : undefined,
     dateRange,
     ...(showComparison && { compareDateRange: dateRange }),
     timezone,
@@ -186,13 +191,14 @@ function Explore() {
   // Query for extremes (min/max median_duration) for heat map coloring
   // Groups by ALL dimensions to find true global max across all dimension combinations
   const { data: extremesData } = useQuery({
-    queryKey: ['explore', 'extremes', workspaceId, dimensions, dateRange, filters, minSessions, timezone],
+    queryKey: ['explore', 'extremes', workspaceId, dimensions, dateRange, filters, metricFilters, minSessions, timezone],
     queryFn: () => api.analytics.extremes({
       workspace_id: workspaceId,
       metric: 'median_duration',
       groupBy: dimensions,
       dateRange,
       filters,
+      metricFilters: metricFilters.length > 0 ? metricFilters : undefined,
       timezone,
       havingMinSessions: minSessions,
     }),
@@ -202,17 +208,22 @@ function Explore() {
 
   // Query for overall totals (no dimensions = single aggregate row)
   // Used for percentages and summary header
+  // When metricFilters are present, use totalsGroupBy to get filtered totals
   const { data: totalsResponse } = useQuery({
-    queryKey: ['explore', 'totals', workspaceId, dateRange, filters, timezone, showComparison],
+    queryKey: ['explore', 'totals', workspaceId, dimensions, dateRange, filters, metricFilters, timezone, showComparison],
     queryFn: () => api.analytics.query({
       workspace_id: workspaceId,
       metrics: ['sessions', 'median_duration', 'bounce_rate', 'median_scroll'],
       dimensions: [], // Empty = no grouping = totals
       filters,
+      // When metricFilters exist, use totalsGroupBy to enable filtered totals
+      ...(metricFilters.length > 0 && {
+        metricFilters,
+        totalsGroupBy: dimensions, // Group by same dimensions for HAVING to work
+      }),
       dateRange,
       ...(showComparison && { compareDateRange: dateRange }),
       timezone,
-      // Note: no havingMinSessions - we want true totals
     }),
     enabled: dimensions.length > 0,
     staleTime: 60_000, // Longer stale time since totals change less frequently
@@ -341,6 +352,7 @@ function Explore() {
           metrics: ['sessions', 'median_duration', 'bounce_rate', 'median_scroll'],
           dimensions: dimensionsToFetch,
           filters: childFilters,
+          metricFilters: metricFilters.length > 0 ? metricFilters : undefined,
           dateRange,
           ...(showComparison && { compareDateRange: dateRange }),
           timezone,
@@ -404,7 +416,7 @@ function Explore() {
         })
       }
     },
-    [dimensions, filters, workspaceId, dateRange, showComparison, timezone, minSessions, queryClient, maxMedianDuration],
+    [dimensions, filters, metricFilters, workspaceId, dateRange, showComparison, timezone, minSessions, queryClient, maxMedianDuration],
   )
 
   // Handle row expansion
@@ -490,6 +502,8 @@ function Explore() {
         onDimensionsChange={setDimensions}
         filters={filters}
         onFiltersChange={setFilters}
+        metricFilters={metricFilters}
+        onMetricFiltersChange={setMetricFilters}
         minSessions={minSessions}
         onMinSessionsChange={setMinSessions}
         customDimensionLabels={workspace.settings.custom_dimensions}

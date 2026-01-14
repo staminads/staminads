@@ -282,13 +282,13 @@ describe('Analytics E2E', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           workspace_id: workspaceId,
-          metrics: ['sessions', 'avg_duration'],
+          metrics: ['sessions', 'median_duration'],
           dateRange: { start: '2025-12-01', end: '2025-12-31' },
         })
         .expect(200);
 
       expect(response.body.data[0]).toHaveProperty('sessions');
-      expect(response.body.data[0]).toHaveProperty('avg_duration');
+      expect(response.body.data[0]).toHaveProperty('median_duration');
       expect(Number(response.body.data[0].sessions)).toBe(30);
     });
 
@@ -619,7 +619,9 @@ describe('Analytics E2E', () => {
         response.body.find((m: { name: string }) => m.name === 'sessions'),
       ).toBeDefined();
       expect(
-        response.body.find((m: { name: string }) => m.name === 'avg_duration'),
+        response.body.find(
+          (m: { name: string }) => m.name === 'median_duration',
+        ),
       ).toBeDefined();
       expect(
         response.body.find((m: { name: string }) => m.name === 'bounce_rate'),
@@ -803,6 +805,358 @@ describe('Analytics E2E', () => {
     });
   });
 
+  describe('Metric Filters (HAVING clause)', () => {
+    it('filters grouped results by bounce_rate > threshold', async () => {
+      // First, get all results without metricFilters to understand the data
+      const allResponse = await request(ctx.app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions', 'bounce_rate'],
+          dimensions: ['utm_source'],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      // With our test data (duration = 30 + i*5, bounce_threshold = 10s = 10000ms)
+      // Sessions with duration < 10000ms are bounces
+      // All sessions have duration >= 30ms (way below 10s), so ALL sessions are bounces
+      // bounce_rate should be 100% for both utm_sources
+      expect(allResponse.body.data.length).toBe(2); // google and facebook
+
+      // Now filter by bounce_rate > 50 (should return all since bounce_rate is 100%)
+      const filteredResponse = await request(ctx.app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions', 'bounce_rate'],
+          dimensions: ['utm_source'],
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          ],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      // Since all bounce_rates are 100%, all rows should pass the filter
+      expect(filteredResponse.body.data.length).toBe(2);
+
+      // Verify HAVING clause is in SQL
+      expect(filteredResponse.body.query.sql).toContain('HAVING');
+    });
+
+    it('filters grouped results by bounce_rate < threshold (excludes high bounce)', async () => {
+      // Filter by bounce_rate < 50 (should exclude all since bounce_rate is 100%)
+      const response = await request(ctx.app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions', 'bounce_rate'],
+          dimensions: ['utm_source'],
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'lt', values: [50] },
+          ],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      // No rows should pass since all have bounce_rate = 100%
+      expect(response.body.data.length).toBe(0);
+    });
+
+    it('combines metricFilters with dimension filters', async () => {
+      const response = await request(ctx.app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions', 'bounce_rate'],
+          dimensions: ['utm_source'],
+          filters: [
+            { dimension: 'device', operator: 'equals', values: ['mobile'] },
+          ],
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          ],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      // Test data: odd sessions have device='mobile' AND utm_source='facebook'
+      // So filtering by mobile gives only facebook sessions (15 total)
+      // bounce_rate is 100% so it passes the metricFilter
+      expect(response.body.data.length).toBe(1);
+      expect(response.body.data[0].utm_source).toBe('facebook');
+      expect(Number(response.body.data[0].sessions)).toBe(15);
+
+      // Verify SQL has both WHERE and HAVING
+      expect(response.body.query.sql).toContain('device = {f0:String}');
+      expect(response.body.query.sql).toContain('HAVING');
+    });
+
+    it('combines metricFilters with havingMinSessions', async () => {
+      const response = await request(ctx.app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions', 'bounce_rate'],
+          dimensions: ['utm_source'],
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          ],
+          havingMinSessions: 10,
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      // Both utm_sources have 15 sessions each, so both pass havingMinSessions
+      // Both have 100% bounce_rate, so both pass metricFilter
+      expect(response.body.data.length).toBe(2);
+
+      // Verify HAVING clause has both conditions
+      expect(response.body.query.sql).toContain('HAVING');
+      expect(response.body.query.sql).toContain('count() >= 10');
+    });
+
+    it('filters by median_duration metric', async () => {
+      const response = await request(ctx.app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions', 'median_duration'],
+          dimensions: ['device'],
+          metricFilters: [
+            { metric: 'median_duration', operator: 'gte', values: [0.05] }, // 50ms = 0.05s
+          ],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      // Sessions have duration 30 + i*5 ms, so median should be > 50ms for both devices
+      expect(response.body.data.length).toBe(2);
+    });
+
+    it('returns empty when no rows pass metricFilter', async () => {
+      const response = await request(ctx.app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions', 'median_duration'],
+          dimensions: ['device'],
+          metricFilters: [
+            { metric: 'median_duration', operator: 'gt', values: [1000] }, // 1000s - way too high
+          ],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      // No device should have median_duration > 1000s
+      expect(response.body.data.length).toBe(0);
+    });
+
+    it('ignores metricFilters when no dimensions and no totalsGroupBy', async () => {
+      // Without totalsGroupBy, metricFilters are ignored for totals queries
+      const response = await request(ctx.app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions', 'bounce_rate'],
+          dimensions: [], // No dimensions = totals
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'lt', values: [50] }, // Would exclude if applied
+          ],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      // Since dimensions is empty and no totalsGroupBy, metricFilters are ignored
+      expect(response.body.data.length).toBe(1);
+      expect(Number(response.body.data[0].sessions)).toBe(30);
+      expect(response.body.query.sql).not.toContain('HAVING');
+    });
+
+    it('applies metricFilters to totals using totalsGroupBy (filtered totals)', async () => {
+      // First, get grouped data with metricFilter to see what passes
+      const groupedResponse = await request(ctx.app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions', 'bounce_rate'],
+          dimensions: ['utm_source'],
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          ],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      // All utm_sources have 100% bounce_rate, so both should pass
+      expect(groupedResponse.body.data.length).toBe(2);
+      const totalFromGrouped = groupedResponse.body.data.reduce(
+        (sum: number, row: { sessions: string }) => sum + Number(row.sessions),
+        0,
+      );
+      expect(totalFromGrouped).toBe(30); // 15 google + 15 facebook
+
+      // Now get filtered totals using totalsGroupBy
+      const totalsResponse = await request(ctx.app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions', 'bounce_rate'],
+          dimensions: [], // Empty = totals
+          totalsGroupBy: ['utm_source'], // Group by this for filtering
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          ],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      // Totals should be the sum of filtered groups
+      expect(totalsResponse.body.data.length).toBe(1);
+      expect(Number(totalsResponse.body.data[0].sessions)).toBe(30);
+      expect(Number(totalsResponse.body.data[0].bounce_rate)).toBe(100);
+
+      // SQL should use subquery pattern
+      expect(totalsResponse.body.query.sql).toContain('FROM (');
+      expect(totalsResponse.body.query.sql).toContain('HAVING');
+    });
+
+    it('returns filtered totals that exclude groups not passing metricFilter', async () => {
+      // Use a filter that excludes all rows (bounce_rate < 50, but all are 100%)
+      const response = await request(ctx.app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions', 'bounce_rate'],
+          dimensions: [],
+          totalsGroupBy: ['utm_source'],
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'lt', values: [50] },
+          ],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      // No groups pass the filter, so totals should be 0
+      expect(response.body.data.length).toBe(1);
+      expect(Number(response.body.data[0].sessions)).toBe(0);
+
+      // SQL should use subquery pattern with HAVING
+      expect(response.body.query.sql).toContain('FROM (');
+      expect(response.body.query.sql).toContain('HAVING');
+    });
+
+    it('filtered totals respects dimension filters too', async () => {
+      // Filter by device=mobile (15 sessions, all facebook) AND bounce_rate > 50
+      const response = await request(ctx.app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions', 'bounce_rate'],
+          dimensions: [],
+          totalsGroupBy: ['utm_source'],
+          filters: [
+            { dimension: 'device', operator: 'equals', values: ['mobile'] },
+          ],
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          ],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      // Mobile sessions are all facebook (15), all have 100% bounce_rate
+      expect(response.body.data.length).toBe(1);
+      expect(Number(response.body.data[0].sessions)).toBe(15);
+    });
+
+    it('applies metricFilters to extremes query', async () => {
+      const response = await request(ctx.app.getHttpServer())
+        .post('/api/analytics.extremes')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metric: 'median_duration',
+          groupBy: ['utm_source'],
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          ],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(200);
+
+      // Both utm_sources have bounce_rate = 100%, so both pass filter
+      expect(response.body).toHaveProperty('min');
+      expect(response.body).toHaveProperty('max');
+    });
+
+    it('validates unknown metric in metricFilters', async () => {
+      await request(ctx.app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          workspace_id: workspaceId,
+          metrics: ['sessions'],
+          dimensions: ['device'],
+          metricFilters: [
+            { metric: 'unknown_metric', operator: 'gt', values: [50] },
+          ],
+          dateRange: { start: '2025-12-01', end: '2025-12-31' },
+        })
+        .expect(400);
+    });
+
+    it('caches queries with different metricFilters separately', async () => {
+      const baseQuery = {
+        workspace_id: workspaceId,
+        metrics: ['sessions', 'bounce_rate'],
+        dimensions: ['utm_source'],
+        dateRange: { start: '2025-12-01', end: '2025-12-31' },
+      };
+
+      // Query with bounce_rate > 50
+      const response1 = await request(ctx.app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          ...baseQuery,
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          ],
+        })
+        .expect(200);
+
+      // Query with bounce_rate < 50 (different filter)
+      const response2 = await request(ctx.app.getHttpServer())
+        .post('/api/analytics.query')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          ...baseQuery,
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'lt', values: [50] },
+          ],
+        })
+        .expect(200);
+
+      // Results should be different (2 rows vs 0 rows)
+      expect(response1.body.data.length).toBe(2);
+      expect(response2.body.data.length).toBe(0);
+    });
+  });
+
   describe('Analytics Caching', () => {
     it('returns cached response for identical queries', async () => {
       const query = {
@@ -876,12 +1230,12 @@ describe('Analytics E2E', () => {
       const response2 = await request(ctx.app.getHttpServer())
         .post('/api/analytics.query')
         .set('Authorization', `Bearer ${authToken}`)
-        .send({ ...baseQuery, metrics: ['avg_duration'] })
+        .send({ ...baseQuery, metrics: ['median_duration'] })
         .expect(200);
 
       // Different metrics means different queries
       expect(response1.body.meta.metrics).toEqual(['sessions']);
-      expect(response2.body.meta.metrics).toEqual(['avg_duration']);
+      expect(response2.body.meta.metrics).toEqual(['median_duration']);
     });
 
     it('caches queries with different filters separately', async () => {
@@ -921,7 +1275,7 @@ describe('Analytics E2E', () => {
     it('handles concurrent identical requests efficiently', async () => {
       const query = {
         workspace_id: workspaceId,
-        metrics: ['sessions', 'avg_duration'],
+        metrics: ['sessions', 'median_duration'],
         dimensions: ['device'],
         dateRange: { start: '2025-12-01', end: '2025-12-15' },
       };
@@ -1266,7 +1620,7 @@ describe('Analytics E2E', () => {
 
         const metricNames = response.body.map((m: { name: string }) => m.name);
         expect(metricNames).toContain('sessions');
-        expect(metricNames).toContain('avg_duration');
+        expect(metricNames).toContain('median_duration');
         expect(metricNames).not.toContain('page_count');
         expect(metricNames).not.toContain('page_duration');
       });

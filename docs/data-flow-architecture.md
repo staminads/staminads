@@ -1175,7 +1175,6 @@ Metrics are scoped by table. The `sessions` table supports session-level metrics
 | Metric | SQL Expression | Table | Description |
 |--------|----------------|-------|-------------|
 | `sessions` | `count()` | sessions | Number of sessions |
-| `avg_duration` | `round(avg(duration), 1)` | sessions | Average session duration (seconds) |
 | `median_duration` | `round(median(duration), 1)` | sessions | Median session duration (seconds) |
 | `max_scroll` | `round(avg(max_scroll), 1)` | sessions | Average max scroll depth (%) |
 | `median_scroll` | `round(median(max_scroll), 1)` | sessions | Median max scroll depth (%) |
@@ -1212,7 +1211,7 @@ Dimensions are scoped by table. Each dimension specifies which tables it's avail
 
 ```typescript
 interface AnalyticsQuery {
-  metrics: string[];           // e.g., ['sessions', 'avg_duration']
+  metrics: string[];           // e.g., ['sessions', 'median_duration']
   dimensions?: string[];       // e.g., ['utm_source', 'device']
   filters?: QueryFilter[];     // WHERE conditions
   granularity?: Granularity;   // 'hour' | 'day' | 'week' | 'month' | 'year'
@@ -1232,7 +1231,7 @@ SELECT
   toDate(created_at, 'America/New_York') as date_day,
   utm_source,
   count() as sessions,
-  round(avg(duration), 1) as avg_duration
+  round(median(duration), 1) as median_duration
 FROM sessions
 WHERE created_at >= '2024-01-08 00:00:00.000'
   AND created_at < '2024-01-15 23:59:59.999'

@@ -1,4 +1,8 @@
-import { DatePreset, FilterDto } from '../../analytics/dto/analytics-query.dto';
+import {
+  DatePreset,
+  FilterDto,
+  MetricFilterDto,
+} from '../../analytics/dto/analytics-query.dto';
 
 /**
  * Explore page configuration output from AI assistant.
@@ -7,6 +11,7 @@ import { DatePreset, FilterDto } from '../../analytics/dto/analytics-query.dto';
 export interface ExploreConfigOutput {
   dimensions?: string[];
   filters?: FilterDto[];
+  metricFilters?: MetricFilterDto[];
   period?: DatePreset;
   comparison?: 'previous_period' | 'previous_year' | 'none';
   minSessions?: number;

@@ -110,11 +110,31 @@ describe('buildSystemPrompt', () => {
 
     const prompt = buildSystemPrompt(workspace);
 
-    expect(prompt).toContain('get_dimensions');
-    expect(prompt).toContain('get_metrics');
     expect(prompt).toContain('get_dimension_values');
     expect(prompt).toContain('preview_query');
     expect(prompt).toContain('configure_explore');
+  });
+
+  it('includes hardcoded dimensions reference', () => {
+    const workspace = createWorkspace();
+
+    const prompt = buildSystemPrompt(workspace);
+
+    expect(prompt).toContain('Available Dimensions');
+    expect(prompt).toContain('| utm_source | string | UTM |');
+    expect(prompt).toContain('| device | string | Device |');
+    expect(prompt).toContain('| country | string | Geo |');
+  });
+
+  it('includes hardcoded metrics reference', () => {
+    const workspace = createWorkspace();
+
+    const prompt = buildSystemPrompt(workspace);
+
+    expect(prompt).toContain('Available Metrics');
+    expect(prompt).toContain('| sessions | Total sessions |');
+    expect(prompt).toContain('| bounce_rate |');
+    expect(prompt).toContain('| median_duration |');
   });
 
   it('includes guidelines section', () => {

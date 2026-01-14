@@ -25,47 +25,6 @@ describe('ToolExecutor', () => {
     });
   });
 
-  describe('get_dimensions', () => {
-    it('returns list of dimensions with name, type, and category', async () => {
-      const result = (await executor.execute('get_dimensions', {})) as Array<{
-        name: string;
-        type: string;
-        category: string;
-      }>;
-
-      expect(Array.isArray(result)).toBe(true);
-      expect(result.length).toBeGreaterThan(0);
-
-      const dimension = result[0];
-      expect(dimension).toHaveProperty('name');
-      expect(dimension).toHaveProperty('type');
-      expect(dimension).toHaveProperty('category');
-    });
-
-    it('returns cached result on subsequent calls', async () => {
-      const result1 = await executor.execute('get_dimensions', {});
-      const result2 = await executor.execute('get_dimensions', {});
-
-      expect(result1).toBe(result2); // Same reference (cached)
-    });
-  });
-
-  describe('get_metrics', () => {
-    it('returns list of metrics with name and description', async () => {
-      const result = (await executor.execute('get_metrics', {})) as Array<{
-        name: string;
-        description: string;
-      }>;
-
-      expect(Array.isArray(result)).toBe(true);
-      expect(result.length).toBeGreaterThan(0);
-
-      const metric = result[0];
-      expect(metric).toHaveProperty('name');
-      expect(metric).toHaveProperty('description');
-    });
-  });
-
   describe('get_dimension_values', () => {
     it('throws BadRequestException for unknown dimension', async () => {
       await expect(
@@ -323,6 +282,93 @@ describe('ToolExecutor', () => {
         }),
       ).rejects.toThrow(/Query failed/);
     });
+
+    it('passes metricFilters to analytics query', async () => {
+      analyticsService.query.mockResolvedValue({
+        data: [{ device: 'mobile', sessions: 100, bounce_rate: 60 }],
+        meta: {
+          total_rows: 1,
+          metrics: ['sessions', 'bounce_rate'],
+          dimensions: ['device'],
+          dateRange: { start: '2025-01-01', end: '2025-01-07' },
+        },
+        query: { sql: 'SELECT ...', params: {} },
+      });
+
+      const result = (await executor.execute('preview_query', {
+        dimensions: ['device'],
+        period: 'previous_7_days',
+        metricFilters: [
+          { metric: 'bounce_rate', operator: 'gt', values: [50] },
+        ],
+      })) as {
+        row_count: number;
+        metric_filters_applied: number;
+      };
+
+      expect(analyticsService.query).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metricFilters: [
+            { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          ],
+        }),
+      );
+      expect(result.metric_filters_applied).toBe(1);
+    });
+
+    it('returns metric_filters_applied count of 0 when no metricFilters', async () => {
+      analyticsService.query.mockResolvedValue({
+        data: [{ device: 'mobile', sessions: 100 }],
+        meta: {
+          total_rows: 1,
+          metrics: ['sessions'],
+          dimensions: ['device'],
+          dateRange: { start: '2025-01-01', end: '2025-01-07' },
+        },
+        query: { sql: 'SELECT ...', params: {} },
+      });
+
+      const result = (await executor.execute('preview_query', {
+        dimensions: ['device'],
+        period: 'previous_7_days',
+      })) as { metric_filters_applied: number };
+
+      expect(result.metric_filters_applied).toBe(0);
+    });
+
+    it('queries all filterable metrics for preview', async () => {
+      analyticsService.query.mockResolvedValue({
+        data: [],
+        meta: {
+          total_rows: 0,
+          metrics: [
+            'sessions',
+            'bounce_rate',
+            'median_duration',
+            'median_scroll',
+          ],
+          dimensions: ['device'],
+          dateRange: { start: '2025-01-01', end: '2025-01-07' },
+        },
+        query: { sql: 'SELECT ...', params: {} },
+      });
+
+      await executor.execute('preview_query', {
+        dimensions: ['device'],
+        period: 'previous_7_days',
+      });
+
+      expect(analyticsService.query).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metrics: [
+            'sessions',
+            'bounce_rate',
+            'median_duration',
+            'median_scroll',
+          ],
+        }),
+      );
+    });
   });
 
   describe('configure_explore', () => {
@@ -428,6 +474,68 @@ describe('ToolExecutor', () => {
 
       expect(result.config.customStart).toBe('2025-01-01');
       expect(result.config.customEnd).toBe('2025-01-31');
+    });
+
+    it('includes metricFilters in config', async () => {
+      const result = (await executor.execute('configure_explore', {
+        dimensions: ['device'],
+        metricFilters: [
+          { metric: 'bounce_rate', operator: 'gt', values: [50] },
+          { metric: 'median_duration', operator: 'gte', values: [60] },
+        ],
+      })) as {
+        config: {
+          metricFilters: Array<{
+            metric: string;
+            operator: string;
+            values: number[];
+          }>;
+        };
+      };
+
+      expect(result.config.metricFilters).toBeDefined();
+      expect(result.config.metricFilters).toHaveLength(2);
+      expect(result.config.metricFilters[0]).toEqual({
+        metric: 'bounce_rate',
+        operator: 'gt',
+        values: [50],
+      });
+      expect(result.config.metricFilters[1]).toEqual({
+        metric: 'median_duration',
+        operator: 'gte',
+        values: [60],
+      });
+    });
+
+    it('includes metricFilters with between operator', async () => {
+      const result = (await executor.execute('configure_explore', {
+        metricFilters: [
+          { metric: 'median_scroll', operator: 'between', values: [25, 75] },
+        ],
+      })) as {
+        config: {
+          metricFilters: Array<{
+            metric: string;
+            operator: string;
+            values: number[];
+          }>;
+        };
+      };
+
+      expect(result.config.metricFilters).toHaveLength(1);
+      expect(result.config.metricFilters[0]).toEqual({
+        metric: 'median_scroll',
+        operator: 'between',
+        values: [25, 75],
+      });
+    });
+
+    it('returns undefined metricFilters when not provided', async () => {
+      const result = (await executor.execute('configure_explore', {
+        dimensions: ['device'],
+      })) as { config: { metricFilters?: unknown } };
+
+      expect(result.config.metricFilters).toBeUndefined();
     });
   });
 });

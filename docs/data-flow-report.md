@@ -793,7 +793,6 @@ interface AnalyticsQueryDto {
 | Metric | SQL | Tables | Description |
 |--------|-----|--------|-------------|
 | `sessions` | `count()` | sessions | Total sessions |
-| `avg_duration` | `round(avg(duration), 1)` | sessions | Avg session duration (seconds) |
 | `median_duration` | `round(median(duration), 1)` | sessions | Median session duration |
 | `max_scroll` | `round(avg(max_scroll), 1)` | sessions | Avg max scroll depth (%) |
 | `median_scroll` | `round(median(max_scroll), 1)` | sessions | Median scroll depth |
@@ -869,7 +868,7 @@ For a query like:
 ```json
 {
   "workspace_id": "ws_123",
-  "metrics": ["sessions", "avg_duration"],
+  "metrics": ["sessions", "median_duration"],
   "dimensions": ["browser", "device"],
   "dateRange": { "start": "2025-01-01", "end": "2025-01-08", "granularity": "day" },
   "timezone": "America/New_York",
@@ -885,7 +884,7 @@ SELECT
   browser,
   device,
   count() as sessions,
-  round(avg(duration), 1) as avg_duration
+  round(median(duration), 1) as median_duration
 FROM sessions
 WHERE
   created_at >= toDateTime64('2025-01-01 00:00:00.000', 3)
@@ -1291,7 +1290,7 @@ updated_at='2025-01-01 00:00:20',
 ```json
 {
   "workspace_id": "ws_123",
-  "metrics": ["sessions", "avg_duration", "pageviews"],
+  "metrics": ["sessions", "median_duration", "pageviews"],
   "dimensions": ["device", "utm_source"],
   "dateRange": {
     "start": "2025-01-01",
@@ -1310,12 +1309,12 @@ Returns:
       "device": "desktop",
       "utm_source": "google",
       "sessions": 1,
-      "avg_duration": 17,
+      "median_duration": 17,
       "pageviews": 2
     }
   ],
   "meta": {
-    "metrics": ["sessions", "avg_duration", "pageviews"],
+    "metrics": ["sessions", "median_duration", "pageviews"],
     "dimensions": ["device", "utm_source"],
     "granularity": "day",
     "dateRange": { "start": "2025-01-01", "end": "2025-01-08" },

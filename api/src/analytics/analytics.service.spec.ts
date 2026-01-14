@@ -175,7 +175,7 @@ describe('AnalyticsService', () => {
 
       await service.query({
         ...baseQuery,
-        metrics: ['sessions', 'avg_duration'],
+        metrics: ['sessions', 'median_duration'],
       });
       const secondCacheKey = cacheManager.set.mock.calls[1][0];
 
@@ -253,7 +253,7 @@ describe('AnalyticsService', () => {
       await service.query(baseQuery);
       await service.query({
         ...baseQuery,
-        metrics: ['avg_duration'],
+        metrics: ['median_duration'],
       });
 
       // Trigger backfill completed event

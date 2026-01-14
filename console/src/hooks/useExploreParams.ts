@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import type { DatePreset, Filter } from '../types/analytics'
+import type { DatePreset, Filter, MetricFilter } from '../types/analytics'
 import type { ComparisonMode, WorkspaceSearch } from '../types/dashboard'
 
 const DEBOUNCE_MS = 200
@@ -23,6 +23,18 @@ export function useExploreParams(workspaceTimezone: string) {
     if (filtersStr) {
       try {
         return JSON.parse(filtersStr)
+      } catch {
+        return []
+      }
+    }
+    return []
+  }, [])
+
+  // Parse metric filters from URL
+  const parseMetricFilters = useCallback((metricFiltersStr?: string): MetricFilter[] => {
+    if (metricFiltersStr) {
+      try {
+        return JSON.parse(metricFiltersStr)
       } catch {
         return []
       }
@@ -58,6 +70,19 @@ export function useExploreParams(workspaceTimezone: string) {
         search: {
           ...search,
           filters: filters.length > 0 ? JSON.stringify(filters) : undefined,
+        } as never,
+        replace: true,
+      })
+    },
+    [navigate, search],
+  )
+
+  const setMetricFilters = useCallback(
+    (metricFilters: MetricFilter[]) => {
+      navigate({
+        search: {
+          ...search,
+          metricFilters: metricFilters.length > 0 ? JSON.stringify(metricFilters) : undefined,
         } as never,
         replace: true,
       })
@@ -123,6 +148,7 @@ export function useExploreParams(workspaceTimezone: string) {
     (updates: {
       dimensions?: string[]
       filters?: Filter[]
+      metricFilters?: MetricFilter[]
       period?: DatePreset
       comparison?: ComparisonMode
       minSessions?: number
@@ -137,6 +163,9 @@ export function useExploreParams(workspaceTimezone: string) {
 
       // Filters: use provided or clear
       newSearch.filters = updates.filters?.length ? JSON.stringify(updates.filters) : undefined
+
+      // Metric filters: use provided or clear
+      newSearch.metricFilters = updates.metricFilters?.length ? JSON.stringify(updates.metricFilters) : undefined
 
       // Period: use provided or keep default
       newSearch.period = updates.period || undefined
@@ -174,10 +203,16 @@ export function useExploreParams(workspaceTimezone: string) {
     [parseFilters, search.filters],
   )
 
+  const metricFilters = useMemo(
+    () => parseMetricFilters(search.metricFilters),
+    [parseMetricFilters, search.metricFilters],
+  )
+
   return {
     // Parsed values
     dimensions,
     filters,
+    metricFilters,
     minSessions: search.minSessions ? parseInt(search.minSessions, 10) : 10,
     period: (search.period ?? 'previous_7_days') as DatePreset,
     timezone: search.timezone ?? workspaceTimezone,
@@ -188,6 +223,7 @@ export function useExploreParams(workspaceTimezone: string) {
     // Setters
     setDimensions,
     setFilters,
+    setMetricFilters,
     setMinSessions,
     setPeriod,
     setTimezone,

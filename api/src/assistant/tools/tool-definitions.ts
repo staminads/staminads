@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import {
   DATE_PRESETS,
   FILTER_OPERATORS,
+  METRIC_FILTER_OPERATORS,
 } from '../../analytics/dto/analytics-query.dto';
 
 /**
@@ -40,7 +41,34 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
             },
             required: ['dimension', 'operator'],
           },
-          description: 'Filters to apply to the data',
+          description:
+            'Dimension filters (WHERE clause). Use for filtering by dimension values like channel, utm_source, device, country, landing_page. Do NOT use for metrics like bounce_rate, sessions, duration - use metricFilters instead.',
+        },
+        metricFilters: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              metric: {
+                type: 'string',
+                description:
+                  'Metric name (e.g., bounce_rate, sessions, median_duration, median_scroll)',
+              },
+              operator: {
+                type: 'string',
+                enum: [...METRIC_FILTER_OPERATORS],
+              },
+              values: {
+                type: 'array',
+                items: { type: 'number' },
+                description:
+                  'Numeric values for comparison. For "between" operator, provide [min, max].',
+              },
+            },
+            required: ['metric', 'operator', 'values'],
+          },
+          description:
+            'Metric filters (HAVING clause). Use for filtering by aggregated metric values like bounce_rate > 50, sessions >= 100, median_duration < 30. These are applied after grouping.',
         },
         period: {
           type: 'string',
@@ -67,24 +95,6 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
           description: 'Custom date range end (ISO format, e.g., 2024-01-31)',
         },
       },
-    },
-  },
-  {
-    name: 'get_dimensions',
-    description:
-      'Get all available dimensions with their descriptions and categories. Use this to understand what data can be analyzed and to find the correct dimension names.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {},
-    },
-  },
-  {
-    name: 'get_metrics',
-    description:
-      'Get all available metrics with their descriptions. Use this to understand what measurements are available.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {},
     },
   },
   {
@@ -143,7 +153,33 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
               values: { type: 'array' },
             },
           },
-          description: 'Optional filters to apply',
+          description: 'Optional dimension filters to apply',
+        },
+        metricFilters: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              metric: {
+                type: 'string',
+                description:
+                  'Metric name (bounce_rate, median_duration, median_scroll)',
+              },
+              operator: {
+                type: 'string',
+                enum: [...METRIC_FILTER_OPERATORS],
+              },
+              values: {
+                type: 'array',
+                items: { type: 'number' },
+                description:
+                  'Numeric values. bounce_rate: 0-100 (%), median_duration: seconds, median_scroll: 0-100 (%)',
+              },
+            },
+            required: ['metric', 'operator', 'values'],
+          },
+          description:
+            'Optional metric filters (HAVING clause). Filter by aggregated values like bounce_rate > 50.',
         },
         period: {
           type: 'string',
@@ -261,7 +297,5 @@ export const STRICT_ASSISTANT_TOOLS: Anthropic.Tool[] = ASSISTANT_TOOLS.map(
  */
 export type ToolName =
   | 'configure_explore'
-  | 'get_dimensions'
-  | 'get_metrics'
   | 'get_dimension_values'
   | 'preview_query';
