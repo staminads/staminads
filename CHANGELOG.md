@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [6.0.0] - 2026-01-25
+
+- Add `user_id` dimension to SDK and database tables (auto-upgrade)
+- Add `export.userEvents` API endpoint for exporting user-level event data
+
 ## [5.1.0] - 2026-01-14
 
 - AI assistant is now available in all pages of the workspace (not just Explore)
