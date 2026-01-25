@@ -950,8 +950,8 @@ describe('User ID Tracking & Export E2E', () => {
       // Should have 1 deduplicated event with latest values
       expect(events).toHaveLength(1);
       expect(events[0].user_id).toBe(userId);
-      expect(events[0].duration).toBe(15000);
-      expect(events[0].max_scroll).toBe(85);
+      expect(Number(events[0].duration)).toBe(15000);
+      expect(Number(events[0].max_scroll)).toBe(85);
 
       // Export should also return the deduplicated event
       const since = new Date(Date.now() - 60000).toISOString();
