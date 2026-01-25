@@ -102,6 +102,8 @@ describe('ExportService', () => {
 
       const dto: UserEventsQueryDto = {
         workspace_id: 'invalid-ws',
+        since: '2025-01-25T00:00:00Z',
+        until: '2025-01-26T00:00:00Z',
       };
 
       await expect(service.getUserEvents(dto)).rejects.toThrow();
@@ -112,6 +114,7 @@ describe('ExportService', () => {
       const dto: UserEventsQueryDto = {
         workspace_id: 'test-ws',
         since: '2025-01-25T00:00:00Z',
+        until: '2025-01-26T00:00:00Z',
       };
 
       await service.getUserEvents(dto);
@@ -127,6 +130,7 @@ describe('ExportService', () => {
       const dto: UserEventsQueryDto = {
         workspace_id: 'test-ws',
         since: '2025-01-25T00:00:00Z',
+        until: '2025-01-26T00:00:00Z',
       };
 
       await service.getUserEvents(dto);
@@ -142,6 +146,7 @@ describe('ExportService', () => {
       const dto: UserEventsQueryDto = {
         workspace_id: 'test-ws',
         since: '2025-01-25T00:00:00Z',
+        until: '2025-01-26T00:00:00Z',
       };
 
       await service.getUserEvents(dto);
@@ -167,6 +172,7 @@ describe('ExportService', () => {
       const dto: UserEventsQueryDto = {
         workspace_id: 'test-ws',
         cursor,
+        until: '2025-01-26T00:00:00Z',
       };
 
       await service.getUserEvents(dto);
@@ -185,6 +191,7 @@ describe('ExportService', () => {
       const dto: UserEventsQueryDto = {
         workspace_id: 'test-ws',
         since: '2025-01-25T00:00:00Z',
+        until: '2025-01-26T00:00:00Z',
         user_id: 'specific-user',
       };
 
@@ -214,6 +221,7 @@ describe('ExportService', () => {
       const dto: UserEventsQueryDto = {
         workspace_id: 'test-ws',
         since: '2025-01-25T00:00:00Z',
+        until: '2025-01-26T00:00:00Z',
         limit: 100,
       };
 
@@ -238,6 +246,7 @@ describe('ExportService', () => {
       const dto: UserEventsQueryDto = {
         workspace_id: 'test-ws',
         since: '2025-01-25T00:00:00Z',
+        until: '2025-01-26T00:00:00Z',
         limit: 100,
       };
 
@@ -262,6 +271,7 @@ describe('ExportService', () => {
       const dto: UserEventsQueryDto = {
         workspace_id: 'test-ws',
         since: '2025-01-25T00:00:00Z',
+        until: '2025-01-26T00:00:00Z',
         limit: 100,
       };
 
@@ -283,6 +293,7 @@ describe('ExportService', () => {
       const dto: UserEventsQueryDto = {
         workspace_id: 'test-ws',
         since: '2025-01-25T00:00:00Z',
+        until: '2025-01-26T00:00:00Z',
         limit: 100,
       };
 
@@ -296,6 +307,7 @@ describe('ExportService', () => {
       const dto: UserEventsQueryDto = {
         workspace_id: 'test-ws',
         since: '2025-01-25T00:00:00Z',
+        until: '2025-01-26T00:00:00Z',
       };
 
       await service.getUserEvents(dto);
@@ -317,6 +329,7 @@ describe('ExportService', () => {
       const dto: UserEventsQueryDto = {
         workspace_id: 'test-ws',
         since: '2025-01-25T00:00:00Z',
+        until: '2025-01-26T00:00:00Z',
       };
 
       const result = await service.getUserEvents(dto);
@@ -338,6 +351,7 @@ describe('ExportService', () => {
       const dto: UserEventsQueryDto = {
         workspace_id: 'test-ws',
         since: '2025-01-25T00:00:00Z',
+        until: '2025-01-26T00:00:00Z',
       };
 
       const result = await service.getUserEvents(dto);
@@ -375,6 +389,7 @@ describe('ExportService', () => {
       const dto: UserEventsQueryDto = {
         workspace_id: 'test-ws',
         since: '2025-01-25T00:00:00Z',
+        until: '2025-01-26T00:00:00Z',
       };
 
       await service.getUserEvents(dto);
@@ -392,6 +407,7 @@ describe('ExportService', () => {
       const dto: UserEventsQueryDto = {
         workspace_id: 'test-ws',
         since: '2025-01-25T00:00:00Z',
+        until: '2025-01-26T00:00:00Z',
       };
 
       const result = await service.getUserEvents(dto);
@@ -413,6 +429,7 @@ describe('ExportService', () => {
         workspace_id: 'test-ws',
         cursor,
         since: '2025-01-01T00:00:00Z', // Should be ignored
+        until: '2025-01-26T00:00:00Z',
       };
 
       await service.getUserEvents(dto);
@@ -430,6 +447,7 @@ describe('ExportService', () => {
       const dto: UserEventsQueryDto = {
         workspace_id: 'test-ws',
         cursor: 'invalid-cursor',
+        until: '2025-01-26T00:00:00Z',
       };
 
       await expect(service.getUserEvents(dto)).rejects.toThrow();
@@ -438,6 +456,7 @@ describe('ExportService', () => {
     it('requires either cursor or since parameter', async () => {
       const dto: UserEventsQueryDto = {
         workspace_id: 'test-ws',
+        until: '2025-01-26T00:00:00Z',
         // Neither cursor nor since provided
       };
 
