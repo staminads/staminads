@@ -62,6 +62,7 @@ describe('ApiKeyStrategy', () => {
 
       expect(result).toEqual<ApiKeyPayload>({
         type: 'api-key',
+        id: 'api-key:key-001',
         keyId: 'key-001',
         workspaceId: 'ws-001',
         role: 'admin',

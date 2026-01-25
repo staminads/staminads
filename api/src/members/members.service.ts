@@ -14,11 +14,7 @@ import {
   WorkspaceMembership,
   MemberWithUser,
 } from '../common/entities/membership.entity';
-import {
-  hasPermission,
-  canModifyMember,
-  ROLE_HIERARCHY,
-} from '../common/permissions';
+import { canModifyMember, ROLE_HIERARCHY } from '../common/permissions';
 import { ListMembersDto } from './dto/list-members.dto';
 import { GetMemberDto } from './dto/get-member.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
@@ -81,14 +77,9 @@ export class MembersService {
 
   /**
    * List all members of a workspace with user details
+   * Access is pre-validated by WorkspaceAuthGuard
    */
-  async list(dto: ListMembersDto, actorId: string): Promise<MemberWithUser[]> {
-    // Verify actor has permission to view members
-    const actorMembership = await this.getMembership(dto.workspace_id, actorId);
-    if (!actorMembership) {
-      throw new ForbiddenException('Not a member of this workspace');
-    }
-
+  async list(dto: ListMembersDto): Promise<MemberWithUser[]> {
     // Get all memberships for the workspace
     const rows = await this.clickhouse.querySystem<MembershipRow>(
       `SELECT * FROM workspace_memberships FINAL
@@ -119,14 +110,9 @@ export class MembersService {
 
   /**
    * Get a specific member with user details
+   * Access is pre-validated by WorkspaceAuthGuard
    */
-  async get(dto: GetMemberDto, actorId: string): Promise<MemberWithUser> {
-    // Verify actor has permission to view members
-    const actorMembership = await this.getMembership(dto.workspace_id, actorId);
-    if (!actorMembership) {
-      throw new ForbiddenException('Not a member of this workspace');
-    }
-
+  async get(dto: GetMemberDto): Promise<MemberWithUser> {
     const membership = await this.getMembership(dto.workspace_id, dto.user_id);
     if (!membership) {
       throw new NotFoundException('Member not found');
@@ -150,23 +136,14 @@ export class MembersService {
 
   /**
    * Update a member's role
+   * Access and permission are pre-validated by WorkspaceAuthGuard with @RequirePermission('admin')
+   * @param dto - Update role DTO
+   * @param actorMembership - Actor's membership from request (set by WorkspaceAuthGuard)
    */
   async updateRole(
     dto: UpdateRoleDto,
-    actorId: string,
+    actorMembership: WorkspaceMembership,
   ): Promise<MemberWithUser> {
-    // Get actor's membership and verify permissions
-    const actorMembership = await this.getMembership(dto.workspace_id, actorId);
-    if (!actorMembership) {
-      throw new ForbiddenException('Not a member of this workspace');
-    }
-
-    if (!hasPermission(actorMembership.role, 'members.manage')) {
-      throw new ForbiddenException(
-        'Insufficient permissions to manage members',
-      );
-    }
-
     // Get target membership
     const targetMembership = await this.getMembership(
       dto.workspace_id,
@@ -176,8 +153,8 @@ export class MembersService {
       throw new NotFoundException('Member not found');
     }
 
-    // Cannot modify yourself
-    if (actorId === dto.user_id) {
+    // Cannot modify yourself (API keys use user_id like 'api-key:xxx' so they can't match)
+    if (actorMembership.user_id === dto.user_id) {
       throw new BadRequestException('Cannot modify your own role');
     }
 
@@ -214,9 +191,9 @@ export class MembersService {
 
     await this.clickhouse.insertSystem('workspace_memberships', [updated]);
 
-    // Log audit event
+    // Log audit event (for API keys, user_id will be 'api-key:xxx')
     await this.auditService.log({
-      user_id: actorId,
+      user_id: actorMembership.user_id,
       workspace_id: dto.workspace_id,
       action: 'member.role_updated',
       target_type: 'membership',
@@ -247,20 +224,14 @@ export class MembersService {
 
   /**
    * Remove a member from a workspace
+   * Access and permission are pre-validated by WorkspaceAuthGuard with @RequirePermission('admin')
+   * @param dto - Remove member DTO
+   * @param actorMembership - Actor's membership from request (set by WorkspaceAuthGuard)
    */
-  async remove(dto: RemoveMemberDto, actorId: string): Promise<void> {
-    // Get actor's membership and verify permissions
-    const actorMembership = await this.getMembership(dto.workspace_id, actorId);
-    if (!actorMembership) {
-      throw new ForbiddenException('Not a member of this workspace');
-    }
-
-    if (!hasPermission(actorMembership.role, 'members.remove')) {
-      throw new ForbiddenException(
-        'Insufficient permissions to remove members',
-      );
-    }
-
+  async remove(
+    dto: RemoveMemberDto,
+    actorMembership: WorkspaceMembership,
+  ): Promise<void> {
     // Get target membership
     const targetMembership = await this.getMembership(
       dto.workspace_id,
@@ -270,8 +241,8 @@ export class MembersService {
       throw new NotFoundException('Member not found');
     }
 
-    // Cannot remove yourself - use leave endpoint instead
-    if (actorId === dto.user_id) {
+    // Cannot remove yourself - use leave endpoint instead (API keys can't match)
+    if (actorMembership.user_id === dto.user_id) {
       throw new BadRequestException(
         'Cannot remove yourself. Use the leave endpoint instead',
       );
@@ -310,9 +281,9 @@ export class MembersService {
     // Revoke all sessions for the removed user to force immediate logout
     await this.authService.revokeAllSessions(dto.user_id);
 
-    // Log audit event
+    // Log audit event (for API keys, user_id will be 'api-key:xxx')
     await this.auditService.log({
-      user_id: actorId,
+      user_id: actorMembership.user_id,
       workspace_id: dto.workspace_id,
       action: 'member.removed',
       target_type: 'membership',
@@ -327,6 +298,7 @@ export class MembersService {
 
   /**
    * Leave a workspace voluntarily
+   * This method is JWT-only (API keys cannot "leave" a workspace)
    */
   async leave(dto: LeaveWorkspaceDto, userId: string): Promise<void> {
     // Get user's membership

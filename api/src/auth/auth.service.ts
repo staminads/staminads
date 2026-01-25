@@ -25,7 +25,10 @@ import { PasswordResetToken } from '../common/entities/password-reset.entity';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
-import { toClickHouseDateTime } from '../common/utils/datetime.util';
+import {
+  toClickHouseDateTime,
+  parseClickHouseDateTime,
+} from '../common/utils/datetime.util';
 
 const PASSWORD_RESET_EXPIRY_HOURS = 1;
 const SESSION_EXPIRY_DAYS = 7;
@@ -243,9 +246,7 @@ export class AuthService {
       throw new BadRequestException('This reset link has already been used');
     }
 
-    // Parse ClickHouse DateTime64 as UTC by appending 'Z'
-    // ClickHouse returns timestamps without timezone, which JavaScript interprets as local time
-    const expiresAt = new Date(resetToken.expires_at.replace(' ', 'T') + 'Z');
+    const expiresAt = parseClickHouseDateTime(resetToken.expires_at);
     if (expiresAt < new Date()) {
       throw new BadRequestException('This reset link has expired');
     }

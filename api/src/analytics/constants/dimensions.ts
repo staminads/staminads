@@ -436,4 +436,13 @@ export const DIMENSIONS: Record<string, DimensionDefinition> = {
     category: 'Goal',
     tables: ['goals'],
   },
+
+  // User
+  user_id: {
+    name: 'user_id',
+    column: 'user_id',
+    type: 'string',
+    category: 'User',
+    tables: ['sessions', 'pages', 'goals'],
+  },
 };

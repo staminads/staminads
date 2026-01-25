@@ -183,6 +183,7 @@ describe('SessionManager', () => {
         sdk_version: '5.0.0',
         sequence: 3,
         dimensions: {},
+        userId: null,
       };
 
       mockLocalStorage._store['stm_session'] = JSON.stringify(existingSession);
@@ -210,6 +211,7 @@ describe('SessionManager', () => {
         sdk_version: '5.0.0',
         sequence: 3,
         dimensions: {},
+        userId: null,
       };
 
       mockLocalStorage._store['stm_session'] = JSON.stringify(existingSession);
@@ -238,6 +240,7 @@ describe('SessionManager', () => {
         sdk_version: '5.0.0',
         sequence: 0,
         dimensions: {},
+        userId: null,
       };
 
       mockLocalStorage._store['stm_session'] = JSON.stringify(existingSession);
@@ -266,6 +269,7 @@ describe('SessionManager', () => {
         sdk_version: '5.0.0',
         sequence: 5,
         dimensions: {},
+        userId: null,
       };
 
       mockLocalStorage._store['stm_session'] = JSON.stringify(existingSession);
@@ -571,6 +575,7 @@ describe('SessionManager', () => {
         sdk_version: '5.0.0',
         sequence: 3,
         dimensions: {},
+        userId: null,
       };
 
       mockLocalStorage._store['stm_session'] = JSON.stringify(existingSession);
@@ -608,6 +613,7 @@ describe('SessionManager', () => {
         sdk_version: '5.0.0',
         sequence: 3,
         dimensions: {},
+        userId: null,
       };
 
       mockLocalStorage._store['stm_session'] = JSON.stringify(existingSession);

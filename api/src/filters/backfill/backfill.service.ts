@@ -19,7 +19,10 @@ import { BackfillTask, BackfillTaskProgress } from './backfill-task.entity';
 import { FilterBackfillProcessor } from './backfill.processor';
 import { FilterDefinition } from '../entities/filter.entity';
 import { computeFilterVersion } from '../lib/filter-evaluator';
-import { toClickHouseDateTime } from '../../common/utils/datetime.util';
+import {
+  toClickHouseDateTime,
+  parseClickHouseDateTime,
+} from '../../common/utils/datetime.util';
 
 export interface BackfillSummary {
   needsBackfill: boolean;
@@ -510,7 +513,7 @@ export class FilterBackfillService implements OnModuleInit, OnModuleDestroy {
     // Estimate remaining time based on sessions processed
     let estimatedRemainingSeconds: number | null = null;
     if (task.started_at && task.processed_sessions > 0) {
-      const startedAt = new Date(task.started_at.replace(' ', 'T') + 'Z');
+      const startedAt = parseClickHouseDateTime(task.started_at);
       const elapsedMs = Date.now() - startedAt.getTime();
       const elapsedSeconds = elapsedMs / 1000;
       const sessionsPerSecond = task.processed_sessions / elapsedSeconds;

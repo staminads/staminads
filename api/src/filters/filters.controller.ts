@@ -29,6 +29,7 @@ import {
 import { BackfillTaskProgress } from './backfill/backfill-task.entity';
 import { BackfillSummary } from './backfill/backfill.service';
 import { WorkspaceAuthGuard } from '../common/guards/workspace.guard';
+import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { DemoRestricted } from '../common/decorators/demo-restricted.decorator';
 
 @ApiTags('filters')
@@ -75,6 +76,7 @@ export class FiltersController {
   @Post('filters.create')
   @DemoRestricted()
   @UseGuards(WorkspaceAuthGuard)
+  @RequirePermission('filters.manage')
   @ApiOperation({ summary: 'Create filter' })
   @ApiResponse({ status: 201, description: 'Created filter' })
   async create(@Body() dto: CreateFilterDto): Promise<FilterDefinition> {

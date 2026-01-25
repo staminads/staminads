@@ -90,6 +90,10 @@ export interface SessionPayload {
   created_at: number;
   updated_at: number;
   sdk_version: string;
+  // User identification
+  user_id?: string | null;
+  // Custom dimensions (stm_1 through stm_10)
+  dimensions?: Record<string, string>;
 }
 
 /**

@@ -1047,16 +1047,6 @@
               }
             }
           },
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          },
           "403": {
             "description": "Insufficient permissions"
           },
@@ -2369,7 +2359,7 @@
     },
     "/api/track": {
       "post": {
-        "description": "Processes a session payload containing pageview and goal actions. Actions are processed incrementally using checkpoint-based delta sending. The server skips actions at indices <= checkpoint and processes only new actions.",
+        "description": "Processes a session payload containing pageview and goal actions. Actions are deduplicated server-side using dedup_token.",
         "operationId": "EventsController_track",
         "parameters": [
           {
@@ -2410,11 +2400,6 @@
                     "success": {
                       "type": "boolean",
                       "example": true
-                    },
-                    "checkpoint": {
-                      "type": "number",
-                      "description": "Index of the last processed action",
-                      "example": 5
                     }
                   }
                 }
@@ -2422,9 +2407,85 @@
             }
           }
         },
+        "security": [
+          {}
+        ],
         "summary": "Track session with cumulative actions array",
         "tags": [
           "events"
+        ]
+      }
+    },
+    "/api/export.userEvents": {
+      "get": {
+        "description": "Export raw events for users with a user_id set. Supports cursor-based pagination for incremental sync.",
+        "operationId": "ExportController_getUserEvents",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "since",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "until",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user_id",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 100,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of user events with pagination cursor"
+          }
+        },
+        "security": [
+          {
+            "jwt-auth": []
+          }
+        ],
+        "summary": "Export user events",
+        "tags": [
+          "export"
         ]
       }
     },
@@ -2680,6 +2741,407 @@
         "summary": "Stream AI assistant results via SSE",
         "tags": [
           "assistant"
+        ]
+      }
+    },
+    "/api/subscriptions.list": {
+      "get": {
+        "operationId": "SubscriptionsController_list",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of subscription objects"
+          }
+        },
+        "security": [
+          {
+            "jwt-auth": []
+          }
+        ],
+        "summary": "List user subscriptions for a workspace",
+        "tags": [
+          "subscriptions"
+        ]
+      }
+    },
+    "/api/subscriptions.get": {
+      "get": {
+        "operationId": "SubscriptionsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Subscription object"
+          },
+          "400": {
+            "description": "Subscription not found"
+          }
+        },
+        "security": [
+          {
+            "jwt-auth": []
+          }
+        ],
+        "summary": "Get a single subscription",
+        "tags": [
+          "subscriptions"
+        ]
+      }
+    },
+    "/api/subscriptions.create": {
+      "post": {
+        "operationId": "SubscriptionsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSubscriptionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created subscription object"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "403": {
+            "description": "Not a workspace member"
+          }
+        },
+        "security": [
+          {
+            "jwt-auth": []
+          }
+        ],
+        "summary": "Create a new subscription",
+        "tags": [
+          "subscriptions"
+        ]
+      }
+    },
+    "/api/subscriptions.update": {
+      "post": {
+        "operationId": "SubscriptionsController_update",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSubscriptionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated subscription object"
+          },
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "403": {
+            "description": "Not a workspace member"
+          }
+        },
+        "security": [
+          {
+            "jwt-auth": []
+          }
+        ],
+        "summary": "Update a subscription",
+        "tags": [
+          "subscriptions"
+        ]
+      }
+    },
+    "/api/subscriptions.delete": {
+      "post": {
+        "operationId": "SubscriptionsController_delete",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "workspace_id": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success response"
+          },
+          "201": {
+            "description": ""
+          },
+          "403": {
+            "description": "Not a workspace member"
+          }
+        },
+        "security": [
+          {
+            "jwt-auth": []
+          }
+        ],
+        "summary": "Delete a subscription",
+        "tags": [
+          "subscriptions"
+        ]
+      }
+    },
+    "/api/subscriptions.pause": {
+      "post": {
+        "operationId": "SubscriptionsController_pause",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "workspace_id": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Paused subscription object"
+          },
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not a workspace member"
+          }
+        },
+        "security": [
+          {
+            "jwt-auth": []
+          }
+        ],
+        "summary": "Pause a subscription",
+        "tags": [
+          "subscriptions"
+        ]
+      }
+    },
+    "/api/subscriptions.resume": {
+      "post": {
+        "operationId": "SubscriptionsController_resume",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "workspace_id": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resumed subscription object"
+          },
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not a workspace member"
+          }
+        },
+        "security": [
+          {
+            "jwt-auth": []
+          }
+        ],
+        "summary": "Resume a paused subscription",
+        "tags": [
+          "subscriptions"
+        ]
+      }
+    },
+    "/api/subscriptions.sendNow": {
+      "post": {
+        "operationId": "SubscriptionsController_sendNow",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "workspace_id": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success response"
+          },
+          "201": {
+            "description": ""
+          },
+          "400": {
+            "description": "Subscription or user not found"
+          },
+          "403": {
+            "description": "Not a workspace member"
+          }
+        },
+        "security": [
+          {
+            "jwt-auth": []
+          }
+        ],
+        "summary": "Send report immediately for testing",
+        "tags": [
+          "subscriptions"
+        ]
+      }
+    },
+    "/api/subscriptions.preview": {
+      "post": {
+        "operationId": "SubscriptionsController_preview",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewSubscriptionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "HTML email content"
+          },
+          "201": {
+            "description": ""
+          },
+          "403": {
+            "description": "Not a workspace member"
+          }
+        },
+        "security": [
+          {
+            "jwt-auth": []
+          }
+        ],
+        "summary": "Preview subscription report as HTML",
+        "tags": [
+          "subscriptions"
+        ]
+      }
+    },
+    "/api/subscriptions.unsubscribe": {
+      "get": {
+        "operationId": "SubscriptionsController_unsubscribe",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success message"
+          },
+          "400": {
+            "description": "Invalid token or subscription not found"
+          },
+          "401": {
+            "description": "Expired token"
+          }
+        },
+        "security": [
+          {}
+        ],
+        "summary": "Unsubscribe via signed token",
+        "tags": [
+          "subscriptions"
         ]
       }
     }
@@ -3627,33 +4089,6 @@
           }
         }
       },
-      "CurrentPageDto": {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "maxLength": 2048
-          },
-          "page_number": {
-            "type": "number",
-            "minimum": 1
-          },
-          "entered_at": {
-            "type": "number"
-          },
-          "scroll": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 100
-          }
-        },
-        "required": [
-          "path",
-          "page_number",
-          "entered_at",
-          "scroll"
-        ]
-      },
       "SessionAttributesDto": {
         "type": "object",
         "properties": {
@@ -3740,13 +4175,6 @@
               "type": "object"
             }
           },
-          "current_page": {
-            "$ref": "#/components/schemas/CurrentPageDto"
-          },
-          "checkpoint": {
-            "type": "number",
-            "minimum": 0
-          },
           "attributes": {
             "$ref": "#/components/schemas/SessionAttributesDto"
           },
@@ -3761,6 +4189,14 @@
           },
           "sent_at": {
             "type": "number"
+          },
+          "user_id": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 256
+          },
+          "dimensions": {
+            "type": "object"
           }
         },
         "required": [
@@ -3807,6 +4243,35 @@
         "required": [
           "dimension",
           "operator"
+        ]
+      },
+      "MetricFilterDto": {
+        "type": "object",
+        "properties": {
+          "metric": {
+            "type": "string"
+          },
+          "operator": {
+            "type": "string",
+            "enum": [
+              "gt",
+              "gte",
+              "lt",
+              "lte",
+              "between"
+            ]
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "metric",
+          "operator",
+          "values"
         ]
       },
       "DateRangeDto": {
@@ -3879,6 +4344,12 @@
               "$ref": "#/components/schemas/FilterDto"
             }
           },
+          "metricFilters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricFilterDto"
+            }
+          },
           "dateRange": {
             "$ref": "#/components/schemas/DateRangeDto"
           },
@@ -3907,6 +4378,13 @@
               "pages",
               "goals"
             ]
+          },
+          "totalsGroupBy": {
+            "description": "When set, enables \"filtered totals\" mode for queries with no dimensions.\nThe query will:\n1. Group by these dimensions in an inner subquery\n2. Apply metricFilters via HAVING clause\n3. Aggregate the filtered results in an outer query\n\nUse this for totals that should respect metricFilters.\nExample: Get total sessions where bounce_rate > 50%, grouped by landing_path.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -3938,6 +4416,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/FilterDto"
+            }
+          },
+          "metricFilters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricFilterDto"
             }
           },
           "timezone": {
@@ -4058,11 +4542,273 @@
             "items": {
               "$ref": "#/components/schemas/MessageDto"
             }
+          },
+          "generate_title": {
+            "type": "boolean"
+          },
+          "current_page": {
+            "type": "string"
           }
         },
         "required": [
           "workspace_id",
           "prompt"
+        ]
+      },
+      "CreateSubscriptionDto": {
+        "type": "object",
+        "properties": {
+          "workspace_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "frequency": {
+            "type": "string",
+            "enum": [
+              "daily",
+              "weekly",
+              "monthly"
+            ]
+          },
+          "day_of_week": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 7
+          },
+          "day_of_month": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 28
+          },
+          "hour": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 23
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "metrics": {
+            "type": "string",
+            "enum": [
+              "sessions",
+              "median_duration",
+              "bounce_rate",
+              "median_scroll"
+            ],
+            "minItems": 1
+          },
+          "dimensions": {
+            "type": "string",
+            "enum": [
+              "landing_path",
+              "exit_path",
+              "referrer_domain",
+              "channel",
+              "channel_group",
+              "utm_campaign",
+              "utm_source",
+              "utm_medium",
+              "utm_content",
+              "utm_term",
+              "country",
+              "device",
+              "browser",
+              "os",
+              "goal_name"
+            ]
+          },
+          "filters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilterDto"
+            }
+          },
+          "limit": {
+            "type": "number",
+            "enum": [
+              5,
+              10,
+              15,
+              20,
+              50
+            ]
+          }
+        },
+        "required": [
+          "workspace_id",
+          "name",
+          "frequency",
+          "metrics"
+        ]
+      },
+      "UpdateSubscriptionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "workspace_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "frequency": {
+            "type": "string",
+            "enum": [
+              "daily",
+              "weekly",
+              "monthly"
+            ]
+          },
+          "day_of_week": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 7
+          },
+          "day_of_month": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 28
+          },
+          "hour": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 23
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "metrics": {
+            "type": "string",
+            "enum": [
+              "sessions",
+              "median_duration",
+              "bounce_rate",
+              "median_scroll"
+            ],
+            "minItems": 1
+          },
+          "dimensions": {
+            "type": "string",
+            "enum": [
+              "landing_path",
+              "exit_path",
+              "referrer_domain",
+              "channel",
+              "channel_group",
+              "utm_campaign",
+              "utm_source",
+              "utm_medium",
+              "utm_content",
+              "utm_term",
+              "country",
+              "device",
+              "browser",
+              "os",
+              "goal_name"
+            ]
+          },
+          "filters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilterDto"
+            }
+          },
+          "limit": {
+            "type": "number",
+            "enum": [
+              5,
+              10,
+              15,
+              20,
+              50
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id"
+        ]
+      },
+      "PreviewSubscriptionDto": {
+        "type": "object",
+        "properties": {
+          "workspace_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "frequency": {
+            "type": "string",
+            "enum": [
+              "daily",
+              "weekly",
+              "monthly"
+            ]
+          },
+          "day_of_week": {
+            "type": "number"
+          },
+          "day_of_month": {
+            "type": "number"
+          },
+          "metrics": {
+            "type": "string",
+            "enum": [
+              "sessions",
+              "median_duration",
+              "bounce_rate",
+              "median_scroll"
+            ],
+            "minItems": 1
+          },
+          "dimensions": {
+            "type": "string",
+            "enum": [
+              "landing_path",
+              "exit_path",
+              "referrer_domain",
+              "channel",
+              "channel_group",
+              "utm_campaign",
+              "utm_source",
+              "utm_medium",
+              "utm_content",
+              "utm_term",
+              "country",
+              "device",
+              "browser",
+              "os",
+              "goal_name"
+            ]
+          },
+          "filters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilterDto"
+            }
+          },
+          "limit": {
+            "type": "number",
+            "enum": [
+              5,
+              10,
+              15,
+              20,
+              50
+            ]
+          }
+        },
+        "required": [
+          "workspace_id",
+          "name",
+          "frequency",
+          "metrics"
         ]
       }
     }

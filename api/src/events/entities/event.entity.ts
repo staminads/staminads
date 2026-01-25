@@ -95,4 +95,7 @@ export interface TrackingEvent {
 
   // Goal timestamp (from SDK, null for pageviews)
   goal_timestamp: string | null;
+
+  // User identification
+  user_id: string | null;
 }

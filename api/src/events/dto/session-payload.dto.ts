@@ -218,6 +218,15 @@ export class SessionPayloadDto {
   @IsOptional()
   @IsNumber()
   sent_at?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  user_id?: string | null;
+
+  @IsOptional()
+  @IsObject()
+  dimensions?: Record<string, string>;
 }
 
 // === Type Guards ===

@@ -16,6 +16,7 @@ import { CommonModule } from './common/common.module';
 import { DatabaseModule } from './database/database.module';
 import { DemoModule } from './demo/demo.module';
 import { EventsModule } from './events/events.module';
+import { ExportModule } from './export/export.module';
 import { FiltersModule } from './filters/filters.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { MailModule } from './mail/mail.module';
@@ -86,6 +87,7 @@ import { SubscriptionsModule } from './subscriptions/subscriptions.module';
     ToolsModule,
     DemoModule,
     EventsModule,
+    ExportModule,
     AnalyticsModule,
     AssistantModule,
     SubscriptionsModule,

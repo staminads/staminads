@@ -198,39 +198,31 @@ describe('MembersService', () => {
   });
 
   describe('list', () => {
+    // Note: Access validation is now done by WorkspaceAuthGuard, not the service
+
     it('should return members with user details', async () => {
-      // Mock actor membership check
-      clickhouseService.querySystem
-        .mockResolvedValueOnce([
-          {
-            ...ownerMembership,
-            workspace_id: workspaceId,
-            user_id: ownerId,
-            invited_by: null,
-          },
-        ])
-        // Mock list of all members
-        .mockResolvedValueOnce([
-          {
-            ...ownerMembership,
-            workspace_id: workspaceId,
-            user_id: ownerId,
-            invited_by: null,
-          },
-          {
-            ...adminMembership,
-            workspace_id: workspaceId,
-            user_id: adminId,
-            invited_by: ownerId,
-          },
-        ]);
+      // Mock list of all members
+      clickhouseService.querySystem.mockResolvedValueOnce([
+        {
+          ...ownerMembership,
+          workspace_id: workspaceId,
+          user_id: ownerId,
+          invited_by: null,
+        },
+        {
+          ...adminMembership,
+          workspace_id: workspaceId,
+          user_id: adminId,
+          invited_by: ownerId,
+        },
+      ]);
 
       // Mock user lookups
       usersService.findById
         .mockResolvedValueOnce(ownerUser)
         .mockResolvedValueOnce(adminUser);
 
-      const result = await service.list({ workspace_id: workspaceId }, ownerId);
+      const result = await service.list({ workspace_id: workspaceId });
 
       expect(result).toHaveLength(2);
       expect(result[0]).toEqual({
@@ -253,45 +245,28 @@ describe('MembersService', () => {
       });
     });
 
-    it('should throw ForbiddenException when actor is not a member', async () => {
-      clickhouseService.querySystem.mockResolvedValue([]);
-
-      await expect(
-        service.list({ workspace_id: workspaceId }, 'not_a_member'),
-      ).rejects.toThrow('Not a member of this workspace');
-    });
-
     it('should skip members without user details', async () => {
-      clickhouseService.querySystem
-        .mockResolvedValueOnce([
-          {
-            ...ownerMembership,
-            workspace_id: workspaceId,
-            user_id: ownerId,
-            invited_by: null,
-          },
-        ])
-        .mockResolvedValueOnce([
-          {
-            ...ownerMembership,
-            workspace_id: workspaceId,
-            user_id: ownerId,
-            invited_by: null,
-          },
-          {
-            ...adminMembership,
-            workspace_id: workspaceId,
-            user_id: adminId,
-            invited_by: ownerId,
-          },
-        ]);
+      clickhouseService.querySystem.mockResolvedValueOnce([
+        {
+          ...ownerMembership,
+          workspace_id: workspaceId,
+          user_id: ownerId,
+          invited_by: null,
+        },
+        {
+          ...adminMembership,
+          workspace_id: workspaceId,
+          user_id: adminId,
+          invited_by: ownerId,
+        },
+      ]);
 
       // First user exists, second doesn't
       usersService.findById
         .mockResolvedValueOnce(ownerUser)
         .mockResolvedValueOnce(null);
 
-      const result = await service.list({ workspace_id: workspaceId }, ownerId);
+      const result = await service.list({ workspace_id: workspaceId });
 
       expect(result).toHaveLength(1);
       expect(result[0].user.id).toBe(ownerId);
@@ -299,33 +274,25 @@ describe('MembersService', () => {
   });
 
   describe('get', () => {
+    // Note: Access validation is now done by WorkspaceAuthGuard, not the service
+
     it('should return single member with user details', async () => {
-      // Mock actor membership check
-      clickhouseService.querySystem
-        .mockResolvedValueOnce([
-          {
-            ...ownerMembership,
-            workspace_id: workspaceId,
-            user_id: ownerId,
-            invited_by: null,
-          },
-        ])
-        // Mock target membership
-        .mockResolvedValueOnce([
-          {
-            ...adminMembership,
-            workspace_id: workspaceId,
-            user_id: adminId,
-            invited_by: ownerId,
-          },
-        ]);
+      // Mock target membership lookup
+      clickhouseService.querySystem.mockResolvedValueOnce([
+        {
+          ...adminMembership,
+          workspace_id: workspaceId,
+          user_id: adminId,
+          invited_by: ownerId,
+        },
+      ]);
 
       usersService.findById.mockResolvedValueOnce(adminUser);
 
-      const result = await service.get(
-        { workspace_id: workspaceId, user_id: adminId },
-        ownerId,
-      );
+      const result = await service.get({
+        workspace_id: workspaceId,
+        user_id: adminId,
+      });
 
       expect(result).toEqual({
         ...adminMembership,
@@ -339,84 +306,45 @@ describe('MembersService', () => {
     });
 
     it('should throw NotFoundException when member not found', async () => {
-      clickhouseService.querySystem
-        .mockResolvedValueOnce([
-          {
-            ...ownerMembership,
-            workspace_id: workspaceId,
-            user_id: ownerId,
-            invited_by: null,
-          },
-        ])
-        .mockResolvedValueOnce([]);
+      clickhouseService.querySystem.mockResolvedValueOnce([]);
 
       await expect(
-        service.get(
-          { workspace_id: workspaceId, user_id: 'nonexistent' },
-          ownerId,
-        ),
+        service.get({ workspace_id: workspaceId, user_id: 'nonexistent' }),
       ).rejects.toThrow('Member not found');
     });
 
     it('should throw NotFoundException when user not found', async () => {
-      clickhouseService.querySystem
-        .mockResolvedValueOnce([
-          {
-            ...ownerMembership,
-            workspace_id: workspaceId,
-            user_id: ownerId,
-            invited_by: null,
-          },
-        ])
-        .mockResolvedValueOnce([
-          {
-            ...adminMembership,
-            workspace_id: workspaceId,
-            user_id: adminId,
-            invited_by: ownerId,
-          },
-        ]);
+      clickhouseService.querySystem.mockResolvedValueOnce([
+        {
+          ...adminMembership,
+          workspace_id: workspaceId,
+          user_id: adminId,
+          invited_by: ownerId,
+        },
+      ]);
 
       usersService.findById.mockResolvedValueOnce(null);
 
       await expect(
-        service.get({ workspace_id: workspaceId, user_id: adminId }, ownerId),
+        service.get({ workspace_id: workspaceId, user_id: adminId }),
       ).rejects.toThrow('User not found');
-    });
-
-    it('should throw ForbiddenException when actor is not a member', async () => {
-      clickhouseService.querySystem.mockResolvedValueOnce([]);
-
-      await expect(
-        service.get(
-          { workspace_id: workspaceId, user_id: adminId },
-          'not_a_member',
-        ),
-      ).rejects.toThrow(ForbiddenException);
     });
   });
 
   describe('updateRole', () => {
+    // Note: Access validation and permission checks are now done by WorkspaceAuthGuard
+    // These tests verify business logic given a pre-validated actorMembership
+
     it('should successfully update role as owner', async () => {
-      // Mock actor (owner) membership
-      clickhouseService.querySystem
-        .mockResolvedValueOnce([
-          {
-            ...ownerMembership,
-            workspace_id: workspaceId,
-            user_id: ownerId,
-            invited_by: null,
-          },
-        ])
-        // Mock target (editor) membership
-        .mockResolvedValueOnce([
-          {
-            ...editorMembership,
-            workspace_id: workspaceId,
-            user_id: editorId,
-            invited_by: adminId,
-          },
-        ]);
+      // Mock target (editor) membership
+      clickhouseService.querySystem.mockResolvedValueOnce([
+        {
+          ...editorMembership,
+          workspace_id: workspaceId,
+          user_id: editorId,
+          invited_by: adminId,
+        },
+      ]);
 
       usersService.findById.mockResolvedValueOnce(editorUser);
 
@@ -426,7 +354,7 @@ describe('MembersService', () => {
           user_id: editorId,
           role: 'admin',
         },
-        ownerId,
+        ownerMembership,
       );
 
       expect(clickhouseService.insertSystem).toHaveBeenCalledWith(
@@ -462,23 +390,14 @@ describe('MembersService', () => {
 
     it('should successfully update role as admin for lower roles', async () => {
       // Admin updating editor to viewer
-      clickhouseService.querySystem
-        .mockResolvedValueOnce([
-          {
-            ...adminMembership,
-            workspace_id: workspaceId,
-            user_id: adminId,
-            invited_by: ownerId,
-          },
-        ])
-        .mockResolvedValueOnce([
-          {
-            ...editorMembership,
-            workspace_id: workspaceId,
-            user_id: editorId,
-            invited_by: adminId,
-          },
-        ]);
+      clickhouseService.querySystem.mockResolvedValueOnce([
+        {
+          ...editorMembership,
+          workspace_id: workspaceId,
+          user_id: editorId,
+          invited_by: adminId,
+        },
+      ]);
 
       usersService.findById.mockResolvedValueOnce(editorUser);
 
@@ -488,14 +407,89 @@ describe('MembersService', () => {
           user_id: editorId,
           role: 'viewer',
         },
-        adminId,
+        adminMembership,
       );
 
       expect(clickhouseService.insertSystem).toHaveBeenCalled();
     });
 
-    it('should throw ForbiddenException when actor lacks permission', async () => {
-      // Editor trying to update viewer
+    it('should throw BadRequestException when trying to modify self', async () => {
+      // Mock target membership (same as actor)
+      clickhouseService.querySystem.mockResolvedValueOnce([
+        {
+          ...ownerMembership,
+          workspace_id: workspaceId,
+          user_id: ownerId,
+          invited_by: null,
+        },
+      ]);
+
+      await expect(
+        service.updateRole(
+          {
+            workspace_id: workspaceId,
+            user_id: ownerId,
+            role: 'admin',
+          },
+          ownerMembership,
+        ),
+      ).rejects.toThrow('Cannot modify your own role');
+    });
+
+    it('should throw ForbiddenException when trying to modify higher role', async () => {
+      // Admin trying to modify owner
+      clickhouseService.querySystem.mockResolvedValueOnce([
+        {
+          ...ownerMembership,
+          workspace_id: workspaceId,
+          user_id: ownerId,
+          invited_by: null,
+        },
+      ]);
+
+      await expect(
+        service.updateRole(
+          {
+            workspace_id: workspaceId,
+            user_id: ownerId,
+            role: 'viewer',
+          },
+          adminMembership,
+        ),
+      ).rejects.toThrow('Cannot modify a member with equal or higher role');
+    });
+
+    it('should throw ForbiddenException when trying to modify equal role', async () => {
+      // Admin trying to modify another admin
+      const otherAdminMembership = {
+        ...adminMembership,
+        id: 'mem_admin2',
+        user_id: 'user_admin2',
+      };
+
+      clickhouseService.querySystem.mockResolvedValueOnce([
+        {
+          ...otherAdminMembership,
+          workspace_id: workspaceId,
+          user_id: 'user_admin2',
+          invited_by: ownerId,
+        },
+      ]);
+
+      await expect(
+        service.updateRole(
+          {
+            workspace_id: workspaceId,
+            user_id: 'user_admin2',
+            role: 'editor',
+          },
+          adminMembership,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw ForbiddenException when trying to promote to same or higher role', async () => {
+      // Admin trying to promote editor to admin
       clickhouseService.querySystem.mockResolvedValueOnce([
         {
           ...editorMembership,
@@ -509,166 +503,24 @@ describe('MembersService', () => {
         service.updateRole(
           {
             workspace_id: workspaceId,
-            user_id: viewerId,
-            role: 'admin',
-          },
-          editorId,
-        ),
-      ).rejects.toThrow('Insufficient permissions to manage members');
-    });
-
-    it('should throw BadRequestException when trying to modify self', async () => {
-      clickhouseService.querySystem
-        .mockResolvedValueOnce([
-          {
-            ...ownerMembership,
-            workspace_id: workspaceId,
-            user_id: ownerId,
-            invited_by: null,
-          },
-        ])
-        .mockResolvedValueOnce([
-          {
-            ...ownerMembership,
-            workspace_id: workspaceId,
-            user_id: ownerId,
-            invited_by: null,
-          },
-        ]);
-
-      await expect(
-        service.updateRole(
-          {
-            workspace_id: workspaceId,
-            user_id: ownerId,
-            role: 'admin',
-          },
-          ownerId,
-        ),
-      ).rejects.toThrow('Cannot modify your own role');
-    });
-
-    it('should throw ForbiddenException when trying to modify higher role', async () => {
-      // Admin trying to modify owner
-      clickhouseService.querySystem
-        .mockResolvedValueOnce([
-          {
-            ...adminMembership,
-            workspace_id: workspaceId,
-            user_id: adminId,
-            invited_by: ownerId,
-          },
-        ])
-        .mockResolvedValueOnce([
-          {
-            ...ownerMembership,
-            workspace_id: workspaceId,
-            user_id: ownerId,
-            invited_by: null,
-          },
-        ]);
-
-      await expect(
-        service.updateRole(
-          {
-            workspace_id: workspaceId,
-            user_id: ownerId,
-            role: 'viewer',
-          },
-          adminId,
-        ),
-      ).rejects.toThrow('Cannot modify a member with equal or higher role');
-    });
-
-    it('should throw ForbiddenException when trying to modify equal role', async () => {
-      // Admin trying to modify another admin
-      const otherAdminMembership = {
-        ...adminMembership,
-        id: 'mem_admin2',
-        user_id: 'user_admin2',
-      };
-
-      clickhouseService.querySystem
-        .mockResolvedValueOnce([
-          {
-            ...adminMembership,
-            workspace_id: workspaceId,
-            user_id: adminId,
-            invited_by: ownerId,
-          },
-        ])
-        .mockResolvedValueOnce([
-          {
-            ...otherAdminMembership,
-            workspace_id: workspaceId,
-            user_id: 'user_admin2',
-            invited_by: ownerId,
-          },
-        ]);
-
-      await expect(
-        service.updateRole(
-          {
-            workspace_id: workspaceId,
-            user_id: 'user_admin2',
-            role: 'editor',
-          },
-          adminId,
-        ),
-      ).rejects.toThrow(ForbiddenException);
-    });
-
-    it('should throw ForbiddenException when trying to promote to same or higher role', async () => {
-      // Admin trying to promote editor to admin
-      clickhouseService.querySystem
-        .mockResolvedValueOnce([
-          {
-            ...adminMembership,
-            workspace_id: workspaceId,
-            user_id: adminId,
-            invited_by: ownerId,
-          },
-        ])
-        .mockResolvedValueOnce([
-          {
-            ...editorMembership,
-            workspace_id: workspaceId,
-            user_id: editorId,
-            invited_by: adminId,
-          },
-        ]);
-
-      await expect(
-        service.updateRole(
-          {
-            workspace_id: workspaceId,
             user_id: editorId,
             role: 'admin',
           },
-          adminId,
+          adminMembership,
         ),
       ).rejects.toThrow('Cannot promote a member to your role or higher');
     });
 
     it('should throw ForbiddenException when non-owner tries to create owner', async () => {
       // Admin trying to promote editor to owner
-      clickhouseService.querySystem
-        .mockResolvedValueOnce([
-          {
-            ...adminMembership,
-            workspace_id: workspaceId,
-            user_id: adminId,
-            invited_by: ownerId,
-          },
-        ])
-        .mockResolvedValueOnce([
-          {
-            ...editorMembership,
-            workspace_id: workspaceId,
-            user_id: editorId,
-            invited_by: adminId,
-          },
-        ]);
+      clickhouseService.querySystem.mockResolvedValueOnce([
+        {
+          ...editorMembership,
+          workspace_id: workspaceId,
+          user_id: editorId,
+          invited_by: adminId,
+        },
+      ]);
 
       // Non-owners cannot promote to owner role
       await expect(
@@ -678,22 +530,13 @@ describe('MembersService', () => {
             user_id: editorId,
             role: 'owner',
           },
-          adminId,
+          adminMembership,
         ),
       ).rejects.toThrow('Only owners can promote members to owner');
     });
 
     it('should throw NotFoundException when target member not found', async () => {
-      clickhouseService.querySystem
-        .mockResolvedValueOnce([
-          {
-            ...ownerMembership,
-            workspace_id: workspaceId,
-            user_id: ownerId,
-            invited_by: null,
-          },
-        ])
-        .mockResolvedValueOnce([]);
+      clickhouseService.querySystem.mockResolvedValueOnce([]);
 
       await expect(
         service.updateRole(
@@ -702,38 +545,32 @@ describe('MembersService', () => {
             user_id: 'nonexistent',
             role: 'admin',
           },
-          ownerId,
+          ownerMembership,
         ),
       ).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('remove', () => {
+    // Note: Access validation and permission checks are now done by WorkspaceAuthGuard
+    // These tests verify business logic given a pre-validated actorMembership
+
     it('should successfully remove member as owner', async () => {
-      clickhouseService.querySystem
-        .mockResolvedValueOnce([
-          {
-            ...ownerMembership,
-            workspace_id: workspaceId,
-            user_id: ownerId,
-            invited_by: null,
-          },
-        ])
-        .mockResolvedValueOnce([
-          {
-            ...editorMembership,
-            workspace_id: workspaceId,
-            user_id: editorId,
-            invited_by: adminId,
-          },
-        ]);
+      clickhouseService.querySystem.mockResolvedValueOnce([
+        {
+          ...editorMembership,
+          workspace_id: workspaceId,
+          user_id: editorId,
+          invited_by: adminId,
+        },
+      ]);
 
       await service.remove(
         {
           workspace_id: workspaceId,
           user_id: editorId,
         },
-        ownerId,
+        ownerMembership,
       );
 
       expect(clickhouseService.commandSystem).toHaveBeenCalledWith(
@@ -760,36 +597,6 @@ describe('MembersService', () => {
     });
 
     it('should successfully remove member as admin', async () => {
-      clickhouseService.querySystem
-        .mockResolvedValueOnce([
-          {
-            ...adminMembership,
-            workspace_id: workspaceId,
-            user_id: adminId,
-            invited_by: ownerId,
-          },
-        ])
-        .mockResolvedValueOnce([
-          {
-            ...editorMembership,
-            workspace_id: workspaceId,
-            user_id: editorId,
-            invited_by: adminId,
-          },
-        ]);
-
-      await service.remove(
-        {
-          workspace_id: workspaceId,
-          user_id: editorId,
-        },
-        adminId,
-      );
-
-      expect(clickhouseService.commandSystem).toHaveBeenCalled();
-    });
-
-    it('should throw ForbiddenException when actor lacks permission', async () => {
       clickhouseService.querySystem.mockResolvedValueOnce([
         {
           ...editorMembership,
@@ -799,35 +606,27 @@ describe('MembersService', () => {
         },
       ]);
 
-      await expect(
-        service.remove(
-          {
-            workspace_id: workspaceId,
-            user_id: viewerId,
-          },
-          editorId,
-        ),
-      ).rejects.toThrow('Insufficient permissions to remove members');
+      await service.remove(
+        {
+          workspace_id: workspaceId,
+          user_id: editorId,
+        },
+        adminMembership,
+      );
+
+      expect(clickhouseService.commandSystem).toHaveBeenCalled();
     });
 
     it('should throw BadRequestException when trying to remove self', async () => {
-      clickhouseService.querySystem
-        .mockResolvedValueOnce([
-          {
-            ...ownerMembership,
-            workspace_id: workspaceId,
-            user_id: ownerId,
-            invited_by: null,
-          },
-        ])
-        .mockResolvedValueOnce([
-          {
-            ...ownerMembership,
-            workspace_id: workspaceId,
-            user_id: ownerId,
-            invited_by: null,
-          },
-        ]);
+      // Mock target membership (same as actor)
+      clickhouseService.querySystem.mockResolvedValueOnce([
+        {
+          ...ownerMembership,
+          workspace_id: workspaceId,
+          user_id: ownerId,
+          invited_by: null,
+        },
+      ]);
 
       await expect(
         service.remove(
@@ -835,7 +634,7 @@ describe('MembersService', () => {
             workspace_id: workspaceId,
             user_id: ownerId,
           },
-          ownerId,
+          ownerMembership,
         ),
       ).rejects.toThrow(
         'Cannot remove yourself. Use the leave endpoint instead',
@@ -844,23 +643,14 @@ describe('MembersService', () => {
 
     it('should throw ForbiddenException when trying to remove higher role', async () => {
       // Admin trying to remove owner
-      clickhouseService.querySystem
-        .mockResolvedValueOnce([
-          {
-            ...adminMembership,
-            workspace_id: workspaceId,
-            user_id: adminId,
-            invited_by: ownerId,
-          },
-        ])
-        .mockResolvedValueOnce([
-          {
-            ...ownerMembership,
-            workspace_id: workspaceId,
-            user_id: ownerId,
-            invited_by: null,
-          },
-        ]);
+      clickhouseService.querySystem.mockResolvedValueOnce([
+        {
+          ...ownerMembership,
+          workspace_id: workspaceId,
+          user_id: ownerId,
+          invited_by: null,
+        },
+      ]);
 
       await expect(
         service.remove(
@@ -868,7 +658,7 @@ describe('MembersService', () => {
             workspace_id: workspaceId,
             user_id: ownerId,
           },
-          adminId,
+          adminMembership,
         ),
       ).rejects.toThrow('Only owners can remove other owners');
     });
@@ -883,14 +673,6 @@ describe('MembersService', () => {
       };
 
       clickhouseService.querySystem
-        .mockResolvedValueOnce([
-          {
-            ...ownerMembership,
-            workspace_id: workspaceId,
-            user_id: ownerId,
-            invited_by: null,
-          },
-        ])
         .mockResolvedValueOnce([
           {
             ...owner2Membership,
@@ -908,7 +690,7 @@ describe('MembersService', () => {
             workspace_id: workspaceId,
             user_id: owner2Id,
           },
-          ownerId,
+          ownerMembership,
         ),
       ).rejects.toThrow(
         'Cannot remove the last owner. Transfer ownership first',
@@ -916,16 +698,7 @@ describe('MembersService', () => {
     });
 
     it('should throw NotFoundException when target member not found', async () => {
-      clickhouseService.querySystem
-        .mockResolvedValueOnce([
-          {
-            ...ownerMembership,
-            workspace_id: workspaceId,
-            user_id: ownerId,
-            invited_by: null,
-          },
-        ])
-        .mockResolvedValueOnce([]);
+      clickhouseService.querySystem.mockResolvedValueOnce([]);
 
       await expect(
         service.remove(
@@ -933,7 +706,7 @@ describe('MembersService', () => {
             workspace_id: workspaceId,
             user_id: 'nonexistent',
           },
-          ownerId,
+          ownerMembership,
         ),
       ).rejects.toThrow(NotFoundException);
     });

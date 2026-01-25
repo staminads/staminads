@@ -581,6 +581,7 @@ function generateSessionEvents(
     device: device.device,
     connection_type: generateConnectionType() ?? '',
     sdk_version: SDK_VERSION,
+    user_id: null,
   };
 
   // Event 1: screen_view (landing page)

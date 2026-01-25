@@ -3,9 +3,11 @@ import { PassportStrategy } from '@nestjs/passport';
 import { Strategy } from 'passport-http-bearer';
 import { ApiKeysService } from '../../api-keys/api-keys.service';
 import { ApiKeyRole } from '../../common/entities/api-key.entity';
+import { parseClickHouseDateTime } from '../../common/utils/datetime.util';
 
 export interface ApiKeyPayload {
   type: 'api-key';
+  id: string; // Set to `api-key:{keyId}` for compatibility with req.user.id
   keyId: string;
   workspaceId: string;
   role: ApiKeyRole;
@@ -34,8 +36,7 @@ export class ApiKeyStrategy extends PassportStrategy(Strategy, 'api-key') {
     }
 
     if (apiKey.expires_at) {
-      // Parse ClickHouse DateTime64 as UTC
-      const expiresAt = new Date(apiKey.expires_at.replace(' ', 'T') + 'Z');
+      const expiresAt = parseClickHouseDateTime(apiKey.expires_at);
       if (expiresAt < new Date()) {
         throw new UnauthorizedException('API key has expired');
       }
@@ -50,6 +51,7 @@ export class ApiKeyStrategy extends PassportStrategy(Strategy, 'api-key') {
 
     return {
       type: 'api-key',
+      id: `api-key:${apiKey.id}`,
       keyId: apiKey.id,
       workspaceId: apiKey.workspace_id,
       role: apiKey.role,

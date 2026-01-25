@@ -241,16 +241,21 @@ export class SessionPayloadHandler {
       // Defaults
       channel: '',
       channel_group: '',
-      stm_1: '',
-      stm_2: '',
-      stm_3: '',
-      stm_4: '',
-      stm_5: '',
-      stm_6: '',
-      stm_7: '',
-      stm_8: '',
-      stm_9: '',
-      stm_10: '',
+
+      // Custom dimensions from SDK payload (default to empty string)
+      stm_1: payload.dimensions?.stm_1 ?? '',
+      stm_2: payload.dimensions?.stm_2 ?? '',
+      stm_3: payload.dimensions?.stm_3 ?? '',
+      stm_4: payload.dimensions?.stm_4 ?? '',
+      stm_5: payload.dimensions?.stm_5 ?? '',
+      stm_6: payload.dimensions?.stm_6 ?? '',
+      stm_7: payload.dimensions?.stm_7 ?? '',
+      stm_8: payload.dimensions?.stm_8 ?? '',
+      stm_9: payload.dimensions?.stm_9 ?? '',
+      stm_10: payload.dimensions?.stm_10 ?? '',
+
+      // User identification (null if not provided or explicitly null)
+      user_id: payload.user_id ?? null,
     };
   }
 

@@ -1,8 +1,9 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiSecurity, ApiQuery } from '@nestjs/swagger';
 import { AuditService } from './audit.service';
 import { ListAuditDto } from './dto/list-audit.dto';
 import { GetAuditByTargetDto } from './dto/get-audit-by-target.dto';
+import { WorkspaceAuthGuard } from '../common/guards/workspace.guard';
 
 @ApiTags('audit')
 @ApiSecurity('jwt-auth')
@@ -11,6 +12,7 @@ export class AuditController {
   constructor(private readonly auditService: AuditService) {}
 
   @Get('audit.list')
+  @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'List audit logs with optional filters' })
   @ApiQuery({ name: 'workspace_id', type: String, required: false })
   @ApiQuery({ name: 'user_id', type: String, required: false })

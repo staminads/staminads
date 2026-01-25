@@ -15,6 +15,9 @@ const ADDITIONAL_WORKSPACE_DATABASES = [
   'staminads_ws_page_tracking_test_ws',
   'staminads_ws_test_ws_v3',
   'staminads_ws_report_gen_test_ws',
+  'staminads_ws_test_ws_user_id',
+  'staminads_ws_api_key_auth_test_ws',
+  'staminads_ws_api_key_auth_other_ws',
 ];
 
 let client: ClickHouseClient;
@@ -43,6 +46,22 @@ async function createWorkspaceDatabase(
 
 export async function setup(): Promise<void> {
   const ch = await getClient();
+
+  // Clean up any leftover workspace databases from previous test runs
+  // This ensures we always have the latest schema
+  const result = await ch.query({
+    query: `SELECT name FROM system.databases WHERE name LIKE 'staminads_ws_%'`,
+    format: 'JSONEachRow',
+  });
+  const databases = await result.json<{ name: string }[]>();
+  for (const db of databases) {
+    await ch.command({ query: `DROP DATABASE IF EXISTS ${db.name}` });
+  }
+
+  // Drop and recreate system database to ensure fresh schema
+  await ch.command({
+    query: `DROP DATABASE IF EXISTS ${TEST_SYSTEM_DATABASE}`,
+  });
 
   // Create test system database
   await ch.command({

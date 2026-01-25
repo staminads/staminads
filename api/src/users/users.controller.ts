@@ -8,6 +8,7 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { DemoRestricted } from '../common/decorators/demo-restricted.decorator';
+import { JwtOnly } from '../common/decorators/jwt-only.decorator';
 import { UsersService } from './users.service';
 import { AuthService } from '../auth/auth.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -16,6 +17,7 @@ import { PublicUser } from '../common/entities/user.entity';
 
 @ApiTags('auth')
 @ApiSecurity('jwt-auth')
+@JwtOnly()
 @UseGuards(JwtAuthGuard)
 @Controller('api')
 export class UsersController {

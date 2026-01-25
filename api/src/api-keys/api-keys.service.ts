@@ -21,6 +21,7 @@ import { hasPermission, ROLE_HIERARCHY } from '../common/permissions';
 import {
   toClickHouseDateTime,
   isoToClickHouseDateTime,
+  parseClickHouseDateTime,
 } from '../common/utils/datetime.util';
 
 interface ApiKeyRow extends Omit<ApiKey, 'role'> {
@@ -225,8 +226,7 @@ export class ApiKeysService {
     if (!apiKey.expires_at) {
       return false;
     }
-    // Parse ClickHouse DateTime64 as UTC
-    const expiresAt = new Date(apiKey.expires_at.replace(' ', 'T') + 'Z');
+    const expiresAt = parseClickHouseDateTime(apiKey.expires_at);
     return expiresAt < new Date();
   }
 

@@ -3,6 +3,7 @@ import * as os from 'os';
 import { APP_MAJOR_VERSION } from '../version';
 import { MajorMigration } from './migration.interface';
 import { MIGRATIONS } from './migrations.registry';
+import { parseClickHouseDateTime } from '../common/utils/datetime.util';
 
 interface SettingsRow {
   key: string;
@@ -147,10 +148,7 @@ export class MigrationsRunner {
     const rows = await result.json<SettingsRow>();
 
     if (rows.length > 0) {
-      // Parse as UTC (ClickHouse returns UTC without 'Z' suffix)
-      const lockTime = new Date(
-        rows[0].updated_at.replace(' ', 'T') + 'Z',
-      ).getTime();
+      const lockTime = parseClickHouseDateTime(rows[0].updated_at).getTime();
       const lockAge = (Date.now() - lockTime) / 1000;
 
       if (lockAge < this.lockTimeout) {

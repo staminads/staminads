@@ -21,7 +21,10 @@ import {
   AcceptInvitationDto,
   InvitationDetailsDto,
 } from './dto/accept-invitation.dto';
-import { toClickHouseDateTime } from '../common/utils/datetime.util';
+import {
+  toClickHouseDateTime,
+  parseClickHouseDateTime,
+} from '../common/utils/datetime.util';
 
 const INVITATION_EXPIRY_DAYS = 7;
 
@@ -249,8 +252,7 @@ export class InvitationsService {
     }
 
     // Check expiry
-    // Parse ClickHouse DateTime64 as UTC
-    const expiresAt = new Date(invitation.expires_at.replace(' ', 'T') + 'Z');
+    const expiresAt = parseClickHouseDateTime(invitation.expires_at);
     if (expiresAt < new Date()) {
       throw new BadRequestException('This invitation has expired');
     }
@@ -312,8 +314,7 @@ export class InvitationsService {
       );
     }
 
-    // Parse ClickHouse DateTime64 as UTC
-    const expiresAt = new Date(invitation.expires_at.replace(' ', 'T') + 'Z');
+    const expiresAt = parseClickHouseDateTime(invitation.expires_at);
     if (expiresAt < new Date()) {
       throw new BadRequestException('This invitation has expired');
     }

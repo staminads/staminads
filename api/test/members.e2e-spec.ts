@@ -253,7 +253,7 @@ describe('Members Integration', () => {
           user_id: editorUserId,
           role: 'admin',
         })
-        .expect(201);
+        .expect(200);
 
       expect(response.body.role).toBe('admin');
       expect(response.body.user_id).toBe(editorUserId);
@@ -282,7 +282,7 @@ describe('Members Integration', () => {
           user_id: viewerUserId,
           role: 'editor',
         })
-        .expect(201);
+        .expect(200);
 
       expect(response.body.role).toBe('editor');
       expect(response.body.user_id).toBe(viewerUserId);
@@ -394,7 +394,7 @@ describe('Members Integration', () => {
           user_id: adminRoleUserId,
           role: 'owner',
         })
-        .expect(201);
+        .expect(200);
 
       expect(response.body.role).toBe('owner');
     });
@@ -410,7 +410,7 @@ describe('Members Integration', () => {
           user_id: editorUserId,
           role: 'admin',
         })
-        .expect(201);
+        .expect(200);
 
       // Wait for audit log to be written
       await waitForClickHouse();
@@ -668,13 +668,14 @@ describe('Members Integration', () => {
 
       const nonMember = await createUser('nonmember@test.com', 'Non Member');
 
+      // WorkspaceAuthGuard returns 403 for non-members
       await request(ctx.app.getHttpServer())
         .post('/api/members.leave')
         .set('Authorization', `Bearer ${nonMember.token}`)
         .send({
           workspace_id: testWorkspaceId,
         })
-        .expect(404);
+        .expect(403);
     });
 
     it('logs audit event when member leaves', async () => {
@@ -879,12 +880,12 @@ describe('Members Integration', () => {
     it('validates workspace_id format', async () => {
       await setupTestScenario();
 
-      // Empty workspace_id results in 403 because the user is not a member of empty workspace
+      // Empty workspace_id results in 400 BadRequest from WorkspaceAuthGuard
       await request(ctx.app.getHttpServer())
         .get('/api/members.list')
         .query({ workspace_id: '' })
         .set('Authorization', `Bearer ${ownerToken}`)
-        .expect(403);
+        .expect(400);
     });
 
     it('handles concurrent role updates gracefully', async () => {
@@ -928,9 +929,9 @@ describe('Members Integration', () => {
       const results = await Promise.all(promises);
 
       // Both should succeed (ClickHouse ReplacingMergeTree handles this)
-      // POST returns 201 by default in NestJS
-      expect(results[0].status).toBe(201);
-      expect(results[1].status).toBe(201);
+      // updateRole returns 200
+      expect(results[0].status).toBe(200);
+      expect(results[1].status).toBe(200);
 
       // Last write wins
       await waitForClickHouse();

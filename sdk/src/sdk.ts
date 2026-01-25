@@ -375,7 +375,10 @@ export class StaminadsSDK {
 
     // Build and send via beacon
     const attributes = this.buildAttributes();
-    const payload = this.sessionState.buildPayload(attributes);
+    const payload = this.sessionState.buildPayload(attributes, {
+      userId: this.sessionManager?.getUserId() ?? null,
+      dimensions: this.sessionManager?.getDimensionsPayload() ?? {},
+    });
     this.sender.sendSessionBeacon(payload);
 
     // Persist final state
@@ -747,7 +750,10 @@ export class StaminadsSDK {
     if (!this.sessionState || !this.sender) return;
 
     const attributes = this.buildAttributes();
-    const payload = this.sessionState.buildPayload(attributes);
+    const payload = this.sessionState.buildPayload(attributes, {
+      userId: this.sessionManager?.getUserId() ?? null,
+      dimensions: this.sessionManager?.getDimensionsPayload() ?? {},
+    });
 
     const result = await this.sender.sendSession(payload);
 
@@ -921,6 +927,22 @@ export class StaminadsSDK {
   async clearDimensions(): Promise<void> {
     await this.ensureInitialized();
     this.sessionManager?.clearDimensions();
+  }
+
+  /**
+   * Set user ID for tracking authenticated users
+   */
+  async setUserId(id: string | null): Promise<void> {
+    await this.ensureInitialized();
+    this.sessionManager?.setUserId(id);
+  }
+
+  /**
+   * Get current user ID
+   */
+  async getUserId(): Promise<string | null> {
+    await this.ensureInitialized();
+    return this.sessionManager?.getUserId() ?? null;
   }
 
   /**

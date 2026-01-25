@@ -105,8 +105,10 @@ const WORKSPACE_SCHEMAS: Record<string, string> = {
       entered_at DateTime64(3),
       exited_at DateTime64(3),
       goal_timestamp Nullable(DateTime64(3)),
+      user_id Nullable(String),
       INDEX idx_name name TYPE bloom_filter(0.01) GRANULARITY 1,
-      INDEX idx_browser_type browser_type TYPE set(10) GRANULARITY 1
+      INDEX idx_browser_type browser_type TYPE set(10) GRANULARITY 1,
+      INDEX idx_user_id user_id TYPE bloom_filter GRANULARITY 1
     ) ENGINE = MergeTree()
     PARTITION BY toYYYYMMDD(received_at)
     ORDER BY (session_id, received_at)
@@ -177,7 +179,9 @@ const WORKSPACE_SCHEMAS: Record<string, string> = {
       goal_count UInt16 DEFAULT 0,
       goal_value Float32 DEFAULT 0,
       sdk_version String DEFAULT '',
-      INDEX idx_created_at created_at TYPE minmax GRANULARITY 1
+      user_id Nullable(String),
+      INDEX idx_created_at created_at TYPE minmax GRANULARITY 1,
+      INDEX idx_user_id user_id TYPE bloom_filter GRANULARITY 1
     ) ENGINE = ReplacingMergeTree(updated_at)
     PARTITION BY toYYYYMM(created_at)
     ORDER BY (created_at, id)
@@ -199,8 +203,10 @@ const WORKSPACE_SCHEMAS: Record<string, string> = {
       is_landing Bool DEFAULT false,
       is_exit Bool DEFAULT false,
       entry_type LowCardinality(String) DEFAULT 'navigation',
+      user_id Nullable(String),
       received_at DateTime64(3) DEFAULT now64(3),
-      _version UInt64 DEFAULT 0
+      _version UInt64 DEFAULT 0,
+      INDEX idx_user_id user_id TYPE bloom_filter GRANULARITY 1
     ) ENGINE = ReplacingMergeTree(_version)
     PARTITION BY toYYYYMMDD(received_at)
     ORDER BY (session_id, page_number)
@@ -257,6 +263,14 @@ export async function initializeTestDatabases(): Promise<void> {
   });
 
   try {
+    // Drop existing databases to ensure fresh schema
+    await rootClient.command({
+      query: `DROP DATABASE IF EXISTS ${SYSTEM_DATABASE}`,
+    });
+    await rootClient.command({
+      query: `DROP DATABASE IF EXISTS ${WORKSPACE_DATABASE}`,
+    });
+
     // Create system database
     await rootClient.command({
       query: `CREATE DATABASE IF NOT EXISTS ${SYSTEM_DATABASE}`,
@@ -408,6 +422,7 @@ export interface EventRecord {
   received_at: string;
   goal_name: string;
   goal_value: number;
+  user_id: string | null;
   [key: string]: unknown;
 }
 

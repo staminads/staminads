@@ -24,6 +24,7 @@ import { CreateApiKeyResponseDto } from './dto/create-api-key-response.dto';
 import { WorkspaceAuthGuard } from '../common/guards/workspace.guard';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { DemoRestricted } from '../common/decorators/demo-restricted.decorator';
+import { JwtOnly } from '../common/decorators/jwt-only.decorator';
 
 @ApiTags('api-keys')
 @ApiSecurity('jwt-auth')
@@ -52,6 +53,7 @@ export class ApiKeysController {
   }
 
   @Get('apiKeys.list')
+  @JwtOnly()
   @ApiOperation({ summary: 'List API keys with optional filters' })
   @ApiQuery({
     name: 'user_id',
@@ -85,6 +87,7 @@ export class ApiKeysController {
   }
 
   @Get('apiKeys.get')
+  @JwtOnly()
   @ApiOperation({ summary: 'Get API key by ID' })
   @ApiQuery({
     name: 'id',
@@ -97,6 +100,7 @@ export class ApiKeysController {
   }
 
   @Post('apiKeys.revoke')
+  @JwtOnly()
   @DemoRestricted()
   @HttpCode(200)
   @ApiOperation({ summary: 'Revoke an API key' })

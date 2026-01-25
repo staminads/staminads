@@ -137,6 +137,7 @@ export class SessionManager {
       sdk_version: SDK_VERSION,
       sequence: 0,
       dimensions: this.loadDimensions(),
+      userId: this.loadUserId(),
     };
 
     this.session = session;
@@ -172,6 +173,7 @@ export class SessionManager {
       sdk_version: SDK_VERSION,
       sequence: 0,
       dimensions: this.loadDimensions(),
+      userId: this.loadUserId(),
     };
 
     this.session = session;
@@ -339,6 +341,58 @@ export class SessionManager {
     this.storage.set(STORAGE_KEYS.DIMENSIONS, this.session.dimensions);
   }
 
+  // User ID
+
+  /**
+   * Set user ID for tracking authenticated users
+   */
+  setUserId(id: string | null): void {
+    if (id !== null && typeof id !== 'string') {
+      throw new Error('User ID must be a string or null');
+    }
+
+    if (id !== null && id.length > 256) {
+      throw new Error('User ID must be 256 characters or less');
+    }
+
+    if (!this.session) return;
+
+    this.session.userId = id;
+    this.saveUserId();
+    this.saveSession();
+
+    if (this.debug) {
+      console.log('[Staminads] Set user ID:', id);
+    }
+  }
+
+  /**
+   * Get current user ID
+   */
+  getUserId(): string | null {
+    if (!this.session) return null;
+    return this.session.userId;
+  }
+
+  /**
+   * Load user ID from storage
+   */
+  private loadUserId(): string | null {
+    return this.storage.get<string>(STORAGE_KEYS.USER_ID) || null;
+  }
+
+  /**
+   * Save user ID to storage
+   */
+  private saveUserId(): void {
+    if (!this.session) return;
+    if (this.session.userId === null) {
+      this.storage.remove(STORAGE_KEYS.USER_ID);
+    } else {
+      this.storage.set(STORAGE_KEYS.USER_ID, this.session.userId);
+    }
+  }
+
   /**
    * Apply dimensions from URL parameters
    * Only sets dimensions that don't already have values (existing wins)
@@ -371,6 +425,7 @@ export class SessionManager {
   reset(): Session {
     this.storage.remove(STORAGE_KEYS.SESSION);
     this.storage.remove(STORAGE_KEYS.DIMENSIONS);
+    this.storage.remove(STORAGE_KEYS.USER_ID);
     this.session = null;
     return this.createSession();
   }

@@ -98,6 +98,7 @@ export interface Session {
   sdk_version: string;
   sequence: number;
   dimensions: CustomDimensions;
+  userId: string | null;
 }
 
 export interface UTMParams {
@@ -152,6 +153,10 @@ export interface StaminadsAPI {
   setDimensions(dimensions: Record<number, string>): Promise<void>;
   getDimension(index: number): Promise<string | null>;
   clearDimensions(): Promise<void>;
+  /** Set authenticated user ID for tracking */
+  setUserId(id: string | null): Promise<void>;
+  /** Get current user ID */
+  getUserId(): Promise<string | null>;
   pause(): Promise<void>;
   resume(): Promise<void>;
   reset(): Promise<void>;

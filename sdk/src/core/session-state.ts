@@ -188,7 +188,10 @@ export class SessionState {
 
   // === Payload Building ===
 
-  buildPayload(attributes: SessionAttributes): SessionPayload {
+  buildPayload(
+    attributes: SessionAttributes,
+    options?: { userId?: string | null; dimensions?: Record<string, string> }
+  ): SessionPayload {
     // Update current page's duration and exited_at before building payload
     if (this.currentPageIndex !== null) {
       const action = this.actions[this.currentPageIndex];
@@ -209,6 +212,16 @@ export class SessionState {
       updated_at: Date.now(),
       sdk_version: SDK_VERSION,
     };
+
+    // Add user_id if provided in options
+    if (options && 'userId' in options) {
+      payload.user_id = options.userId;
+    }
+
+    // Add dimensions if provided in options
+    if (options && 'dimensions' in options) {
+      payload.dimensions = options.dimensions;
+    }
 
     return payload;
   }

@@ -14,7 +14,10 @@ import { User, PublicUser, UserStatus } from '../common/entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { toClickHouseDateTime } from '../common/utils/datetime.util';
+import {
+  toClickHouseDateTime,
+  parseClickHouseDateTime,
+} from '../common/utils/datetime.util';
 
 @Injectable()
 export class UsersService {
@@ -253,9 +256,7 @@ export class UsersService {
       return false;
     }
 
-    // Parse ClickHouse DateTime64 as UTC by appending 'Z'
-    // ClickHouse returns timestamps without timezone, which JavaScript interprets as local time
-    const lockedUntil = new Date(user.locked_until.replace(' ', 'T') + 'Z');
+    const lockedUntil = parseClickHouseDateTime(user.locked_until);
     return lockedUntil > new Date();
   }
 

@@ -6,6 +6,7 @@ import {
   Query,
   Request,
   HttpCode,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -23,6 +24,9 @@ import { RemoveMemberDto } from './dto/remove-member.dto';
 import { LeaveWorkspaceDto } from './dto/leave-workspace.dto';
 import { TransferOwnershipDto } from './dto/transfer-ownership.dto';
 import { DemoRestricted } from '../common/decorators/demo-restricted.decorator';
+import { WorkspaceAuthGuard } from '../common/guards/workspace.guard';
+import { JwtOnly } from '../common/decorators/jwt-only.decorator';
+import { RequirePermission } from '../common/decorators/require-permission.decorator';
 
 @ApiTags('members')
 @ApiSecurity('jwt-auth')
@@ -31,6 +35,7 @@ export class MembersController {
   constructor(private readonly membersService: MembersService) {}
 
   @Get('members.list')
+  @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'List all members of a workspace' })
   @ApiQuery({ name: 'workspace_id', type: String, required: true })
   @ApiResponse({
@@ -65,15 +70,13 @@ export class MembersController {
       },
     },
   })
-  async list(
-    @Query('workspace_id') workspaceId: string,
-    @Request() req: { user: { id: string } },
-  ) {
+  async list(@Query('workspace_id') workspaceId: string) {
     const dto: ListMembersDto = { workspace_id: workspaceId };
-    return this.membersService.list(dto, req.user.id);
+    return this.membersService.list(dto);
   }
 
   @Get('members.get')
+  @UseGuards(WorkspaceAuthGuard)
   @ApiOperation({ summary: 'Get a specific member by user ID' })
   @ApiQuery({ name: 'workspace_id', type: String, required: true })
   @ApiQuery({ name: 'user_id', type: String, required: true })
@@ -107,13 +110,15 @@ export class MembersController {
   async get(
     @Query('workspace_id') workspaceId: string,
     @Query('user_id') userId: string,
-    @Request() req: any,
   ) {
     const dto: GetMemberDto = { workspace_id: workspaceId, user_id: userId };
-    return this.membersService.get(dto, req.user.id);
+    return this.membersService.get(dto);
   }
 
   @Post('members.updateRole')
+  @HttpCode(200)
+  @UseGuards(WorkspaceAuthGuard)
+  @RequirePermission('members.manage')
   @DemoRestricted()
   @ApiOperation({ summary: "Update a member's role" })
   @ApiResponse({
@@ -145,10 +150,12 @@ export class MembersController {
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   @ApiResponse({ status: 404, description: 'Member not found' })
   async updateRole(@Body() dto: UpdateRoleDto, @Request() req: any) {
-    return this.membersService.updateRole(dto, req.user.id);
+    return this.membersService.updateRole(dto, req.membership);
   }
 
   @Post('members.remove')
+  @UseGuards(WorkspaceAuthGuard)
+  @RequirePermission('members.remove')
   @DemoRestricted()
   @HttpCode(200)
   @ApiOperation({ summary: 'Remove a member from a workspace' })
@@ -164,11 +171,13 @@ export class MembersController {
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   @ApiResponse({ status: 404, description: 'Member not found' })
   async remove(@Body() dto: RemoveMemberDto, @Request() req: any) {
-    await this.membersService.remove(dto, req.user.id);
+    await this.membersService.remove(dto, req.membership);
     return { success: true };
   }
 
   @Post('members.leave')
+  @JwtOnly()
+  @UseGuards(WorkspaceAuthGuard)
   @DemoRestricted()
   @HttpCode(200)
   @ApiOperation({ summary: 'Leave a workspace voluntarily' })
@@ -197,6 +206,8 @@ export class MembersController {
   }
 
   @Post('members.transferOwnership')
+  @JwtOnly()
+  @UseGuards(WorkspaceAuthGuard)
   @DemoRestricted()
   @ApiOperation({ summary: 'Transfer workspace ownership to another member' })
   @ApiResponse({

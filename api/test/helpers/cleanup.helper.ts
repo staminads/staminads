@@ -31,7 +31,7 @@ export type SystemTable =
 /**
  * Workspace database tables that can be truncated
  */
-export type WorkspaceTable = 'sessions' | 'events';
+export type WorkspaceTable = 'sessions' | 'events' | 'pages' | 'goals';
 
 /**
  * Truncate a single table

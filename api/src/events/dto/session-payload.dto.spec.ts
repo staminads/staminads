@@ -539,6 +539,206 @@ describe('PageviewActionDto - Timestamp Ordering', () => {
 });
 
 // === Cross-Phase Tests ===
+describe('SessionPayloadDto - user_id field', () => {
+  const validPayload = {
+    workspace_id: 'ws-test',
+    session_id: 'sess-123',
+    actions: [],
+    created_at: Date.now(),
+    updated_at: Date.now(),
+  };
+
+  it('accepts payload with user_id as string', async () => {
+    const dto = plainToInstance(SessionPayloadDto, {
+      ...validPayload,
+      user_id: 'user_123',
+    });
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(0);
+    expect(dto.user_id).toBe('user_123');
+  });
+
+  it('accepts payload with user_id as null', async () => {
+    const dto = plainToInstance(SessionPayloadDto, {
+      ...validPayload,
+      user_id: null,
+    });
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(0);
+    expect(dto.user_id).toBeNull();
+  });
+
+  it('accepts payload without user_id (undefined)', async () => {
+    const dto = plainToInstance(SessionPayloadDto, validPayload);
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(0);
+    expect(dto.user_id).toBeUndefined();
+  });
+
+  it('rejects user_id that is not a string', async () => {
+    const dto = plainToInstance(SessionPayloadDto, {
+      ...validPayload,
+      user_id: 12345,
+    });
+    const errors = await validate(dto);
+
+    expect(errors.some((e) => e.property === 'user_id')).toBe(true);
+  });
+
+  it('rejects user_id longer than 256 characters', async () => {
+    const dto = plainToInstance(SessionPayloadDto, {
+      ...validPayload,
+      user_id: 'a'.repeat(257),
+    });
+    const errors = await validate(dto);
+
+    expect(errors.some((e) => e.property === 'user_id')).toBe(true);
+  });
+
+  it('accepts user_id at exactly 256 characters', async () => {
+    const dto = plainToInstance(SessionPayloadDto, {
+      ...validPayload,
+      user_id: 'a'.repeat(256),
+    });
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(0);
+  });
+});
+
+describe('SessionPayloadDto - dimensions field', () => {
+  const validPayload = {
+    workspace_id: 'ws-test',
+    session_id: 'sess-123',
+    actions: [],
+    created_at: Date.now(),
+    updated_at: Date.now(),
+  };
+
+  it('accepts payload with valid dimensions object', async () => {
+    const dto = plainToInstance(SessionPayloadDto, {
+      ...validPayload,
+      dimensions: {
+        stm_1: 'value1',
+        stm_2: 'value2',
+      },
+    });
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(0);
+    expect(dto.dimensions).toEqual({ stm_1: 'value1', stm_2: 'value2' });
+  });
+
+  it('accepts payload with all 10 dimensions', async () => {
+    const dimensions: Record<string, string> = {};
+    for (let i = 1; i <= 10; i++) {
+      dimensions[`stm_${i}`] = `value_${i}`;
+    }
+
+    const dto = plainToInstance(SessionPayloadDto, {
+      ...validPayload,
+      dimensions,
+    });
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(0);
+    expect(Object.keys(dto.dimensions!).length).toBe(10);
+  });
+
+  it('accepts payload with empty dimensions object', async () => {
+    const dto = plainToInstance(SessionPayloadDto, {
+      ...validPayload,
+      dimensions: {},
+    });
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(0);
+    expect(dto.dimensions).toEqual({});
+  });
+
+  it('accepts payload without dimensions (undefined)', async () => {
+    const dto = plainToInstance(SessionPayloadDto, validPayload);
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(0);
+    expect(dto.dimensions).toBeUndefined();
+  });
+
+  it('rejects dimensions that is not an object', async () => {
+    const dto = plainToInstance(SessionPayloadDto, {
+      ...validPayload,
+      dimensions: 'not-an-object',
+    });
+    const errors = await validate(dto);
+
+    expect(errors.some((e) => e.property === 'dimensions')).toBe(true);
+  });
+
+  it('accepts sparse dimensions (non-consecutive keys)', async () => {
+    const dto = plainToInstance(SessionPayloadDto, {
+      ...validPayload,
+      dimensions: {
+        stm_1: 'value1',
+        stm_5: 'value5',
+        stm_10: 'value10',
+      },
+    });
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(0);
+    expect(dto.dimensions).toEqual({
+      stm_1: 'value1',
+      stm_5: 'value5',
+      stm_10: 'value10',
+    });
+  });
+});
+
+describe('SessionPayloadDto - user_id and dimensions combined', () => {
+  const validPayload = {
+    workspace_id: 'ws-test',
+    session_id: 'sess-123',
+    actions: [],
+    created_at: Date.now(),
+    updated_at: Date.now(),
+  };
+
+  it('accepts payload with both user_id and dimensions', async () => {
+    const dto = plainToInstance(SessionPayloadDto, {
+      ...validPayload,
+      user_id: 'user_xyz',
+      dimensions: {
+        stm_1: 'campaign_a',
+        stm_2: 'variant_b',
+      },
+    });
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(0);
+    expect(dto.user_id).toBe('user_xyz');
+    expect(dto.dimensions).toEqual({
+      stm_1: 'campaign_a',
+      stm_2: 'variant_b',
+    });
+  });
+
+  it('accepts payload with user_id null and dimensions', async () => {
+    const dto = plainToInstance(SessionPayloadDto, {
+      ...validPayload,
+      user_id: null,
+      dimensions: { stm_1: 'test' },
+    });
+    const errors = await validate(dto);
+
+    expect(errors).toHaveLength(0);
+    expect(dto.user_id).toBeNull();
+    expect(dto.dimensions).toEqual({ stm_1: 'test' });
+  });
+});
+
 describe('Cross-phase validation - payload size', () => {
   const MAX_ACTIONS = 1000;
 

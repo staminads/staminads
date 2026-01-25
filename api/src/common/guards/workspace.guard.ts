@@ -72,6 +72,19 @@ export class WorkspaceAuthGuard implements CanActivate {
         throw new ForbiddenException('API key has insufficient permissions');
       }
 
+      // Create synthetic membership for API key auth so controllers/services can use it
+      // The API key's role is used for all permission checks
+      request.membership = {
+        id: `api-key:${apiKeyUser.keyId}`,
+        workspace_id: workspaceId,
+        user_id: `api-key:${apiKeyUser.keyId}`,
+        role: apiKeyUser.role,
+        invited_by: null,
+        joined_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
       return true;
     }
 

@@ -1,11 +1,23 @@
-import { ExecutionContext, Injectable } from '@nestjs/common';
+import {
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
-import { IS_API_KEY_ROUTE } from '../decorators/api-key-route.decorator';
+import { JWT_ONLY_KEY } from '../decorators/jwt-only.decorator';
 
+/**
+ * Global auth guard that accepts both JWT and API key authentication.
+ *
+ * - For public routes (@Public decorator), authentication is skipped
+ * - For JWT-only routes (@JwtOnly decorator), API keys are rejected
+ * - For protected routes, tries JWT first, then API key
+ * - If both fail, returns 401 Unauthorized
+ */
 @Injectable()
-export class JwtAuthGuard extends AuthGuard('jwt') {
+export class JwtAuthGuard extends AuthGuard(['jwt', 'api-key']) {
   constructor(private reflector: Reflector) {
     super();
   }
@@ -19,15 +31,34 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       return true;
     }
 
-    // Skip JWT auth for API key routes - they use their own auth strategy
-    const isApiKeyRoute = this.reflector.getAllAndOverride<boolean>(
-      IS_API_KEY_ROUTE,
-      [context.getHandler(), context.getClass()],
-    );
-    if (isApiKeyRoute) {
-      return true;
-    }
-
     return super.canActivate(context);
+  }
+
+  handleRequest<TUser = any>(
+    err: any,
+    user: TUser,
+    info: any,
+    context: ExecutionContext,
+  ): TUser {
+    if (user) {
+      // Check if route requires JWT only
+      const isJwtOnly = this.reflector.getAllAndOverride<boolean>(
+        JWT_ONLY_KEY,
+        [context.getHandler(), context.getClass()],
+      );
+
+      // Reject API key auth on JWT-only routes
+      if (isJwtOnly && (user as any)?.type === 'api-key') {
+        throw new UnauthorizedException(
+          'This endpoint requires JWT authentication',
+        );
+      }
+
+      return user;
+    }
+    if (err) {
+      throw err;
+    }
+    throw new UnauthorizedException();
   }
 }
