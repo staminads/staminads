@@ -12,38 +12,40 @@ export function useDashboardParams(workspaceTimezone: string) {
   const navigate = useNavigate()
   const [pendingPeriod, setPendingPeriod] = useState<DatePreset | null>(null)
 
-  // Load from localStorage on mount if URL params are empty
+  // Load from localStorage on mount, but only for URL params that are missing.
+  // A single navigate call restores both values at once so they can't clobber
+  // each other, and we never overwrite a value already provided by the URL.
   useEffect(() => {
-    if (!search.period) {
-      const savedPeriod = localStorage.getItem(STORAGE_KEY_PERIOD) as DatePreset | null
-      if (savedPeriod) {
-        navigate({
-          search: { ...search, period: savedPeriod } as never,
-          replace: true,
-        })
-      }
-    }
-    if (!search.comparison) {
-      const savedComparison = localStorage.getItem(STORAGE_KEY_COMPARISON) as ComparisonMode | null
-      if (savedComparison) {
-        navigate({
-          search: { ...search, comparison: savedComparison } as never,
-          replace: true,
-        })
-      }
+    const savedPeriod = localStorage.getItem(STORAGE_KEY_PERIOD) as DatePreset | null
+    const savedComparison = localStorage.getItem(STORAGE_KEY_COMPARISON) as ComparisonMode | null
+
+    const needsPeriod = !search.period && savedPeriod
+    const needsComparison = !search.comparison && savedComparison
+
+    if (needsPeriod || needsComparison) {
+      navigate({
+        search: {
+          ...search,
+          ...(needsPeriod ? { period: savedPeriod } : {}),
+          ...(needsComparison ? { comparison: savedComparison } : {}),
+        } as never,
+        replace: true,
+      })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Save to localStorage when values change
   useEffect(() => {
-    const period = search.period ?? 'previous_7_days'
-    localStorage.setItem(STORAGE_KEY_PERIOD, period)
+    if (search.period) {
+      localStorage.setItem(STORAGE_KEY_PERIOD, search.period)
+    }
   }, [search.period])
 
   useEffect(() => {
-    const comparison = search.comparison ?? 'previous_period'
-    localStorage.setItem(STORAGE_KEY_COMPARISON, comparison)
+    if (search.comparison) {
+      localStorage.setItem(STORAGE_KEY_COMPARISON, search.comparison)
+    }
   }, [search.comparison])
 
   // Debounce period changes

@@ -14,6 +14,7 @@ import {
 } from './dto/session-payload.dto';
 import { TrackingEvent } from './entities/event.entity';
 import { toClickHouseDateTime } from '../common/utils/datetime.util';
+import { toUInt16 } from '../common/utils/number.util';
 import {
   extractFieldValues,
   applyFilterResults,
@@ -212,11 +213,11 @@ export class SessionPayloadHandler {
       utm_id: attrs?.utm_id ?? '',
       utm_id_from: attrs?.utm_id_from ?? '',
 
-      // Device
-      screen_width: attrs?.screen_width ?? 0,
-      screen_height: attrs?.screen_height ?? 0,
-      viewport_width: attrs?.viewport_width ?? 0,
-      viewport_height: attrs?.viewport_height ?? 0,
+      // Device (clamp to UInt16 range; client values may be negative/NaN/huge)
+      screen_width: toUInt16(attrs?.screen_width),
+      screen_height: toUInt16(attrs?.screen_height),
+      viewport_width: toUInt16(attrs?.viewport_width),
+      viewport_height: toUInt16(attrs?.viewport_height),
       device: attrs?.device ?? '',
       browser: attrs?.browser ?? '',
       browser_type: attrs?.browser_type ?? '',

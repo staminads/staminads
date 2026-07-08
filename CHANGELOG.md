@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [6.2.0] - 2026-07-08
+
+- Fix ClickHouse insert crash when a client sends a negative/out-of-range screen or viewport dimension (clamp device metrics to UInt16 at ingest, preventing dropped event batches)
+- Fix race condition when restoring dashboard period/comparison from localStorage that could drop the saved period or overwrite URL params
+
 ## [6.1.0] - 2026-04-24
 
 - Upgrade AI assistant models to Claude Opus 4.7, Sonnet 4.6, and Haiku 4.5
