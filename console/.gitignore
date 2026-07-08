@@ -15,8 +15,10 @@ dist-ssr
 # TanStack Router generated files
 src/routeTree.gen.ts
 
-# SDK files (copied from sdk/dist by copy-sdk.cjs)
-public/sdk/staminads_*.min.js
+# SDK files (copied from sdk/dist by copy-sdk.cjs) are committed so that every
+# published version stays available — install snippets hard-pin the version in
+# the URL (/sdk/staminads_<version>.min.js), so removing old files breaks sites
+# that installed an earlier version. Do NOT re-ignore these.
 
 # Editor directories and files
 .vscode/*
