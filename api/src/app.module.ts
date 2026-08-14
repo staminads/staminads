@@ -13,6 +13,7 @@ import { AssistantModule } from './assistant/assistant.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { CommonModule } from './common/common.module';
+import { setStaticAssetHeaders } from './config/static-assets';
 import { DatabaseModule } from './database/database.module';
 import { DemoModule } from './demo/demo.module';
 import { EventsModule } from './events/events.module';
@@ -38,6 +39,9 @@ import { SubscriptionsModule } from './subscriptions/subscriptions.module';
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, 'public'),
       exclude: ['/api/{*path}', '/health'],
+      serveStaticOptions: {
+        setHeaders: setStaticAssetHeaders,
+      },
     }),
     CacheModule.register({
       isGlobal: true,
