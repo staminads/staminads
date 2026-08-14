@@ -1,8 +1,10 @@
 import { ValidationPipe } from '@nestjs/common';
 import { CorsOptionsDelegate } from '@nestjs/common/interfaces/external/cors-options.interface';
 import { NestFactory } from '@nestjs/core';
+import compression from 'compression';
 import { Request } from 'express';
 import { AppModule } from './app.module';
+import { shouldCompress } from './config/compression';
 import { MigrationsRunner } from './migrations/migrations.service';
 import { APP_VERSION } from './version';
 
@@ -17,6 +19,9 @@ async function bootstrap() {
   }
 
   const app = await NestFactory.create(AppModule);
+
+  // Compress regular responses while preserving immediate SSE delivery.
+  app.use(compression({ filter: shouldCompress }));
 
   // Parse allowed origins from env (empty array = allow all)
   const allowedOriginsEnv = process.env.CORS_ALLOWED_ORIGINS;
