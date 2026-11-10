@@ -2,7 +2,10 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:latest
     ports:
-      - "8123:8123"
+      # Localhost only: clickhouse-users.xml lets `default` in without a password
+      # from any network (needed for local dev), and Docker-published ports bypass
+      # host firewalls such as UFW. Never publish this port on 0.0.0.0.
+      - "127.0.0.1:8123:8123"
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - ./clickhouse-users.xml:/etc/clickhouse-server/users.d/users.xml:ro

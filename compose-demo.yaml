@@ -5,7 +5,6 @@ services:
       - "8124:8123"
     volumes:
       - clickhouse_demo_data:/var/lib/clickhouse
-      - ./clickhouse-users.xml:/etc/clickhouse-server/users.d/users.xml:ro
       - ./clickhouse-system-logs.xml:/etc/clickhouse-server/config.d/zz-clickhouse-system-logs.xml:ro
     environment:
       CLICKHOUSE_DB: staminads_system
