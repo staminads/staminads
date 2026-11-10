@@ -1,0 +1,14 @@
+<clickhouse>
+  <!-- Disable the server-wide thread profiler that floods system.trace_log -->
+  <global_profiler_real_time_period_ns>0</global_profiler_real_time_period_ns>
+  <global_profiler_cpu_time_period_ns>0</global_profiler_cpu_time_period_ns>
+  <!-- Bound retention of noisy system log tables -->
+  <trace_log><ttl>event_date + INTERVAL 3 DAY DELETE</ttl></trace_log>
+  <text_log><ttl>event_date + INTERVAL 7 DAY DELETE</ttl></text_log>
+  <metric_log><ttl>event_date + INTERVAL 7 DAY DELETE</ttl></metric_log>
+  <asynchronous_metric_log><ttl>event_date + INTERVAL 3 DAY DELETE</ttl></asynchronous_metric_log>
+  <part_log><ttl>event_date + INTERVAL 14 DAY DELETE</ttl></part_log>
+  <processors_profile_log><ttl>event_date + INTERVAL 7 DAY DELETE</ttl></processors_profile_log>
+  <query_log><ttl>event_date + INTERVAL 14 DAY DELETE</ttl></query_log>
+  <query_views_log><ttl>event_date + INTERVAL 7 DAY DELETE</ttl></query_views_log>
+</clickhouse>
